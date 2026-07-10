@@ -1,7 +1,7 @@
 <?php
 /**
  * TronBlow.site Faucet Bot
- * v2.0 - Clean TronBlow Only
+ * v2.1 - No Cookie Input
  * Developer: Moneymaker_w
  */
 
@@ -33,7 +33,7 @@ echo $yellow . "
 ║            TRONBLOW AUTO CLAIM BOT                          ║
 ╠══════════════════════════════════════════════════════════════╣
 ║  Developer : " . $green . "Moneymaker_w" . $yellow . "                           ║
-║  Version   : 2.0                                             ║
+║  Version   : 2.1                                             ║
 ║  Language  : PHP CLI                                         ║
 ║  Status    : " . $green . "ACTIVE" . $yellow . "                                          ║
 ╚══════════════════════════════════════════════════════════════╝
@@ -84,7 +84,7 @@ function save_config(array $config): void {
     log_msg("Config saved!", "SUCCESS");
 }
 
-function get_page(string $url, string $cookie_string): string|false {
+function get_page(string $url, string $cookie_string = ''): string|false {
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
@@ -351,25 +351,23 @@ function interactive_setup(): array {
     global $green, $cyan, $yellow, $reset;
     
     echo "\n" . $green . "╔════════════════════════════════════════════════╗" . $reset . "\n";
-    echo $green . "║     TRONBLOW FAUCET BOT v2.0                  ║" . $reset . "\n";
+    echo $green . "║     TRONBLOW FAUCET BOT v2.1                  ║" . $reset . "\n";
     echo $green . "║     Developer: Moneymaker_w                    ║" . $reset . "\n";
     echo $green . "╚════════════════════════════════════════════════╝" . $reset . "\n\n";
 
     $config = [];
-    echo $cyan . "[1/2] Enter your FaucetPay email:" . $reset . "\n";
+    echo $cyan . "[1/1] Enter your FaucetPay email:" . $reset . "\n";
     $config['email'] = read_line("Email: ");
     while (empty($config['email']) || !filter_var($config['email'], FILTER_VALIDATE_EMAIL)) {
         log_msg("Invalid email!", "WARN");
         $config['email'] = read_line("Email: ");
     }
 
-    echo "\n" . $cyan . "[2/2] Enter your browser cookie:" . $reset . "\n";
-    echo $yellow . "(DevTools > Network > claim request > Request Headers > Cookie)" . $reset . "\n";
-    $config['cookie'] = read_line("Cookie: ");
-
+    // Tidak ada input cookie lagi
+    $config['cookie'] = ''; // kosongkan
     $config['base_url'] = "https://tronblow.site";
     $config['delay'] = 65;
 
-    echo "\n" . $green . "Config saved!" . $reset . "\n";
+    echo "\n" . $green . "Config saved! (Cookie not required)" . $reset . "\n";
     return $config;
 }
