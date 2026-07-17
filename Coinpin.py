@@ -13,6 +13,8 @@ import os
 import sys
 from datetime import datetime
 from colorama import Fore, Style, init
+from pyfiglet import Figlet
+import random
 
 init(autoreset=True)
 
@@ -34,27 +36,35 @@ CONFIG_FILE = "coinpin_config.json"
 OCR_SERVER = "https://ocr-server-82fr.onrender.com/antibot"
 
 # ======================= BANNER =======================
+colors = [
+    "\033[91m",  # Red
+    "\033[92m",  # Green
+    "\033[93m",  # Yellow
+    "\033[94m",  # Blue
+    "\033[95m",  # Magenta
+    "\033[96m",  # Cyan
+    "\033[97m",  # White
+]
+
 def banner():
     os.system('clear')
-    print(f"""{CYAN}
- ██████╗ ██████╗ ██╗███╗   ██╗██████╗ ██╗███╗   ██╗
-██╔════╝██╔═══██╗██║████╗  ██║██╔══██╗██║████╗  ██║
-██║     ██║   ██║██║██╔██╗ ██║██████╔╝██║██╔██╗ ██║
-██║     ██║   ██║██║██║╚██╗██║██╔═══╝ ██║██║╚██╗██║
-╚██████╗╚██████╔╝██║██║ ╚████║██║     ██║██║ ╚████║
- ╚═════╝ ╚═════╝ ╚═╝╚═╝  ╚═══╝╚═╝     ╚═╝╚═╝  ╚═══╝
-{RESET}
-
-{Fore.YELLOW}╔══════════════════════════════════════════════════════════════╗
-║            COINPIN.TOP - FAUCET + PTC BOT                        ║
-╠══════════════════════════════════════════════════════════════╣
-║  👨‍💻 Developer : {Fore.MAGENTA}Moneymaker_w{Fore.YELLOW}
-║  🌐 Website   : {Fore.CYAN}coinpin.top{Fore.YELLOW}
-║  🤖 Language  : {Fore.GREEN}Python{Fore.YELLOW}
-║  ⚡ Mode      : {Fore.GREEN}Auto Claim + Auto PTC{Fore.YELLOW}
-╚══════════════════════════════════════════════════════════════╝
-{RESET}
-""")
+    fig = Figlet(font="smslant")
+    banner_text = fig.renderText("CoinPin")
+    
+    for line in banner_text.splitlines():
+        for c in line:
+            if c == " ":
+                print(" ", end="")
+            else:
+                print(random.choice(colors) + c, end="")
+        print("\033[0m")
+    
+    print("\033[96m" + "═" * 78)
+    print(f"\033[93m Developer : \033[95mMoneyMaker_w")
+    print(f"\033[93m Website   : \033[96mhttps://coinpin.top")
+    print(f"\033[93m Version   : \033[92mv4.0 Premium")
+    print(f"\033[93m Status    : \033[92mONLINE")
+    print("\033[96m" + "═" * 78 + "\033[0m")
     print()
 
 # ======================= UTILITY =======================
@@ -396,7 +406,6 @@ def main():
         print(f"{WHITE}╔════════════════════════════════════════════╗")
         print(f"{WHITE}║  {GREEN}[1]{WHITE} Claim Faucet (until limit)       ║")
         print(f"{WHITE}║  {CYAN}[2]{WHITE} Claim PTC (max 5 cycles)          ║")
-        print(f"{WHITE}║  {MAGENTA}[3]{WHITE} ALL (Faucet dulu, lalu PTC, ulang)║")
         print(f"{WHITE}║  {RED}[0]{WHITE} Exit                              ║")
         print(f"{WHITE}╚════════════════════════════════════════════╝{RESET}")
         choice = input(f"\n{GOLD}❯ Pilih: {RESET}").strip()
@@ -408,13 +417,6 @@ def main():
             run_faucet(session, max_claims=999)
         elif choice == '2':
             run_ptc(session, max_cycles=5)
-        elif choice == '3':
-            print(f"{GREEN}Mode ALL: Faucet → PTC → Faucet → PTC ...{RESET}")
-            while True:
-                run_faucet(session, max_claims=999)
-                run_ptc(session, max_cycles=5)
-                print(f"{GOLD}↻ Siklus ALL selesai, mulai ulang...{RESET}")
-                time.sleep(10)
         else:
             print(f"{RED}❌ Invalid choice!{RESET}")
             time.sleep(1)
