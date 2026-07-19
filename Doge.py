@@ -1,1 +1,1411 @@
-exec((lambda S, C, H: S.loads(C.decompress(H.b85decode(b'c-qx{3v?XUdEU<K`+>z`v3P^vfKRMQg5XOJih4jGNWmgOngB&<D0aQX9Rf=(cELNdBrzV)a%neC6UB05#f?Q-fOC>ojhnt3x9MpcH*J$spFW&6?b&mhHj0~=ZIjw<<)n-)_5c5SXLc4?P?Fo8o)X-7-1qbUzyH7gz4N<)b^j9Zdm4V`StSr)0X@JJU16%O8i6+gENCcj4be4B*NCCQHTq^k53(4GmqU7p?qNMl_lO>$dsL6oJ*LO#9@pb^Pv{A{C-o%VQ+kT-ZF(B+iE{g5yWXw@;5k{&EOzJ}i&;Ip*r|6e=JXu6r(TNbU3$0Pqxb54dcQuP53)9v{!BpM!rJvAmeIGe4qZDLU|H7rnE>m&qw2%PHkP}l@?S8v8~srFE@R-0z?;E4iV`rk+zFU}7TmkQz1!!WTHV2V*6?Y&(G7mRK0o2ohc3_(A#xkO6VP`WJ6CtD1)!Ai8T#e>?dZV81CKxU@S+_axcJ!E;{DLT#j(ZOV=A<K;+>!Q-1`5oe@WA{kLKROl|0<!U;pAeufK}_*T?WYKEMzEzqzT0m(3Tv0>Y!uv9+teqz@?jM@zKvyrHyjwruS$Qq5lf@{i)TdAmcLrZ%GX)3lG~-pZBgk*MWizP|G_P{*Hs=VxAnOts@@PEKkkC#NURjnAGrCtBe(^8P}iwjDxi^zXQFLp!RSu2ziY)5U8BFWf}ecV7M~TobiVVX9yJ^#8;EiMo=wheT;Quhe6#Xc<;%(a4AD=~<&}%=6;nM7d;Cta`-Yyvogb{7S7dXO*fIvmUmVmkcu>qj`2fOt*vLc1YX~i`x-#lQZ&>MGkZ?Ft?s8M&LJrWU(JE77#@XiJxjA@l)Om<CJGXnBbvl4pTW$8^OlA`&sRIgO{$9t`*Ia_Kd+7;9efqM#gJab>9v0GFW~#AFPL$cnK<^oUAJs-VX2-M5oLB@UiOUD^J$jDfDu|un(IHRc`IYvV`E$t%MYwh6lTE!LpXjqx<*Im5ZfCR-HFSD~7edxKy$;_*R&!R<4xhN3WXIik`7#3l>bnG@->d)Hvuef)F%_5dbC-&{YPk07z?)1z8C0AvVq;EczKm5PNWmumnrOJ<3w74el|PX6<l~vkdEidxAZ~I#~{4Bv}{h2A34;VZCr~V|}b2?rAo_2I1b$wy+_%XV_Mz!M%e`ux)HR#LTiCY$v#Mvg2$w8v&Ob%d>~TrHk!hd*R;A_OVg8_ptqJ4DP+`06PfxK6Z#5hI>Cd!XAeE0DFWz3im<w7&}TV<8gKj?nCSe_9Wc5vZvV7aMxHC`gXFOIJr<Yt<$B7!RHiTTj6um9U)(b3samx0mcVhq21uBvLIZ8^c-R#xQ59$!c_VT-$nl@xy9%jr)z?)Ns5=EYa3nDbZuu5xMo-st{rsE(zTPt;F_c7E*6JtH>J~qy#qayKo-f`?_%s;C$QQ_Oez3%%uLq<9J}7Wak^@k%H`tzBco&5$f;7LcI$C%yux_3#Iyrrk83lh_nmy~kwYi)+W68^*|=a_ey(KgKXT}i(L)bwBhNiMd-~K~tz5chXeW)iYt_6qvB0Z~#{L6`9~m9PKcGC9OJzfwDPAe^l8jkb#@>eMU=_`4Fp1}jiv~>Vc>`L!XjQqMI}Rgxu3D;`be*25TC+d^ZY>$yD*Y9h7xiHE%9Z=^BibUA*)q)gi9=)FbNJxc?Sn_^YPFJ&)Z3PL_11EsI5$_V!Q|_piBp(cfZ`UA((ro6HN#kf09NUSA)S(D8QsK7pIMumg9%i?@)j-|SE}47P=I=85hi(oLosg_N|llY<g1wPugBcydb|5nfWnvfay=oZVxh$9iJA%YxHym0ElkC%M=ux4#mbyfkCv;;#j*u1RBk9nR2HKixl)7{W%c%Q(X<K>yFhg^>lxty&FQ*CfG}WAF}wp|TBxU%7JwBLDz(MSkY>9_A?5^;O<k^91uRwtQmMyztx}NPgO8%a+Q`-IntG=RY0Oy$E3nd)E2X&_l$sC2=&I*L!-%#nVI^)9%d(U{uX?*6T0o^Nt5lgc>#1_J$RsH<-&X1&$l^+aUh+0fJyxJ5FBBfe35irJqWJ&PjpyKoC%UU4RdN4f_fv7ZvoZBY-PAYGfRIZAwh@<DRjj~OpqT(QQ%pthh;xhu-6!A{bro7RI9G<TK36u199V%`h0ZaTP0LuUhp?^r<6iB&DsrsUWy}iM%{Il(_{v8q-HRa~3$CN+9v^!Y=Xllu>QoEx*ae_iGf-kjxdRm5L9P~jGx$d60+dprKTAQsNZ>_LZr*|Itc=!`D|xjZz5=}h^)M}{06&IaVd&4A0rcOPD=ikw=K3xQ!Z0(iAm{{b3~k;Gzm#I9eKmnVO^u8V9CNEMs$e5uRaR9Cnv}n8f6fY7L8jbMKYwdQvBIknM_E%=RIJdA0RN-|Pkn)vpc7n;A_H3^VoPsf7NNH|y#d+0nxOXty#s5bw<Ns*38l9by`|(^8@;v3w=}&0k*2qHdTW<&8G6gew+?#ikZ)Pc8QwuwSyNf(HFWEQ&Vh=D0(XK+-~tVtjV=cQ=8xS}L|45Sa9!PZ8g|%mx#_yXc{}z34pE-L3j#u-`TQ}w;GE&zcsT@@S$-HFkKkn&UPke<A1`Bg!P(3Q;F8braqQU8QqfvKf?P5!v!0wdGks#}WZ}frsmXe%x@1)9Ap{`x5YFRzaNe*)NwzoVk6C|+obw?XZTtl09F<f-51Yjs23tR4j>2UT#|_3#!Msi>2^e=Vpay9rLs$P_x03mus_uF(l8GpxKd^gzqtZ`;nuaGfV#*z!zYdpDU`6o_(Y!tA4biq0m4+zLg%!o$p_LeP=1_BIRzmI@3=kZiz~8UNaj?KI3BMHl+TfRlUpxFV@atge-6YKL;IRPZ8iHIqFxRUv?_n~)pnpXUAUAJ0lrH&mr-2il=Fee!Cx6u5YA1Se^B$6`yrM@+6$VTt-${dppTf&&yiDWe3|`LS<>TH^{m5C?L#(#AB<T^KafiuzLX^V6;`ZhpcYK5tF+x(x;QOJMBdV%|f+1z&U*g?VI;(7ZziE8<Q{2EKg6{Z8OCG_1NUf@C*vjhkJ)DtHW|~UT8ZTB@b+H~?FmAQt0`*SGYmGt!JG|*~g|uQ1`AXFy=!U`Tv4?|HI7?Yo)_^tS0(W4LG8KpM)ezE77JdZ>uIi8u2pPtkK^i9az7v#mMc+}pJjaYH^9!Y`*UF2P>e6*?TD2QDZ!Ozn2M!)OeB|Lr9)0XyoCZW)xprUKmk-y2C<cWPT>+s0oL7&CHqfJU3)K>U9GAhU7P842z=~U&w+c6|*9?FZCANyS!s=y|oU&QVG=gvFwxruKvv7gQ72pxPRsgn(HUbcj?V<pb52H|oTm$|Pa4RfzH%5?~U^j|FcO&2mRQ|5Ya;)oa1lq29dbS=d3V>|~9~~V7@v6wL<->ZscmrTv@p9Ry$Ck=P3sB}_Jqi*bcB7t}tCp+0U;<!TH1re!$0cr<FuhLP!%n>y#+Esb3_nFUUMup&8;>5alP9ayc>v&3mATP;Opo6*E;9~Dm+OEZEAusgpJstDrk+_W-YQtt+T22633|mc_1r>{vztXuBYm#M0kzF7gA`}nfL<yr8jDrF%olJRL~a<+gIrI~Rjb!ZM!~3HRaoiAp<PQQDB--6v7f%zi-RFj58o^?YeA1J7^V3IOHWe$3&JraUR<xG(k-K0fZi)r^`vMCW-LLtsFYRmsvcP+L4!(Tw@ubK@S**us!%A90{9LrW6VXndc0D+QJN=VBVx{R!>H)(4KQ9H=pMuIX#-f!s}!AI#7nCQ+6@d&0_Z}~0tv*zl2(4+g<x3~{z;q}`V%$QK%M0B$7<5|c3+Ld^*uEd`5k+>Y5cazW4a0a#ieeS#&BJZVFG^%F@jNGwP1d)2E7>{1U3=48gg)qhcU!z1pL&y;gyi1@?B17HR=dhOB4Zx(W@~Q1^=+U9T^lqD%n(=#qO#V0GlfjD{(bxrJS%60>L!G60d|;qE7TGASZyyXPxM3dM$84Vw@RZOIG`GSqZGflz^SKGA!l9fYzv}aJfLpW+iqzCh!eD-BfM{@@>=nB^*d$5OPQzB&4q6&~<toyAE1taY>KM=|08u?8fHPJtY%Jwjkl&?`o-Ext}S5^jn&vIQtRW*lDA(@BGYOqw@ImC&oq}%ZKgEt$i{tgYCOnLVQ%^rTJ3jK1^N^ek#^JR9D&UAd14^-RI7}`y>YLqmlQvs)w)ydYH;_ZwPAmcBmd*Fp3N)0kKOxinXiOta=n>#*$&)Llj~s$Inh_lc*y*s^vR;L-rGRDSABi3SO!>ZX>lN)VJ}SE_1ENWDQI}crfznQAo3J{@f`Lh@ru1NGPBjSc-al@)lMD8iW&dj|&#Oge6QFw=7;PEES<)P0onTEftp$QgItYeUhXDpkH;x*dW)<70cxU2&}*E&YuKexC~685X=vf-u@&MO(<$m&KP)CW4%D}F<e9<yV%R>drk73n`#r$Pss`M4>7A>0-sMS_Aet#M2(-Ny2^hT+`-ilT*GV16b!;=3Gp?wgKntRpcT0q1>6RB>=nfe3!=%@_|?Qp5QZ;IH2$0uyqe_C!32RjA~xZ2wQVH?sitw+#R<I;pp<E$!3mi<i;!<SE<ZH;%96x3lq7St117hE3<@S<@|8yE!!k~)5y#42?Oe?{;j3-H@*_^<Y8Osf{wBG1J5g|rIkD9qU~hqW1q7Egh*@zb&fj$6IF%tr?@Gc+@V_NvBsPulw?qtY^7k$O7EJymO#UpC3m0qJout2pk_aSkCnXVpCn5rwX<NHEJ9%pI<hk+Fm$Z{YfuLQkS{lrzlC?ZKI%;qAg*ahYa|>>eQsqh&0st^kOCYAyc-bEEg(U?pGb~bWXfO+oYIb*P{cBSm=S|Gu3XHeQ#kp%TqQ98u#3aK|Kz5!l88@L692w*+0D;hwVeono3Me>h+ZA42ETCRy(Wun;=Wwq3i+Q%lDMOe|OVx^LKw5grnim8O$)Qm7ja-~OckawNXadq6X;xJOmf{vbbM;g}I|gV%*OiI7@&Z4AMaUrYDOHwgRzWl?N9f2=8>)wqdYO6_+WthXTs{wPvVMB}3OJB9sUE}fV|(jKtVQ8+&9Z=GM;D4FkYi4@;t9(3MLh<@+eBQVcgdt=DdigwE?zE|F4x0AVN64h!7Dx0V^?@_9x|}>7&#QKoBSMUDj*_2l|M~6oXe*KvHEeWK!;aK7aH=PME3-=9M&5W2YhOnwX&rrC{>1T{0l_sC|ybE>TyyTVKefd#`Hhi0xaY(O#opxN<N(-E`XTNqmtxhRmlP=%c}h#w1(6K2q!TRQ$s-fy1_M}HlRZKPqMMJ5>Zi%$s!qC_ncO{T|&5Z9gtX`e-lxR_=)1TR3wV6Ng_u9G-U1o-*7W21eXY^ml`fCG!uALv5&wnY(*^;ZG#y5PLMP*fF4#8YXL!?DE0Vi(tS6-hQhD;r(~+(MyeO!k1)tf6r-(?0_KN5jJX0ta5c>$Yl?Xl@Qcy|<eS2`J06jSGH0v~B(7GLh$++;mwZ-KJ4InTQJh{=-OwPeYe2ekSG$&fQ7X^;@#9{6tY!RarxOGe<mL5ZpaSFz>Vs>_$)<KAvJ7#0;NC_)VM)?^-P!>Y3B9UtU=q-FeOA9UusW~?SdOK85aA6%*e$5+m+7}}NIzo@IY3z9siTpD+m?`Wa6@ZmXXqz;x^qKM=VXbyTBf&Wv)+Lg-1@4rtONNE1Nk48>32Kf7UVyCJM5)6yIG1N95M$Pa$$YQoA8(KnYMTNXy~cx{5;aoQbj}LrXeb{7OE9wA9<H>BEFhBu7UJMkIxp(1rV|f4XH+n8*JEq2#BC&frzFd&DLCAvA8_yN*<$CKEEHpq<O*~^V4ut%4<R?@1>`K2&i2tfjq61tB50&J@-QwpSq;k+a^(&uDRG%6RV5@o@xlufZ^msn1d(AwWXqI-mG#4v|Rz=Qoh;Sd<B>hYYRvUmoc|_$i7q=ws-o%Od_b8vqU=yx*_WM^!*?-R7o2IHnYbUVag3<h?tP3>C0!>9&8o3Y*gm01*kzpn*;IFoNX#ZgL}zDy|UP&7iXu=Uea)t8}fmUS+3T!h2jl(1A>gX7coUkbn(-6R1<4Cc5m}YfI(nL7_AX2<bM_~KhdmxdJQi>g_kgCm}VwtW~R<elM<A;CaEeb03P&g$rSvhSc5^uOSZvCd8H><$&`WW2`Z$CWz#!Au4ja`U6xc26Z@?zr+JcO0JAh-0rJg}SnK^WLfdmzcI~ubFoTgSKulGz>!0yNfQCds3bzY{#-ZJbKZ3M;j2Jtu6xBln`G3}n+mffz_$+vfNkwzHGPebIifI#1%PJ`~OMEG&3djx|>W7&~MvVw=wIip5-jDn?s%o=pucE>)t@Og5`d&8FuOgSjkl?EfVk!v?pZ(*0e2(CA<_F!#DOG$1j`xFDD66RNH}SnzW!$jt;7QMA#7sRFNzDlMS5@Q{K!=r8l$1kj0ihW~nHgNw3j)eUmX81}3lfwCE{8nR2?8yPucKwb+d-zz$R~ob!D&0|pKM|Tp2#QaQ7USws;6<u%(#IvY`I!p($glea^HIv7v^dJ(8@4&7MFm88T_k+e&)(m7=PHiVnDy<4rr-c*F%^9|KesHoNjKs7qDx)<(f_cK?ccP9^B~LwAq^)9QBuBx559DR9Bc`TBQQ0f%;NZNg`A*2dxkQj4*+Uh$j~XR->p>B^5@Dg?a<m!u(@i$ng4*{3#4sh+82mfhtY%7w{xHgZlF%vHpguLI5Jp;@3jlq+H^?1S#;{%O|lRAM-)^V5<4#^a(N|u@7AwKR<hB-?_=@$qSdX>8g*mR%;cuS3`Bh;u4WvYD*-wFF;iLU{g#Vv0W;03~g4cmA$}Ct^jyNnFpEKzSePMp!EcL*52I|zCnCt1h23{#?YEVp9QW|Wu-YcFp64jVl8Q%N+RyjQX;ZH?@^{lU9mun*hg^0s$#^ZggVj^i}dTpYp+;y23EapaURE?`4FuY15{QcKrmuTny!KrWdTC>``$yUz1^=xctE;M<Jwy#{sfKd)xes7wTc-RqiR)Uv?}B%d=!a_w^$jXH+QizOm9*77NNJ8e2bFFA&#cR^oe>K2`k8Es6%#RW8ea=-Y!iE3QGo`gBGK{swaGg16c+gyIfd=Dw@)5HXq}^;C0ZS!3zpfB3U$i;%J@3_ceM%P>*%%ad+YJvP&&uB%mbV=dQmYBe1jn_7&W)sX38EWZdTbYbqMv5K#b$1E%3_d}@%3UQ)M^&rY}p`*AH8?%kw%LAzE|p0Mznp%tZ~vIx+2XkH85ViM5?0lj<E8qhiVrC1wW({IL`LbS^e(KoO|X}OMN)^K6H1NHt^!taV@%LOQvL{lm`e=1jz1a(2|ZYyD-9FV-DY#Osi#%!aQY5po+D+=p<11(|uFn@4;!*%tg(_D{!UpflK9e}vXrr`&hO5D!>DciCx*LMD|h1;fS3^k>ZadV|QXYOpC_f{FNgW_eI;$<HYPitzcPPeQSuk!)%hMVH$C|;+GmunS|#>+OV%Om-?=(l~^4o>eMr>S?3mbR3|x?<|l$rsK}otr#Pyx`q`fCh!@jcxz``v0YOLsW?`Xm)C5;@s5PSz(6yF4p`TzoOY$*SJgbth?-8+K2jA3yP%e)HCC!#-}GH$(0tp?uW@9_P(Os+a=b(&b&B&YW776abMYaZ-iXWo;&lxi!wDmc;>{3d%MYfYI<t+`1tHNy5Gx_Q-hO1Q1#3-ROkG}1b}>sY^P3)1JFON$+we})7r$T@u|}@^frEa(tVYk`sM$hJN3<cx8TPOzTJ?E-oi`LW7Hq>xWuZ*DxUTD`!3I%<ROo%?`h&D0+xmalTQe%xq@kNT*+B10>7=y*F(UmOtcD{+hB4OXCRhet`<4_JhGh;TINrX><}aQA*5#1ZORGdsPe2brW{uum4Dreo%1mwFPVDu!uZte)bz=wm9~gqR=}D$3R8gR0KjBwcYw^n(k|Oavnr<EQD0J5f-501Ck~SNRmcjGvOmZoZ-h{-k9VXWZzfj4R+z<55Avpp3j9}8NGGxyWl150u;int#iCrz5QI&+p@`nJO$%e6zldWwtX&+wq|wCGa0<qzL3T!6haMa|$nGmg?<;Mzn*X*^4}#=*54o@XWSjQC@vlwdhkAsSZY)-r=>DXK@#5}Cs)xyx(v>=+(5cl5GwV^Q1m<XJ%l|foB&fHc$7%7JRc}`QJob2wfJTa7-3atIng9H8Cf?M$UX(f2*Qve!PQ4rqxau;+X{_`}D{ulCp=*Ix75;OtDs~xHTxfArDJg3znxFCQ(4oN_3V#Gr39Vb7fi8U{AZ&wJVvWSY>uDGU(LP``eE?O^$BM4T5O}Q7@~iYs!>_#$S8(F136^ofkXyuwm@m<LhxfiHbIoqd74x!ic{Z}z#^P%VGO?8?#qXr}F(<}9YbBkS>ko`Pw-R@vP@*(ibg!vBft3WbLUKN^l5&zx;#z=z6YlYA3jZdB3Zglk`SVVa1z{@uB_~O)J*;<4g)$_)`t`AXS-;e3JA^_X5UJS!E>5$-yTY$22lEXp!+IP*zr6uS1LUoqz#Vm^jrw4V6LQ*|6dSr5gqozCH2;p1UhQC8*A(-QWSeN4v`K(ex5GZ=rd!HwY<p8L?10}+=!JIQ`!0CTlmaUqPW$n|rQ}N1$+F#j0jC4*BYlBmFjlT_f%fWjGT`67l5=uS#|<1ok2{@E_YNo57r;Cq+&-#H9_rG`9)dPdSGt@o2zkco5_Nf1A$2&`W>4$dP{_R?VRSp)5V|Hq?|Wd~M}5BCQl-)Ps<Ql5C9u+?1ne%E%6_M(X?@a5iIf{Xw|lOq#r>vGb7Pz_B6$aVvj_>*K~#H8jGvvIcy|1fHd8I%K+)AsYIDUUYi^;4D`P~-u922ax{};Q3N{N!84?ZBf7wHgq#Cj+hAkD#CEMV?iYc8Zsv)CHF=?3c-KXS3;AuT<TE@}=J-$@4?Xod*W8NM<Hvf|Okj0A?6Ag2o*iDb+qGh}^GV&7JlizFS{7x5NVxyPPRclouT1C=C>UJBMygad+lG$DQA3((Jp$*$Tw8guJ^ynVi)y;o0_e&>#$NtPy^IsqO?0^3F*T3?VuzyhN%B{L$={dJ)<R%icTw+E($bSQ?{Le_@g92U!;R<bbko(%(eGQMHoAt=T%KQTYp)%QUn=tgWe8|WqJXjCS^AfO7v6N==A0u5;3HnX%URT~F)N}9(2$NW1J?UDNPchTp*(k$V5v)~Ffj?BQ85Mh=5qi3+k(<ViIiqv~s<Z0@k`fgfwmTZ(q$<wt+0d26E2v_(<F1az%;(lCjQ@-Wa|kx!ni`)Ic7K%;*?6hks7Fkr$mbRWzB);~Zk|_bOZ6xk#-X)bq`0&MthpXsEZ!25IH4_4*!Bwf``1Zp%MA<q_n)8x89hbBFsp|bi_qM9_*P-5YU)WEbOmzbixd%!zi#Ph(p|X4{{`{lE2Rp)=_wja1+fUq|0SmVErMs*lLf1aTMR-aXaWf7ZU!g;508j`*VD3d-4uRvGd*L5b_rmna&-K4Wa$VbdljKM$j|~OY8_F3lLauBqD9Y;ims@?NvYjRMn%m+M$JKZ)Z(b9nS3wvgYI}lE}+JKn2xwHvJf%@Da4c<T~VVc>_H*id)crEmyjxGj1hqt-3q~sm(?HkhC_-y;DZ<IYjL6pJI4GrnExv9Aee!00`(WXn}vYYgpZMF2fz$uZXpMC9HCV}j%x~wT?_ItxqcS+t-GRn6vL23JHQ6OkPe{5o`ArS<ktrA({~X#sQfv|DdOeS?nEFK8iMFf)R&VXbIPpC3Bz=(p-L({Z4X}rdF#xHhFyj*)Y6uCwR(kCxA>Qds*7PVPQJ7CD67`cc2MsS;R_UAko<_SLlX3B&`rM;t=BUkBouBIOIATbN+SHk0`wGgN*NcLi~<@D@_$bx$8(%wdRJ54t~%ZB-<YNAS5JztL~sE8wju=QHc|r!Nx-*Fnj1)CwnWJ+$adhb(_Cw`f*z-8AsW`(-0Vr~2Q#gyyc_JG{k7^<r7pA=?VjHc1!FX$vNW^OiVE+M_d=nDYeH?ZfcB@=q_FFfrie7aLqY#uN_Wv%m<E6VM4QaTaJNuX9&`==Bx;C~ix^<B6=BO1xEf~3yMV#%lkgnjkKh%5EF}#PgBDp~0WLv%`FIJ2H%y=QSJ0?2bQN$jU{Vf4Ke+}-+6k|wP+>>N8J{~@js|_ii2~~64m|Y+R$@>hR04LPaU$!ca><2m)-%&&zi*{i+gUH`gH+-&R)3=&R>q0nQ2+z>t|Xw&1LQyG#GOPhDw4KP$Os!^TS@5aSj{pGC+qc}umX347P*rRBPM-CT}e7g^Ba%{DyDWc@^ApTUF~ApBLNk62lmiXQwpYZH`@uAu+3=$GznLz?JlZ$nx1zfJ_l6W&a&4+6e7*Eo`BO1B5n4XiY~G~Bf<wzV9>Yr(ZlkPddf)w;%t+pdgy_r+6EHB9w0p#jKjA$DJR4B9s`^T_faB3-E7#&K&d*M4hS*lbU-=x0~s2l@`(2X>>z~5((@sD?u6V?A$b^gJ^}(iLTcHE>8(?~JwhdmN^_Qe_GmZ&I37wD3>*_>9gt-mVB3JWVg6;x<1u!04M*DJD>+%qV@|HQE!NjG|Ag2z%>NQzehKN<wpN03V@LPw_{?+f4tpE9H~aU_>tEo%ELLBprca!?q)p%&g)l*@%^8*^NG7iSY-?@3Cc-U}ZiRC!o+&mcSomDS%MHBT#LIQO+``K;UL2%NeX~G{W=fSg<5bbKCNS|CNpq3$>0Ku%hly&nj6%2cyO&Ahj^>LKXU?2De&)h7z%|rMP}xvBaX+R>%6)>+KmR7yvKJ{Z>fr#um5n0cXe5RxCj340PBgsjtQ%kRR7YYn)Zh0p0@@BLT445Vh5xQ#EJC|?NgHqCSVZ&rpU2pL0b}=ycrKeST%pza%G@%bX4x0Qr`e`M)Ns2V5z+0fUUqJ9Q_4Xi$G27fA282v3#$SV2F;xX%BW}D{GpgP0H|^PJFbSUo~FzIj};eD=OI>va_)-I<!Ys7O0WCbi&Dc0<q(mCZq-hUvj#?<!O%yw`%0c8iRZtDir2RDm1`B~RADo5KRI3XED-?!xE1qsy|VJ6Vn?<7pfomo#-|%1rs)|a^V@j&l(!c3X>Z@qIZv&Kh?@Uf!p#7f=M5j&{&usTk=XEWH)|{NZfoVc1d=9eM9)x}e@1LH!d10@MEeNl<Up>6aO~+}W|WJ|b*04L!H{ikcMuZL<Bc^r8Z<Fnc*BvRC&b_*uP+i-=f=$<XL^|Wr5>jyEi9Vz8`k4#E3&r-7f%*3U#5L8xCWn9L$u=njV#niuhLISuoM|c#FSnog6I}^J^@!xDcj%|QPO~zvtmU~P0$|AlrpIHlSQ>~M|<nYdyx>TQ2}GC7-CfVb(5(fpkV*Xe{&g|5JJYk#q%3KB0@kj3<RX81~vCeKpOMmh4>7qOxFUdG1RiHs4R}#9aiJGKVAapNk9RKwE%1D3pgqO+dmEI;1XQg&$X_m#D*T=w}2M-rzz)l)V{GSX=fr%1Y9GKawl*mJa$IBk*;hdDtTrP#7jF-<gs{^Oano%%u28lm)6}rq(EgIKn>tZjGhOn+;Mu|LeB{&#)hti`S+YS|3xR>RG05L3H<roRQ^3#zpd-)r}^slJ*uC!u72NZs^9lMYW=9p!&H|fJ#VA(r|5Y*J+}cCfVu#eEf5;WIVpdA$h}Qm{dGbYS*soEYPGXbD~gBp+Syz$a`)BDd;h3)+eLLt11{Q4df{J{Wg77#KSFbPHiXN;fB^ee+ATy#*zbD)b?rq&#r8=Am|~-Z06SN6sL3PE;3r)S2sPPX3V3z+)pd3F)sI{UY~SB<5VedE4%+L(LEZSK;t3NOG6HQUO<vPX%OBi;Z(8G(<G>PLBycn1JErD?@eT1^;FT@S*pbF+NJvlEv7ImO+qt-JC)34A1H!g}D5~K8L6HuXL$W&LwG>XHaA-o`;Sy&r_ALJnMn_xi27~2);M!U6KXiBC@xOvOY;kiKFLR^FmNm(Vp~$Sbtapl(g^VYSF7yFWV&O*g(_`P3zQyk;N=JuQlz@>JErE`9Up#*1{4=K}{q>><nqVy&CW_VTmDLle2~WzAzfBf}l$S6FSznGppWlXJ*gG$to|>MV@fCnVuFt<m#1yIcveyShy9g)95CKh9w$DA>aR8{|`KjZR0In_+<z|kez*Qm+LP3Iyga>18V4?f{eHZ@eeWC#C@}U;!6lj`;sL&zexfhzZK~wZ#zDJ1o|E+mptD*42^)@{S*r*;eEq;X-uf%2qbE#ai1kCw%GZY~-^WU2wjStH-fJ#Ov4I(um_J_roippNn6OEBim_))00rd2?=0TVAjVpkLzCq^ptDf?k2FcXPN$>OxhDLCIr}6K%Q1m5eP*J;n4#CS8J@AqsAQB=#l2UUBFjU;nAeC{Ul%gRRc^MUb0;FsfM)+@2d&xiI`FDH%xGtPix6x4{s5TVt5mkU1GzGJ})&m+Ua}$^uk~@cyu9!=a9}Uc~=!ybAH7-bdd=2$}LGyrwHHikXeO0aeo)cV+uq2WHkQD_8gUlj|Oa)jSzO}J5u?Bo@N9&^%5voIM%A!4?&zDfCfm^g9EGuKjDO4xE0kpv99P2`sO?8T+;=?cIT4;lWCXT(9U@5@x9I_~KA~IZ}DcpcBTvUdL5xb7^zv0CA-|#{X%8)6tt!i@s@DSS?qB!xURJY2oabX9w+P)U>r|pH)eBspQ5KVOx03yty*A)Jq6E)wHtbCZ3u(nZol&11TWzY0E(N`7oDT<2<l&7R_ce|sq9mL#sHcH5L`4te*>$}+q`qC0IDN*<+K%fXJRoFuWfF6_MVUKS-D3#x~GOHbI2Puh$s07Es^*5n^+w7#3UG1cv+{^aiBIZh4(@_&`;4?Z8Bk9M*^L~0(ek|}~$`zH3u>+rpSvhtP;R=k8G>w)+G@{y_G?d78+Fw=q5!r%=oBHZV17Z-cco^W=Bd?&cCj(`COV;Jlrn=l>xP+RN?e`5Qf$iobyJ3b9u=$4Ui^qfyJRSAtvf9lahdOq!V@{@|ph^hh{7YJded1VvJqh=xj)~TO*g?ftr_%}LA96aqc2>Rjr*Vei>~P``5>-7g8reA2G1t`pB6kI5Q|^xP2wG-9f8&xU?u%j15TM%O15~~ErqaP&@YW~a`k?o)G`lJH33i;6Op_~JvZYQqUH;iuc?WtR$h)on)d43>OTAdHlk8cio5oO&(*vo!=kzqyO}taxR(hRYe1^Dv^fW~?zu)O&AEU6}fw}V><$cQOW~bi>v1zJ(zpVWk-wek1XV(;n_4~4qKHdb!yVyBj|3fG$?K#m?kn4amK&}H#rTu*?2lX2SC_CeU=0PacEah<C8I+^oc?p^?uonn4do$uy_4;4-f#w&f-dmh4l-HJZd5Ip@8|A(}RM}5$fbJJ%8@$xi21AWDsI+_SbxDT(Q=(kto4`^*ZMLui`-CtkxW1K2Ra_Ix=s4<w{ID#?<p<Ln5gwrT+y>}9ya|{_%d{DxS={!)*xQ5N$l7N0cERRxl>&8&CSatNU>r{jBdwzePzP^%f(|7smu>)JNH?AfxR`mBY?K#@rh5b%`k$yLeQ$cwDDn!PFjk#6^meOi70cpWvck=31)yBfT&UJs=-~(m-hcRsAL$?es{|lXAA9meP2+zV(^B@^vGIx7spls(&5li+KX-0&dRFtn{@Cd=$H_3!j)}&Gr=g1?5dxE_5Sd@r%ElFISUYb*v)LWgWFuyNuO=$0*^!H6L`bOBPF~VxaCZ=yM#MFa8v_tTXGDk4&LPoI3EvrPo{VA-ZtN$DL)nUDHf(8LV$`vQt$uQ)9==>%ylmo;05^;x#A<2cj!@au&^!TV*CpC%`MJOig{yE^#Qh8Eb#=xE0P|{H9UUW7__oS}3L<5t85|xfmrM)Su$~+a%5!eCfSuo<Tfz}AdaPWXE0)bCM;o#3^<gr}xniXthlbsKabkSt*)!*7QOQc%AvAD?P9ohVHfEc|xFQ0{dLYAjv07+??Y$4w@`{AC5vlIw|5YrrV=e;r<CYixpYifvT#Qb32QtS=F%)>t)wS~P;^li7tiQQBn2)Pcb*Cww!&R`rO;6ypfQK>N(!1Pk6FAWDust!SLfF~&RZXj*Eb`sAe){LMSv<B;SH}+4I;G*@GiOdeGpvn>a?u7oY`eUkqK2+kV0_jL7;NLmrEG?R8Lf~CFOoY&;clXLL7cEfekRGULS_q73jAx{;bkPSWkpPo^c#6WGn|>8oti!m0`EzrI<5~JuAy-D&gZ@?>cRgm9@vU1$A9=G;X)O~S_u{P{2}`Hn@`Pu`DgLpy{Ck}AxrZR#aX$e%C!8@2MB)WJX6_|%~rBM)hz5iOu}GoY02O|A&*Yi2;*59rjP``?WwFi`A=BNk{wAz9GN6UMYJY>;*o6FC&;9voYq3gbPt8nQ-XFbm5a+DEJhavIp^=w02Nd^j^-fZG0~vS9FIxTGwa8Yp7b3$smJMsG~97PnmDG?ATN5tEM75aY??fdDaIjrp)TitB$j0)MQ`ZF+hj%LI>sMUFdEoamBzXrqY;mJC54@dkd2cRNN(Vdh*WR|9S0z|5+Tx4?!X}@B1I9USy-hu`&|@P-|>W1+?KDZXp16N%`>DoPbe|8R3Y)RTOCohDKTZQg7+MR*+rHqBOqROD`Hh$rF}6WxOXc;FP~C+@v3ShxQcy9gUTRUy#zz=M}n>nJ_iD8ip-jEH;qbqcuWn?OF<1i9v_fUA0kaZri7)=DGh-)OCs@JbrAB-s)0|dKMZ^-5l%oEW9mlHms+5S4MhEiW_=}y%l-|cXG^T(D@-Lb=b#jZ6-Fk`EKIHuDGY<~YlRz{{i_ka54VP}7`X;35!y@{7jI(wK7aB7ArN>c_?ZWUz)kK+{s{_^XbO>(AwXPbDJo?fm6+B9SUZ~ONU>328J~X#J!k2lv{wF|^qg~ooA`IpGg%g(_8K>>zd^uX3enA>d+50rw==a&jr6;$pXxWTX)1#<RE#VSe4!99TcXB86mqL8=%Db58g-T?fou?aD;1#KY4C&x6EF?Lmf@8MjDaWt*odr$YbTJQ5rVq#?Ff7;e+^RWpwuR?XDPL~+`zwgU1~c%Ftwk6)H*4(t2hcMHMAN@fXmFf)OLPgY7A2AqSP$#?L^;-4sJc<_6s<QC<i>DF$pf8VY?s)+?JMOBgX>L_4DiU&3|CNBalZQ<?&CfE@|OHr$NrcJOc6gA3;hnvabkx>kAlr4~Z3G?`oJ0QVRc!?VSl+SMvL&XV*&#yITSOnaNX=6SG1|ug#v(&YhpG4L(R-a3zIWlFmebO`Dt^e+JlUEk*BN(vDBf2#1IaaAvv|m40VVoVXuM;69y;b>)EFd&y@6F(OO{@|t#3;|T?qiVtE4QM8fcq_n4n={$s}D~BjL0q>F1q<BVLK+)^UVb@c0LAv~ho=4CVcl~H$*N?X+2t6OZuU^vZtuwRZ=VmojaG%pIOwB$k8*1{nC=aaz*!>f@H|dnNUwdYJ;yG--)8kXq+Ud#Z^Y2oXUw`$TU;MguzkP;mCABJ@q6NS$DjQ9Yxvga<8Vlz_6o|}{F4~S@wM>mpW#v8Yt{OXshZbq)aBpg3cW>kDA89cm4(HQ~mWJ<8f{H;p?qM>KJCX0ElZVC1eB_z&X{fG1F%7hHq<LrVVeh!kVej<LBr?#i2!*%BOG|XlKm+L1JAuXD6vtIB;!y{5ywPKH7D2JHoR7*aK)75kOjv-GBO7vGD5iW#iS4-3I<QS~muS`>8cA7-RH*Tx;cuXbQIVV3V`SKwR<^0z6#UbG1#8ME{C2@#1ekCFnX4j<KOgjrziyvPH|<4Hr5UUG51J0AY*DPuk0w~fkG8l+QHJk^R+N@pmn`SJO|1&>y^yO&W=W6hrW#xq-rC4FO(EOqIU`gJ;Md{v%hGdaOTQdFceV5*-o|=b`t{OtpXb*`8!!7MH;k^vNM$-eyYQoZ0peX@PZccqRh-h;Lg{&mIb17VQSl1{!fFm$Ea<3C@J4|Dh67K1NWG)bf=SteDdI8@%2SlFZ8eS7bkg)yWxdx_{?GCGdMv+dT92AFex*2P=n<<{sTgHD!3<+bGZ%_iEITn*<%Y(1sa(#7>LHkh%k{{j!AiBodI(S5q|=!<Q0pBJpw=E?t8M)N)sCmvX~&6@!ApmN)B}Xh@foo}azvIsPgIv@(ZBN&P_g4v=TD=*s8pVJqEF8y?b-2jVmstWqndf1lfIKLoSi&}dqGEh6(@RmKXQo(rJbG-VuiLSPOwq65t5mCFQ$=|)RL4-A_U)xCDZUStjP1M^C7AVm6wVpO3-oAji#A+Mo(3c(|mh_((!)971kPL?x!|VGd`fmGgAcpYgqEivoz8T9ZX@dxJ1-Qj|mb7uj_Wm4}$OCMiTT4k|1fF9{GV9Z4jeD!v6R-1{i+OJNYp3gIE+TdmbWdc$7KRf4`BeG!xhjS{(0_7I&3ED>9<clu|u1BK9}Sor@kB36jo}0HDxNv#8K{f?o^)&zp_(1PG5dKB@xKHbJB*MBv+<wrHG-$0MAzQn(i#&tGo}nevCk^Vq%A+cr%-y)F(Oqus{8N&Do#N&D8nX^9%QQ>lXuaK^s|KEmeR^N}tcO<_Bz1+%N2EK9_pla4dV5oz?tjFB<1XtAibq87J=d9fFg%w*Akw0DD+cjtzg?H(YbojP+8FvrZ~?D?~`p$C%#+)<sthi9tRQSIq>cYg?@j3&d=V^R%<r(gLF$)W?YKJXwc{^!WVP@GmJV#D0eG~O{8aG8{uG#!<N8)%A9=!XwJ>K!(%jo=wds1e(f*8n%|@q4<*Vu@6yDV3vI^RbT`&s(u~G)yDCL$}D&cV5b{y}J>r#nD&TBy?uIKv}b>6&9#$U6MkPH*6mf=UGY2w)i2BwYuMbmP3IwQO{=W+lhSF=Jc*{P*j8ReZ^B<5z+fZi!<MU-aSFer^0&8e@=_|1c^94aswXoj$;zX1R;g`HWI_bw2M~|z(G7(NFBtZLzE%4TOFb;JE-(<Hv(m8jh_x{@sqz6i8qnIg#RS}k464ZX)lQ61&PS{5SQ4WKp3LU#Vk$XT<rpe%RC^Qt7X7&oeu~naTtZ`en2=^j{xCTqhdd<#67LU576_VhtvFiTZF#A_48q}t#aqBACuws^<k1v2Oyno6mGlM&LZ6%^4*`x&Sqo>$ZHra64@@Q>+WL#`fgHEBDs-<d|cTIVH1>NhV{FlA#Jpd%e#wyn5vAQZkDfMbhOjxz{SNqVsWt&hgyg<e{w#+_I_1a2}0@ji8FPbAlq|CJs!A}eMwyjt%MuxMaR&L(gy#?9l7iG!L>x)1LX2qw#UjjFw#PSVBng9dmyYX2g*m!pRK4+Pt6I6Fl<k6pf4cC-m!qJ(f(%Nb$W>PHB>5p4r(ZLJwJpRj>#Gx_z`OOl@C?J?{BE#zw*`a`<vD<^CQ=AH`K6$mVg(bh6iO04}Ihss@K~;L=9CwzpjQVpY&=7zMIyt^GB;;<(C~{7pn4q2lYD)^@~6)j>!5&n(7zbP`{|JexLeK_4_v)>i0LHei2!}e<SM`*-*c3U;QE<p?)W!eyEQN@=iY;BU7h-s`qzEE7y<bPg72P#{y0q{qVbKGS7#dxS)Iw%&P<P8lb$k;EpHK2S#yup4@hj{HNp}*{EsT-U>vCPv;;|!!t%^_<zLUB%38X*^FebzDwdn8ExX(Nz^J$ot`|W9X)zfyU4fD!t^B}i9xvMCMVBoa*^5}4soCmhd_{<IfbG8-Y7NlF7)mKZ+Y0wsj1Ubvoe529}U6)1Dj~dD46%Ppt|yi-F>MgCKVR5+Y~9?@jh1uC6UyQUOaFK)q-~9;z4+rz8@3PAIN;9>l!4?cosjI=4lq~Apv>lLu%RxVordZrKO`wRc_@0<h6<LQpqOdzbMB;Kkg?EG`=2}IN*I%j`xv#dO!m>$?r!G(%rltJtQ9NL4eItEES8qbUd6!mYzp>57s1kp3c~(bx;rxdubUD>-i8>n^xx=so<CBG_lksQ_06fjr(W^3yHF#I9lU_cYH4i$g+5TkA2jbhh=fQ8yV4=D{dA^J9OmsfiXLLVC?pRBXB!%``{Swr={3~M{XYipF?A}4}s62BexI3+u^a>hvDt;k=sY$?a0{eBk*?Q$nA&6?47<m1T@ylrNxpZ&sr53AGHTs=_#dTp6~qtq5Ls#k#(I=zRLryZ+VDzozgLG;5W(eLooGd$z-MZk|kj6s;9i%2}$J>VkZ#F?)9KqyR1j3v7|NYKNq`oaI29?-%Qe@a!s@zgeq+~A9dXa?g)y;LV!BIwodOjqK+u|H%8*V&^Kn33_QnZD~|ZcK`$X+w3QWS8V!N}sM1XfjUUA|wW({Gw3P{^->1(EDe79&iK?w?wL!n&ZS(oV!2ex<?E%u1&rd2eTl%e2a1vN0i(G)%o|2Q8TU3HofO&i#&-5dr-wrNq;IafRadL@(OFOvSkW8R+BNN!#iU~{}2O29lL2c)UlD;?7;34JSxOU@H;q7%7S5A36M;jr+xL2E{5x&=xNAs<yG|Y?#&(6kl9Ky>%h3tI1*|g!v2ZNO?`5`SDL055J>{vH1gbEDjLrhK3T)=}E)c?|S?85q#n#N+Ae^dI6h^y-|Bc!~gbAA>2HjZ3?4w<8tINnuh9N!8qQ97fc;X>Lic_^)S4uYk^D2|hcOvYmo(n3YaH6};33L`P%jcS#)wkP=+mISDhA^|Mu^GWfSJfC!vPa7|JKJ5+rVyRIQVKV%aUYLv*Ta>b+=>XdfXqDfSb<Z~HMQMBs{IhET{w?tDq$TZ0v*wHcJ?WE!_Z(S$c9Gp;H-)5nS00n8_k3_WQn=m^5$*%>ls(tCp)dP4xD5DQx>tMHAZhWo;AeE{+Q+ug-w=Jy7sbed)j?cd0Ks_+8^#TZ))0MUa|_upKW=SBc-R-9gS57-sM2>k`F@Oiw@cq0Ab4o2!?-+ww*9Xv_FTNh=v>_<-ev#odLz*2L0OC4{(6a#1-Y$wV_>9tY=PfTcz*fj(FJ}#>-jz8vtQriwXMGt{<ho;p>Z4jKKf)$#1$l3#eiCEmxttHN&g+Z@1R;jA3&SzWTR}qJcLV>_YWb&u1!N=so#eXyEhGiy*9=UtkL#BcHmkN#031VK(7<J7RG0G&<Wo_ab`R8Q5e6eAbJtE+_6Ksz)G}|V~1s!BkRJT=y8O?sO(`7s<5xHMILd4&AZnYP{tAbypB7@n*0CytSl)VIj|CkGQ}ysMaVDSqD%=YlL+&vbz$5xC7?`?uOwv3$Ji6N!vkU^Db|-ER<cE`6xAeU<(-6+x}&ZnygEJUB-oLD91%~gt5-s9TRa~MSP#7#Ts|tlm7%hyX~vHG$L#|~^E1t(nc_~+p$*4LIP}eP={rfjCpPgtNxsi+;yWcq?K&Uqw~v8OU$ak(u^*G|;ybEbe4q7ZAphL7{iv(>ohI!pu&WxE2U($I@35=#Eixwk#b+Q!?E^1XYua3~;`gf2*MB}v-=QfnX-$CVCm;(P<vWn)ewc$N$hHCSfG}_1?==ac;^@`8ugUwD?9LW88g{OgS%%%wWRH>8_Gu8Xh4^R>qc!I=fETp3q;sILW@xNz@EgG2M@Q|aH(D~wBcq2K=U$YqG!9X(7zUmH0I0lJ#uN^=P|}mP0S$i+56{9RWTGYU36LS*$q2#&13x1^)qT`&{e8qO-;7l%m$9oVRm)9nR1^^v_*|Rg27Vm1R4kjL_8~Xg#JUJ_B+ND9P05ekjoJh5iU{fZCoEpxGa*d7t4sENcTI-OL~deX(A-m_&jYwN=p|EQhOlb2ACeKgMxi+Pee-?PJlLx8qmE><FHYsl;)V1A{iKAreJ|&pt-)goE?_H&I@16`r*Ul2_&91O8l%UK2uC~S4ij4RwcDFC5YWh~BG2x-ht?26ThT-3$)R-1e~&~mA^6g<r=?gF0r5prbl~B2Ab8T58t%DMq&FdnytJ3#sw-zhr0K~QX5I5hmgmX_&L=3Ll&ftuk-#;f*)wO);^`I}k2I!ESb}Cv!nB&5nwg!NfNG~2a|SBZMdu8Q86%94#Lm-{yKjJ;a?}{JXv^z<rRAvRI>=dYRLk!XXnP$r-`4c82j7}b1G67#Hs5Kibq~Aew~Hm7b%*;l7JDA@&eq5`3+F%Z#OhBpZ)p8Hc%j4P|EFuT%zucNH0Jw{$pQ#ky58}eu}o+1PN8Cl*Osh&n^;szk{Y2v0yw;gX2D&kzL(-Hz0G|g6$A|#Jxsa~@S+st0Wo@1_N<;1+k#2h*HixE!}KI-XQUytp1S6XzTrq({16A4tMgBzF!Niqm=&VaHzM>Qlq}f*qhQkye>>opQ-u{T3idk`ao(1=Zllw;P#njPprj$>5Qyt3vKJPI8h5K%QWuOUIq=D0K9rjOiXQ_*1Eqw#hSYv}&IfL_ZT4~BLux`DLhI(gpPtC!=f{*G`ol8k;HQ4S=}=v-(wl$H{n!3?Yz!hz8UShDL`FhFC7tl3{G`uM8t^tr`B7<h6mhixB<07XlphBP{+m`*?sv^ls1A1*7ll$CmH$(Rz8#MT>8_^e>swj+`c|72^~LLKN*#{{{&D=$Y9UQu%xY&{#{!iw>vo?#Gf>eYJxxnbC|&&u_y}XEu+Nf!45xf9snsm&7bsU6tj47U!a%D~Y;Z>CE>ckQZ?P?&y~0q-(BPln`r!_<8b5wqLl!S|8$L|2PHoYSUrjU`AVw%GTIq<%TA)K{dcEL4CV!7?S(`M#0tpq%dmC%v=C#sN{;0H?9CSGdeTQmh78l~hR~ehR|K29<??Y>1HQ&Q3;Bw|Ud$;7H)76`rFy_;4E|lgL<RJoRc~rw>iIqXx7sk&aXLQpRiE5W?mai1jBw+SL!)9OubOc0buuazY6CMXhHfw0!+U%21yF5~U!D9nN?TO30*06Sx)=k%CSBQw~H~T}`q+TW-1}bpEx417<J3_HDL?12$T1K1sNjV9$Pb~B!b;8ddh7|Q)tPg1;F8nv`QE23{xslV?0{@2yP=pCPZu#jDG}<BZ5MK*;YuiXjW>JJLBys(}kfL>IJf}J>^KT~t)tF?s%GBms6w>*~=?xQYNRF7J+Hw3!ozXlFo~rHoaOOLn29ah|@3=H9K?{?ow2@`Q++V4}RMCU**mQ2nCX<0tVHgeTe0KdXe659!@GTFB;8?^hPd9<fZ)+Zdt?cZiWl5AO&KK7Yw>D7}ITjwn5jWU0;<h0lra!@RL-*}o|Iz>c=o^NTXNHS!8}-@lcQNq`VN$ytUZ>p_->?j?({B50<n9Edj$54N8gVzM0AEAfu$0d%qY<J_hKT#VMbaFiU4}@I2C!9#4jBS>R%cs==#(K)6O?N*y%qU)QK)Vj(#ZAFKF#?r(TBX=hL%baZ)@1XwXbGaFD<S<@7m8*J}$NEzd^Bn?SZi#7g|YpdRS`UzvXehePU^!{{f}*9hpvF%XIL7q#VV{Laa`R^}e*z>-UB4TJ2^7w8=ur4{p@(Z)r8#yd401yRvbCmli&8xv-X@-Irf}S@Z2QAjN$RC9QY9{Imb{>!0^87toq-EscI(d7ap;bjM}hS{J4Er7vKl<CCW*XD3~6T;`=6l91V7)Fxk;niV{D1iA5n4NOKTCPp_^ObBK+xG^5EJ29O`?a_;v4KUe-VufT`lEj4eVxs^xOynlt(^8`OJAsYM4hc`d`EQ=k^HwvrYsf4|@%1oX9>>cQVwG>%tcQ$SASfJau}%@k6C`O_;bTZqKISb@L{yiqM3imbUj(>VjP~w{MYhIMLh--RrhwmS!qHwvd4)6!d1V@&eubV+<cI6ALZN~-y@h(BfQG%bGCrpYh3mCqS@`fL0<JJfBHK}qlwNH51iaX^N*{*&swe6Fg2(Zxo&T}7{q)<O$kve72oInQGcB9aYL95xqfM>LpKfl_hW#_1ZI3c2*+0jSO7BesW3gCwtUnfvg%jIj!?DA$$79LZmRNhDH<n5m;BqE*G4QEaE;bR{6WbBH9P5F%cx)`yLFr)=Q7aZ`*V1?2`r@nFX#*s>(lxUv&wIaCG)n-(XpX$|=1*$Rd#>7ialTj{CM8C#m-Jnq^?P47_yXL^!^CQ7ww^XBS5X^utypO>mhr=PyY<k-i{sOJ=;XQa7xnPD$(hMnF`|FYJLB@K$L2^@9>>eSCJo18(OTe7BGO8UPhXGHCj|KCy>q5wmi%NbeU6kq3rgST<}q(JteYWkwU|UmNH`uO$*1x1hTB1WTybaNQ;NHbop0Ky_1G~nF0se~lc5+GrjLHAYCQBuY9jP~H5qzWO~w94tUacz|HIv{Iq3UP2;-!KflqDxi=EDrERCoz2Tvf!zWcubtWYpR'))))(__import__('marshal'), __import__('zlib'), __import__('base64')))
+#!/usr/bin/env python3
+
+# ============================================================
+# BANNER BARU
+# ============================================================
+CYAN = "\033[1;96m"
+GRAY = "\033[90m"
+RESET = "\033[0m"
+
+BANNER = rf"""{CYAN}
+
+██████╗   ██████╗   ██████╗ ███████╗
+██╔══██╗ ██╔═══██╗ ██╔════╝ ██╔════╝
+██║  ██║ ██║   ██║ ██║  ███╗█████╗
+██║  ██║ ██║   ██║ ██║   ██║██╔══╝
+██████╔╝ ╚██████╔╝ ╚██████╔╝███████╗
+╚═════╝   ╚═════╝   ╚═════╝ ╚══════╝
+
+{GRAY}░▒▓█ DOGE GENERATOR █▓▒░
+{GRAY}      Dev : MoneyMaker_w    •   
+{GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{RESET}
+"""
+
+import asyncio
+import requests
+import json
+import time
+import random
+import os
+import re
+import math
+import sys
+import urllib.parse
+from datetime import datetime
+from telethon import TelegramClient, errors, functions, types
+
+# --- COLORS ---
+R, G, Y, B, M, C, W, X = '\033[91m', '\033[92m', '\033[93m', '\033[94m', '\033[95m', '\033[96m', '\033[97m', '\033[0m'
+
+# ============================================================
+# VERIFIKASI DINONAKTIFKAN
+# ============================================================
+def verify_ez4short():
+    print(f"\n{G}✅ Verifikasi Berhasil! (Auto-verified){W}\n")
+    return True
+
+API_URL = "https://claimdoge.net/api"
+CONFIG_FILE = "doge_config.json"
+SESSION_FILE = "telegram_session"
+
+
+class GhostMiner:
+    def __init__(self):
+        self.initdata = ""
+        self.initdata_expiry = 0
+        self.session_id = None
+        self.user_agent = "Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Mobile Safari/537.36"
+        self.proxy = None
+        self.balance = "0"
+        self.loyalty = 0
+        self.counter = {"tasks": 0, "games": 0, "generator": 0}
+        self.success = 0
+        self.failed = 0
+        self.last_gen_claims = 0
+        self.last_game_claims = 0
+
+        # Telegram credentials (tetap ada untuk auto-renew di background)
+        self.api_id = None
+        self.api_hash = None
+        self.phone_number = None
+        self.telegram_client = None
+        self.bot_username = "DogecoinGeneratorBot"
+
+        # Task selection
+        self.run_games = True
+        self.run_tasks = True
+        self.run_generator = True
+        self.selected_difficulty = "expert"
+
+        # Auto renew settings
+        self.auto_renew_initdata = True
+        self.renew_check_interval = 11440
+        self.last_renew_check = 0
+
+        # Config settings
+        self.config_settings = {
+            "proxy_account": "off",
+            "claim_check_timer": "5 minutes",
+            "keep_active_timer": "30 minutes",
+            "sleep_timer": "off",
+            "success_task_before_sleep": "20~25",
+            "auto_renew_initdata": "on"
+        }
+
+        self.load_configs()
+
+    def clear(self):
+        os.system('cls' if os.name == 'nt' else 'clear')
+
+    def num(self, value, decimals=8):
+        try:
+            if value is None:
+                return "0"
+            return f"{float(value):.{decimals}f}"
+        except:
+            return str(value)
+
+    def load_configs(self):
+        if os.path.exists(CONFIG_FILE):
+            try:
+                with open(CONFIG_FILE, 'r') as f:
+                    configs = json.load(f)
+                    if "GhostMiner" in configs:
+                        saved = configs["GhostMiner"]
+                        self.initdata = saved.get("initdata", "")
+                        self.initdata_expiry = saved.get("initdata_expiry", 0)
+                        self.config_settings = saved.get("config_settings", self.config_settings)
+                        self.selected_difficulty = saved.get("selected_difficulty", "expert")
+                        self.run_games = saved.get("run_games", True)
+                        self.run_tasks = saved.get("run_tasks", True)
+                        self.run_generator = saved.get("run_generator", True)
+                        self.proxy = saved.get("proxy", None)
+                        self.api_id = saved.get("api_id", None)
+                        self.api_hash = saved.get("api_hash", None)
+                        self.phone_number = saved.get("phone_number", None)
+                        self.auto_renew_initdata = self.config_settings.get("auto_renew_initdata", "on") == "on"
+            except:
+                pass
+
+    def save_configs(self):
+        configs = {}
+        if os.path.exists(CONFIG_FILE):
+            try:
+                with open(CONFIG_FILE, 'r') as f:
+                    configs = json.load(f)
+            except:
+                pass
+
+        configs["GhostMiner"] = {
+            "initdata": self.initdata,
+            "initdata_expiry": self.initdata_expiry,
+            "config_settings": self.config_settings,
+            "selected_difficulty": self.selected_difficulty,
+            "run_games": self.run_games,
+            "run_tasks": self.run_tasks,
+            "run_generator": self.run_generator,
+            "proxy": self.proxy,
+            "api_id": self.api_id,
+            "api_hash": self.api_hash,
+            "phone_number": self.phone_number
+        }
+
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(configs, f, indent=2)
+
+    def generate_session_id(self):
+        return os.urandom(16).hex()
+
+    def generate_request_id(self):
+        ts = int(time.time() * 1000)
+        suffix = ''.join(random.choices('abcdefghijklmnopqrstuvwxyz0123456789', k=9))
+        return f"{ts}-{suffix}"
+
+    def get_client_attestation(self):
+        return {
+            "session_id": self.session_id if self.session_id else self.generate_session_id(),
+            "telegram": {
+                "available": True,
+                "platform": "android",
+                "version": "8.0",
+                "color_scheme": "dark",
+                "user_present": True
+            },
+            "navigator": {
+                "webdriver": False,
+                "languages_count": 3,
+                "max_touch_points": 5,
+                "hardware_concurrency": 8,
+                "device_memory": 8,
+                "platform": "Linux armv81",
+                "vendor": "Google Inc.",
+                "cookie_enabled": True
+            },
+            "screen": {
+                "width": 393,
+                "height": 873,
+                "avail_width": 393,
+                "avail_height": 873,
+                "pixel_ratio": 2.75,
+                "color_depth": 24
+            },
+            "user_agent_data": {
+                "mobile": True,
+                "platform": "Android"
+            },
+            "timezone": "Europe/London"
+        }
+
+    def call_api(self, action, extra_params=None):
+        if self.session_id is None:
+            self.session_id = self.generate_session_id()
+
+        ts = int(time.time() * 1000)
+        payload = {
+            "action": action,
+            "initData": self.initdata,
+            "timestamp": ts,
+            "requestId": self.generate_request_id(),
+            "client_attestation": self.get_client_attestation()
+        }
+        if extra_params:
+            payload.update(extra_params)
+
+        headers = {
+            "x-requested-with": "TelegramWebApp",
+            "origin": "https://claimdoge.net",
+            "content-type": "application/json",
+            "accept-language": "en-US,en;q=0.9",
+            "user-agent": self.user_agent
+        }
+
+        try:
+            proxies = {"http": self.proxy, "https": self.proxy} if self.proxy else None
+            res = requests.post(API_URL, headers=headers, json=payload, timeout=30, proxies=proxies)
+            if res.status_code == 200:
+                return res.json()
+            return None
+        except Exception as e:
+            print(f"API Error: {e}")
+            return None
+
+    async def get_webview_initdata(self):
+        try:
+            print(f"{C}[TELEGRAM] Getting bot entity...{X}")
+            bot = await self.telegram_client.get_input_entity(self.bot_username)
+
+            print(f"{C}[TELEGRAM] Fetching bot info...{X}")
+            full_user_request = await self.telegram_client(functions.users.GetFullUserRequest(id=bot))
+            bot_info = full_user_request.full_user.bot_info
+
+            target_url = None
+            if bot_info and bot_info.menu_button:
+                if hasattr(bot_info.menu_button, 'url'):
+                    target_url = bot_info.menu_button.url
+                    print(f"{G}[TELEGRAM] Auto-detected URL: {target_url}{X}")
+
+            if not target_url:
+                target_url = 'https://claimdoge.net/'
+                print(f"{Y}[TELEGRAM] Using fallback URL: {target_url}{X}")
+
+            print(f"{C}[TELEGRAM] Requesting WebView...{X}")
+
+            result = await self.telegram_client(functions.messages.RequestWebViewRequest(
+                peer=bot,
+                bot=bot,
+                platform='android',
+                from_bot_menu=True,
+                url=target_url
+            ))
+
+            print(f"{C}[TELEGRAM] Parsing response...{X}")
+            parsed_url = urllib.parse.urlparse(result.url)
+
+            fragment = parsed_url.fragment
+            if fragment:
+                query_params = urllib.parse.parse_qs(fragment)
+                init_data = query_params.get('tgWebAppData', [None])[0]
+                if init_data:
+                    return init_data
+
+            query = parsed_url.query
+            if query:
+                query_params = urllib.parse.parse_qs(query)
+                init_data = query_params.get('tgWebAppData', [None])[0]
+                if init_data:
+                    return init_data
+
+            return None
+
+        except Exception as e:
+            print(f"{R}[ERROR] Failed to get WebView initdata: {e}{X}")
+            return None
+
+    async def login_telegram_async(self):
+        print(f"{C}[TELEGRAM] Logging in with Telethon...{X}")
+
+        if not self.api_id or not self.api_hash:
+            print(f"{R}[ERROR] API ID and API Hash are required!{X}")
+            print(f"{Y}Get them from https://my.telegram.org/apps{X}")
+            return False
+
+        try:
+            self.telegram_client = TelegramClient(
+                SESSION_FILE,
+                self.api_id,
+                self.api_hash
+            )
+
+            await self.telegram_client.connect()
+
+            if not await self.telegram_client.is_user_authorized():
+                if not self.phone_number:
+                    print(f"{Y}[TELEGRAM] Phone number required for first login{X}")
+                    return False
+
+                phone = self.phone_number
+                if not phone.startswith('+'):
+                    phone = '+' + phone
+
+                await self.telegram_client.send_code_request(phone)
+                code = input(f"{M}[?] {W}Enter Telegram verification code: {C}")
+
+                try:
+                    await self.telegram_client.sign_in(phone, code)
+                except errors.SessionPasswordNeededError:
+                    password = input(f"{M}[?] {W}Enter 2FA password: {C}")
+                    await self.telegram_client.sign_in(password=password)
+
+            print(f"{G}[TELEGRAM] Successfully logged in!{X}")
+
+            print(f"{C}[TELEGRAM] Extracting initdata from @{self.bot_username}...{X}")
+            initdata = await self.get_webview_initdata()
+
+            if initdata:
+                self.initdata = initdata
+                self.initdata_expiry = int(time.time()) + 7200
+                self.save_configs()
+                print(f"{G}[TELEGRAM] Initdata extracted successfully!{X}")
+                print(f"{C}[TELEGRAM] Initdata length: {len(initdata)} chars{X}")
+                return True
+            else:
+                print(f"{R}[TELEGRAM] Failed to extract initdata{X}")
+                print(f"{Y}[TIP] Make sure you have started a chat with @{self.bot_username} before{X}")
+                return False
+
+        except Exception as e:
+            print(f"{R}[TELEGRAM] Login error: {e}{X}")
+            return False
+        finally:
+            if self.telegram_client:
+                await self.telegram_client.disconnect()
+
+    def login_telegram(self):
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            result = loop.run_until_complete(self.login_telegram_async())
+            loop.close()
+            return result
+        except Exception as e:
+            print(f"{R}[TELEGRAM] Error: {e}{X}")
+            return False
+
+    def check_and_renew_initdata(self):
+        if not self.auto_renew_initdata:
+            return False
+
+        current_time = int(time.time())
+
+        if not self.initdata:
+            print(f"\n{Y}[AUTO-RENEW] No initdata found, attempting login...{X}")
+            return self.login_telegram()
+
+        if current_time >= self.initdata_expiry - 600:
+            print(f"\n{Y}[AUTO-RENEW] Initdata expiring soon, refreshing...{X}")
+            if self.login_telegram():
+                self.last_renew_check = current_time
+                print(f"{G}[AUTO-RENEW] Initdata refreshed successfully!{X}")
+                return True
+            else:
+                print(f"{R}[AUTO-RENEW] Failed to refresh initdata{X}")
+                return False
+
+        if self.last_renew_check > 0 and current_time - self.last_renew_check > self.renew_check_interval:
+            print(f"\n{Y}[AUTO-RENEW] Periodic refresh...{X}")
+            if self.login_telegram():
+                self.last_renew_check = current_time
+                print(f"{G}[AUTO-RENEW] Initdata refreshed successfully!{X}")
+                return True
+
+        return False
+
+    def connect(self):
+        self.check_and_renew_initdata()
+
+        if not self.initdata:
+            return False
+
+        result = self.call_api("get_user_data")
+        if result:
+            self.balance = result.get("balance", "0")
+            self.loyalty = result.get("loyalty_percent", 0)
+            self.last_gen_claims = result.get("gen_claims", 0)
+            self.last_game_claims = result.get("daily_mines_claims", 0)
+            return True
+        return False
+
+    def dashboard(self):
+        expiry_str = "N/A"
+        if self.initdata_expiry > 0:
+            remaining = self.initdata_expiry - int(time.time())
+            if remaining > 0:
+                mins = remaining // 60
+                secs = remaining % 60
+                expiry_str = f"{mins}m{secs}s"
+            else:
+                expiry_str = "EXPIRED"
+
+        print(f"\n{C}╔══════════════════════════════════════════════════════════════╗")
+        print(f"║ {M}SCRIPT      {W}» {C}Dogecoin Generator{' ' * 38}║")
+        print(f"║ {M}BALANCE     {W}» {G}{self.num(self.balance, 8)} DOGE{' ' * (38 - len(self.num(self.balance, 8)))}║")
+        print(f"║ {M}LOYALTY     {W}» {G}{self.loyalty}%{' ' * (40 - len(str(self.loyalty)))}║")
+        print(f"║ {M}PROXY       {W}» {Y}{self.proxy if self.proxy else 'OFF'}{' ' * (39 - len(self.proxy if self.proxy else 'OFF'))}║")
+        print(f"║ {M}INITDATA    {W}» {Y}{expiry_str}{' ' * (41 - len(expiry_str))}║")
+        print(f"║ {M}AUTO-RENEW  {W}» {G}{'ON' if self.auto_renew_initdata else 'OFF'}{' ' * (39 - len('ON' if self.auto_renew_initdata else 'OFF'))}║")
+        print(f"║ {M}SUCCESS     {W}» {G}{self.success}{' ' * (41 - len(str(self.success)))}║")
+        print(f"║ {M}FAILED      {W}» {R}{self.failed}{' ' * (41 - len(str(self.failed)))}║")
+        print(f"║ {M}GEN CLAIMS  {W}» {Y}{self.last_gen_claims}{' ' * (39 - len(str(self.last_gen_claims)))}║")
+        print(f"║ {M}GAME CLAIMS {W}» {Y}{self.last_game_claims}{' ' * (38 - len(str(self.last_game_claims)))}║")
+        print(f"{C}╚══════════════════════════════════════════════════════════════╝{X}")
+
+    def countdown(self, seconds, message="WAITING"):
+        while seconds > 0:
+            if seconds % 60 == 0:
+                self.check_and_renew_initdata()
+
+            mins, secs = divmod(seconds, 60)
+            timer = f'{Y} [!] {message} » {W}Next in {mins:02d}:{secs:02d}{X}'
+            print(f"\r{timer}", end="")
+            time.sleep(1)
+            seconds -= 1
+        print("\r" + " " * 60 + "\r", end="")
+
+    def internal_captcha(self, context):
+        print(f"{C}[CAPTCHA] Solving {context} captcha...{X}")
+        retry = 0
+
+        while retry < 5:
+            try:
+                captcha_init = self.call_api("captcha_init", {"context": context})
+                if not captcha_init or "session" not in captcha_init:
+                    print(f"{R}[CAPTCHA] Failed to initialize{X}")
+                    retry += 1
+                    time.sleep(2)
+                    continue
+
+                session_id = captcha_init['session']['sessionId']
+
+                time.sleep(random.uniform(1.0, 2.0))
+
+                puzzle = captcha_init['session']['step1']['puzzleSvg']
+
+                match = re.search(r"<g\s*transform='translate\((\d+),", puzzle)
+                if not match:
+                    match = re.search(r"translate\(([\d.]+),", puzzle)
+
+                if not match:
+                    print(f"{R}[CAPTCHA] Failed to parse puzzle{X}")
+                    retry += 1
+                    continue
+
+                x_pos = int(float(match.group(1)))
+
+                width_match = re.search(r"width='(\d+)'", puzzle)
+                width = int(width_match.group(1)) if width_match else 500
+
+                max_x = x_pos + random.randint(70, 75)
+                val_x = 0
+                trajectory = []
+
+                while val_x < max_x and val_x <= width:
+                    if random.randint(0, 1) or val_x == 0:
+                        val_x += random.randint(10, 15)
+                    time.sleep(random.uniform(0.01, 0.03))
+                    trajectory.append({
+                        "x": val_x,
+                        "t": int(time.time() * 1000)
+                    })
+
+                final_x = max(10, x_pos - 1 + random.random())
+
+                slide_result = self.call_api("captcha_verify_slide", {
+                    "sessionId": session_id,
+                    "x": final_x,
+                    "trajectory": trajectory
+                })
+
+                if not slide_result or not slide_result.get("success"):
+                    print(f"{R}[CAPTCHA] Slide verification failed{X}")
+                    retry += 1
+                    continue
+
+                print(f"{G}[CAPTCHA] Slide verification passed{X}")
+                time.sleep(random.uniform(2.5, 4.0))
+
+                grid = captcha_init['session']['step2']['grid']
+                targets = captcha_init['session']['step2']['targets']
+
+                icon_to_id = {}
+                for item in grid:
+                    icon_to_id[item['icon']] = item['id']
+
+                selected_ids = []
+                for target in targets:
+                    if target in icon_to_id:
+                        selected_ids.append(icon_to_id[target])
+
+                pattern_result = self.call_api("captcha_verify_pattern", {
+                    "sessionId": session_id,
+                    "selectedIds": selected_ids
+                })
+
+                if not pattern_result or not pattern_result.get("success"):
+                    print(f"{R}[CAPTCHA] Pattern verification failed{X}")
+                    retry += 1
+                    continue
+
+                token = pattern_result.get("token")
+                if not token:
+                    print(f"{R}[CAPTCHA] No token received{X}")
+                    retry += 1
+                    continue
+
+                print(f"{G}[CAPTCHA] Pattern verification passed!{X}")
+                return token
+
+            except Exception as e:
+                print(f"{R}[CAPTCHA] Error: {e}{X}")
+                retry += 1
+                continue
+
+        print(f"{R}[CAPTCHA] Failed after {retry} attempts{X}")
+        return None
+
+    def action_proof(self, target_action, is_doubled=False):
+        print(f"{C}[PROOF] Getting action proof for {target_action}...{X}")
+
+        init_data = {
+            "targetAction": target_action
+        }
+        if is_doubled:
+            init_data["doubled"] = True
+
+        proof_init = self.call_api("action_proof_init", init_data)
+
+        if not proof_init or proof_init.get("status") != "success":
+            print(f"{R}[PROOF] Failed to initialize{X}")
+            return None
+
+        wait_time = proof_init.get("min_wait_seconds", 2)
+        time.sleep(wait_time + 1)
+
+        complete_data = {
+            "targetAction": target_action,
+            "challengeId": proof_init.get("challenge_id")
+        }
+        if is_doubled:
+            complete_data["doubled"] = True
+
+        proof_complete = self.call_api("action_proof_complete", complete_data)
+
+        if not proof_complete or proof_complete.get("status") != "success":
+            print(f"{R}[PROOF] Failed to complete{X}")
+            return None
+
+        return proof_complete.get("proof_token")
+
+    def task_generator(self):
+        print(f"\n{B}╔══════════════════════════════════════════════════════════════╗")
+        print(f"║ {W}                    GENERATOR TASK{B}                              ║")
+        print(f"╚══════════════════════════════════════════════════════════════╝{X}")
+
+        print(f"{C}[INFO] Checking faucet status...{X}")
+
+        url = "https://claimdoge.net/faucetmining"
+        headers = {
+            "origin": "https://claimdoge.net",
+            "content-type": "application/json",
+            "user-agent": self.user_agent
+        }
+
+        try:
+            proxies = {"http": self.proxy, "https": self.proxy} if self.proxy else None
+            res = requests.post(url, headers=headers, json={"initData": self.initdata}, timeout=30, proxies=proxies)
+            if res.status_code == 200:
+                data = res.json()
+                timer = data.get("TimeSinceLastClaimSeconds", 0)
+                cooldown = data.get("FaucetCooldownSeconds", 3600)
+
+                if timer < cooldown:
+                    wait = cooldown - timer
+                    print(f"{Y}[COOLDOWN] Next claim in {wait} seconds{X}")
+                    return False
+        except:
+            pass
+
+        delay = random.randint(5, 10)
+        print(f"{Y}[PROCESS] Please wait...{X}")
+        for i in range(delay):
+            print(f"\r{Y}[PROCESS] {delay - i} seconds remaining{X}", end="")
+            time.sleep(1)
+        print()
+
+        proof_token = self.action_proof("claim_faucet", is_doubled=True)
+        if not proof_token:
+            print(f"{R}[FAILED] Action proof failed{X}")
+            self.failed += 1
+            return False
+
+        captcha_token = None
+        user_data = self.call_api("get_user_data")
+        if user_data:
+            gen_claims = user_data.get("gen_claims", 0)
+            gen_freq = user_data.get("faucet_captcha_frequency", 5)
+
+            if gen_freq > 0 and (gen_claims + 1) % gen_freq == 0:
+                print(f"{Y}[INFO] Captcha required for claim #{gen_claims + 1}{X}")
+                captcha_token = self.internal_captcha("faucet")
+                if not captcha_token:
+                    print(f"{R}[FAILED] Captcha solving failed{X}")
+                    self.failed += 1
+                    return False
+
+        claim_data = {
+            "doubled": True,
+            "action_proof": proof_token
+        }
+        if captcha_token:
+            claim_data["captcha"] = captcha_token
+            claim_data["captcha_provider"] = "internal"
+
+        result = self.call_api("claim_faucet", claim_data)
+
+        if result and result.get("status") == "success":
+            reward = result.get("claimed_amount", "0")
+            bonus = result.get("loyalty_bonus_amount", "0")
+            print(f"{G}[SUCCESS] Claimed {self.num(reward, 8)} DOGE (Bonus: {self.num(bonus, 8)}){X}")
+            self.counter["generator"] += 1
+            self.success += 1
+            return True
+        else:
+            error_msg = result.get("message", "Unknown error") if result else "No response"
+            print(f"{R}[FAILED] Generator claim failed: {error_msg}{X}")
+            self.failed += 1
+            return False
+
+    def task_tasks(self):
+        print(f"\n{B}╔══════════════════════════════════════════════════════════════╗")
+        print(f"║ {W}                     DAILY TASKS{B}                                ║")
+        print(f"╚══════════════════════════════════════════════════════════════╝{X}")
+
+        u_data = self.call_api("get_user_data")
+        if not u_data:
+            print(f"{R}[ERROR] Failed to get user data{X}")
+            return False
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        claimed = False
+
+        last_daily = u_data.get("last_daily_bonus", "")
+        if not last_daily or last_daily.split()[0] != today:
+            print(f"{C}[DAILY] Claiming daily bonus...{X}")
+
+            proof_token = self.action_proof("claim_daily_bonus", is_doubled=True)
+            if proof_token:
+                result = self.call_api("claim_daily_bonus", {
+                    "doubled": True,
+                    "action_proof": proof_token
+                })
+                if result and result.get("status") == "success":
+                    amount = result.get("claimed_amount", "0")
+                    print(f"{G}[SUCCESS] Claimed {self.num(amount, 8)} DOGE{X}")
+                    claimed = True
+        else:
+            print(f"{Y}[DAILY] Already claimed today{X}")
+
+        double_claims = u_data.get("daily_double_claims", 0)
+        last_double = u_data.get("last_double_task_claimed_at", "")
+        last_double_activity = u_data.get("last_double_claim_activity_at", "")
+
+        if double_claims >= 10 and (not last_double or last_double.split()[0] != today):
+            if last_double_activity and last_double_activity.split()[0] == today:
+                print(f"{C}[DOUBLE] Claiming double reward task...{X}")
+
+                proof_token = self.action_proof("claim_double_reward_task", is_doubled=True)
+                if proof_token:
+                    result = self.call_api("claim_double_reward_task", {
+                        "doubled": True,
+                        "action_proof": proof_token
+                    })
+                    if result and result.get("status") == "success":
+                        amount = result.get("claimed_amount", "0")
+                        print(f"{G}[SUCCESS] Claimed {self.num(amount, 8)} DOGE{X}")
+                        claimed = True
+
+        mines_claims = u_data.get("daily_mines_claims", 0)
+        last_mines = u_data.get("last_mines_task_claimed_at", "")
+        last_mines_activity = u_data.get("last_mines_claim_activity_at", "")
+
+        if mines_claims >= 10 and (not last_mines or last_mines.split()[0] != today):
+            if last_mines_activity and last_mines_activity.split()[0] == today:
+                print(f"{C}[MINES] Claiming mines reward task...{X}")
+
+                proof_token = self.action_proof("claim_mines_reward_task", is_doubled=True)
+                if proof_token:
+                    result = self.call_api("claim_mines_reward_task", {
+                        "doubled": True,
+                        "action_proof": proof_token
+                    })
+                    if result and result.get("status") == "success":
+                        amount = result.get("claimed_amount", "0")
+                        print(f"{G}[SUCCESS] Claimed {self.num(amount, 8)} DOGE{X}")
+                        claimed = True
+
+        video_claims = u_data.get("daily_rewarded_video_claims", 0)
+        if video_claims < 7:
+            print(f"{C}[VIDEO] Watching ad for reward...{X}")
+
+            for i in range(random.randint(5, 10)):
+                print(f"\r{Y}[VIDEO] {i+1} seconds{X}", end="")
+                time.sleep(1)
+            print()
+
+            result = self.call_api("claim_rewarded_video_task", {})
+            if result and result.get("status") == "success":
+                amount = result.get("claimed_amount", "0")
+                print(f"{G}[SUCCESS] Claimed {self.num(amount, 8)} DOGE{X}")
+                claimed = True
+
+        if claimed:
+            self.counter["tasks"] += 1
+            self.success += 1
+            return True
+
+        print(f"{Y}[TASKS] No tasks available today{X}")
+        return False
+
+    def task_games(self):
+        print(f"\n{B}╔══════════════════════════════════════════════════════════════╗")
+        print(f"║ {W}                       GAMES TASK{B}                               ║")
+        print(f"╚══════════════════════════════════════════════════════════════╝{X}")
+
+        total_earned_this_session = 0
+        games_played = 0
+
+        while True:
+            m_stats = self.call_api("mines_get_stats")
+            if not m_stats:
+                print(f"{R}[ERROR] Failed to get game stats{X}")
+                break
+
+            stats = m_stats.get("stats", {})
+            lives = int(stats.get("game_lives", 0))
+            max_lives = stats.get("game_lives_max", 3)
+            has_active = stats.get("has_active_game", False)
+            active_game = stats.get("active_game")
+
+            if active_game is None:
+                active_game = {}
+
+            current_earnings = float(active_game.get("earned_doge", 0))
+            game_claims = stats.get("total_games_won", 0)
+            game_freq = stats.get("cashout_captcha_frequency", 5)
+
+            print(f"\n{C}{'=' * 54}{X}")
+            print(f" {M}ENERGY  {W}» {Y}{lives}/{max_lives}{X}")
+            print(f" {M}ACTIVE  {W}» {Y}{has_active}{X}")
+            if has_active and active_game:
+                print(f" {M}CURRENT {W}» {G}{self.num(current_earnings, 8)} DOGE{X}")
+            print(f" {M}MODE    {W}» {C}{self.selected_difficulty.upper()}{X}")
+            print(f" {M}GAMES   {W}» {C}{games_played}{X}")
+            print(f"{C}{'=' * 54}{X}")
+
+            if lives <= 0 and not has_active:
+                print(f"{Y}[ENERGY] No energy left! Used {games_played} game(s), earned {self.num(total_earned_this_session, 8)} DOGE{X}")
+                break
+
+            if not has_active and lives > 0:
+                print(f"{B}[GAME {games_played + 1}] Starting {self.selected_difficulty.upper()} round...{X}")
+
+                start_res = self.call_api("mines_start_game", {"difficulty": self.selected_difficulty})
+                if not start_res or start_res.get("status") != "success":
+                    print(f"{R}[ERROR] Failed to start game{X}")
+                    break
+
+                time.sleep(1)
+                continue
+
+            if not has_active:
+                break
+
+            grid_state = {}
+            try:
+                grid_state = json.loads(stats.get('active_grid_state', '{}'))
+            except:
+                pass
+
+            bombs = grid_state.get('bombs', [])
+            revealed = grid_state.get('revealed', [])
+            safe_tiles = [i for i in range(25) if i not in bombs and i not in revealed]
+
+            can_cashout = active_game.get("can_cashout", False)
+
+            if not safe_tiles or can_cashout:
+                print(f"{C}[CASHOUT] Cashing out {self.num(current_earnings, 8)} DOGE...{X}")
+
+                act_token = self.action_proof("mines_cashout", is_doubled=False)
+                if not act_token:
+                    print(f"{R}[CASHOUT] Action proof failed{X}")
+                    break
+
+                captcha_token = None
+                if game_freq > 0 and (game_claims + 1) % game_freq == 0:
+                    print(f"{Y}[INFO] Captcha required for cashout (claim #{game_claims + 1}){X}")
+                    captcha_token = self.internal_captcha("mines")
+
+                cashout_data = {
+                    "action_proof": act_token
+                }
+                if captcha_token:
+                    cashout_data["captcha"] = captcha_token
+                    cashout_data["captcha_provider"] = "internal"
+
+                result = self.call_api("mines_cashout", cashout_data)
+
+                if result and result.get("status") == "success":
+                    earned_amount = result.get("result", {}).get("earned_doge", current_earnings)
+                    print(f"{G}[CASHOUT] Earned {self.num(earned_amount, 8)} DOGE{X}")
+                    total_earned_this_session += float(earned_amount)
+                    games_played += 1
+                    self.counter["games"] += 1
+                    self.success += 1
+                    self.last_game_claims += 1
+                    continue
+                else:
+                    error_msg = result.get("message", "Unknown error") if result else "No response"
+                    print(f"{R}[CASHOUT] Cashout failed: {error_msg}{X}")
+                    break
+
+            if safe_tiles:
+                tile_to_open = random.choice(safe_tiles)
+
+                open_res = self.call_api("mines_open_tile", {"tile_index": tile_to_open})
+
+                if open_res and open_res.get("status") == "success":
+                    result_data = open_res.get("result", {})
+                    tile_result = result_data.get("result")
+                    earned = result_data.get("current_earnings_doge", 0)
+
+                    if tile_result == "bomb":
+                        print(f"  {R}💣 Tile {tile_to_open:02} » BOMB! (Earned: {self.num(earned, 8)} DOGE){X}")
+
+                        if result_data.get("can_continue"):
+                            print(f"{Y}[AD] Watch ad to continue...{X}")
+
+                            act_token = self.action_proof("mines_watch_ad_continues", is_doubled=False)
+                            if act_token:
+                                watch_res = self.call_api("mines_watch_ad_continues", {"action_proof": act_token})
+                                if watch_res and watch_res.get("status") == "success":
+                                    for i in range(random.randint(5, 10)):
+                                        print(f"\r{Y}[AD] {i+1}s{X}", end="")
+                                        time.sleep(1)
+                                    print()
+
+                                    continue_res = self.call_api("mines_use_continue", {})
+                                    if continue_res and continue_res.get("status") == "success":
+                                        print(f"{G}[CONTINUE] Game continued!{X}")
+                                        continue
+                        break
+                    else:
+                        print(f"  {G}√ Tile {tile_to_open:02} » {self.num(earned, 8)} DOGE{X}")
+                else:
+                    print(f"  {R}× Tile {tile_to_open:02} » FAILED{X}")
+                    break
+
+                time.sleep(random.uniform(0.3, 0.8))
+
+        self.call_api("get_user_data")
+
+        if games_played > 0:
+            print(f"{G}[GAMES] Completed {games_played} game(s), earned {self.num(total_earned_this_session, 8)} DOGE{X}")
+
+        return games_played > 0
+
+    def show_task_selection(self):
+        while True:
+            self.clear()
+            print(BANNER)
+
+            print(f"\n{C}╔══════════════════════════════════════════════════════════════╗")
+            print(f"║ {W}                    SELECT TASKS TO RUN{C}                         ║")
+            print(f"╚══════════════════════════════════════════════════════════════╝{X}")
+
+            gen_status = f"{G}✓ ENABLED{X}" if self.run_generator else f"{R}✗ DISABLED{X}"
+            task_status = f"{G}✓ ENABLED{X}" if self.run_tasks else f"{R}✗ DISABLED{X}"
+            game_status = f"{G}✓ ENABLED{X}" if self.run_games else f"{R}✗ DISABLED{X}"
+            renew_status = f"{G}✓ ON{X}" if self.auto_renew_initdata else f"{R}✗ OFF{X}"
+
+            print(f"\n  {C}[{W}1{C}] GENERATOR (Faucet)  : {gen_status}")
+            print(f"  {C}[{W}2{C}] TASKS (Daily Bonus) : {task_status}")
+            print(f"  {C}[{W}3{C}] GAMES (Mines Game)  : {game_status}")
+            print(f"  {C}[{W}4{C}] GAME MODE           : {C}{self.selected_difficulty.upper()}{X}")
+            print(f"  {C}[{W}5{C}] AUTO RENEW INITDATA : {renew_status}")
+            print(f"  {C}[{W}6{C}] {G}START MINER WITH SELECTED TASKS{X}")
+            print(f"  {C}[{W}0{C}] {R}CANCEL / BACK TO MAIN MENU{X}")
+
+            print()
+            choice = input(f"{C}═⫸ {W}Select option: {C}").strip()
+
+            if choice == "1":
+                self.run_generator = not self.run_generator
+                status = "ENABLED" if self.run_generator else "DISABLED"
+                print(f"{G}Generator {status}{X}")
+                self.save_configs()
+                time.sleep(1)
+
+            elif choice == "2":
+                self.run_tasks = not self.run_tasks
+                status = "ENABLED" if self.run_tasks else "DISABLED"
+                print(f"{G}Tasks {status}{X}")
+                self.save_configs()
+                time.sleep(1)
+
+            elif choice == "3":
+                self.run_games = not self.run_games
+                status = "ENABLED" if self.run_games else "DISABLED"
+                print(f"{G}Games {status}{X}")
+                self.save_configs()
+                time.sleep(1)
+
+            elif choice == "4":
+                self.show_game_mode_menu()
+
+            elif choice == "5":
+                self.auto_renew_initdata = not self.auto_renew_initdata
+                self.config_settings["auto_renew_initdata"] = "on" if self.auto_renew_initdata else "off"
+                status = "ENABLED" if self.auto_renew_initdata else "DISABLED"
+                print(f"{G}Auto Renew Initdata {status}{X}")
+                self.save_configs()
+                time.sleep(1)
+
+            elif choice == "6":
+                if not any([self.run_generator, self.run_tasks, self.run_games]):
+                    print(f"{R}[ERROR] Please enable at least one task!{X}")
+                    time.sleep(2)
+                    continue
+                return True
+
+            elif choice == "0":
+                return False
+
+    def show_game_mode_menu(self):
+        difficulty_map = {
+            "easy": "surface",
+            "medium": "tunnel",
+            "hard": "deep shaft",
+            "expert": "core drill"
+        }
+
+        while True:
+            self.clear()
+            print(BANNER)
+
+            print(f"\n{C}╔══════════════════════════════════════════════════════════════╗")
+            print(f"║ {W}                    SELECT GAME MODE{C}                            ║")
+            print(f"╚══════════════════════════════════════════════════════════════╝{X}")
+
+            print(f"\n  {C}[{W}1{C}] EASY     (surface)")
+            print(f"  {C}[{W}2{C}] MEDIUM   (tunnel)")
+            print(f"  {C}[{W}3{C}] HARD     (deep shaft)")
+            print(f"  {C}[{W}4{C}] EXPERT   (core drill)")
+            print(f"  {C}[{W}0{C}] BACK")
+
+            print(f"\n  {Y}Current mode: {C}{self.selected_difficulty.upper()} ({difficulty_map[self.selected_difficulty]}){X}")
+            print()
+            choice = input(f"{C}═⫸ {W}Select game mode: {C}").strip()
+
+            mode_map = {
+                "1": "easy",
+                "2": "medium",
+                "3": "hard",
+                "4": "expert"
+            }
+
+            if choice in mode_map:
+                self.selected_difficulty = mode_map[choice]
+                self.save_configs()
+                print(f"{G}Game mode set to {self.selected_difficulty.upper()} ({difficulty_map[self.selected_difficulty]}){X}")
+                time.sleep(1)
+                return
+
+            elif choice == "0":
+                return
+
+    def telegram_login_menu(self):
+        self.clear()
+        print(BANNER)
+
+        print(f"\n{C}╔══════════════════════════════════════════════════════════════╗")
+        print(f"║ {W}                 TELEGRAM LOGIN SETUP{C}                           ║")
+        print(f"║ {G}    Bot: @{self.bot_username}{C}                                    ║")
+        print(f"╚══════════════════════════════════════════════════════════════╝{X}")
+
+        print(f"\n{Y}[INFO] Get API ID and Hash from https://my.telegram.org/apps{X}\n")
+
+        api_id_input = input(f"{M}[?] {W}Enter API ID: {C}").strip()
+        if api_id_input:
+            self.api_id = int(api_id_input)
+
+        self.api_hash = input(f"{M}[?] {W}Enter API Hash: {C}").strip()
+
+        print(f"\n{Y}[INFO] Phone number format: 628123456789 (without +) or +628123456789{X}\n")
+        self.phone_number = input(f"{M}[?] {W}Enter Phone Number: {C}").strip()
+
+        if self.api_id and self.api_hash and self.phone_number:
+            print(f"{C}[TELEGRAM] Attempting login...{X}")
+            if self.login_telegram():
+                print(f"{G}[SUCCESS] Telegram login successful!{X}")
+                print(f"{G}[SUCCESS] Initdata extracted and saved!{X}")
+                self.save_configs()
+                time.sleep(2)
+                return True
+            else:
+                print(f"{R}[ERROR] Telegram login failed!{X}")
+                print(f"{Y}[TIP] Please make sure you have started a chat with @{self.bot_username}{X}")
+                input(f"{Y}Press Enter to continue...{X}")
+                return False
+
+        return False
+
+    def config_settings_menu(self):
+        while True:
+            self.clear()
+            print(BANNER)
+
+            print(f"\n{C}╔══════════════════════════════════════════════════════════════╗")
+            print(f"║ {W}                    CONFIG SETTINGS{C}                              ║")
+            print(f"╚══════════════════════════════════════════════════════════════╝{X}")
+
+            print(f"  {C}[{W}2{C}] CLAIM CHECK TIMER ::: [{self.config_settings['claim_check_timer']}]")
+            print(f"  {C}[{W}3{C}] KEEP ACTIVE TIMER ::: [{self.config_settings['keep_active_timer']}]")
+            print(f"  {C}[{W}4{C}] SLEEP TIMER ::: [{self.config_settings['sleep_timer']}]")
+            print(f"  {C}[{W}5{C}] SUCCESS LIMIT ::: [{self.config_settings['success_task_before_sleep']}]")
+            print(f"  {C}[{W}6{C}] AUTO RENEW INITDATA ::: [{self.config_settings.get('auto_renew_initdata', 'on').upper()}]")
+            print(f"  {C}[{W}7{C}] TELEGRAM LOGIN SETUP")
+            print(f"  {C}[{W}0{C}] BACK")
+
+            print()
+            choice = input(f"{C}═⫸ {W}Select option: {C}").strip()
+
+            if choice == "1":
+                print(f"\n  {C}[1] OFF")
+                print(f"  {C}[2] ON")
+                sub = input(f"{C}═⫸ {W}Select: {C}").strip()
+                if sub == "1":
+                    self.config_settings["proxy_account"] = "off"
+                    self.proxy = None
+                    print(f"{Y}Proxy DISABLED{X}")
+                elif sub == "2":
+                    self.config_settings["proxy_account"] = "on"
+                    self.proxy = input(f"{M}Enter proxy (http://ip:port): {C}").strip()
+                    print(f"{G}Proxy ENABLED{X}")
+                self.save_configs()
+                time.sleep(1)
+
+            elif choice == "2":
+                timers = ["5 minutes", "10 minutes", "15 minutes", "30 minutes", "1 hour", "2 hours", "3 hours"]
+                print(f"\n  Select claim check timer:")
+                for i, t in enumerate(timers, 1):
+                    print(f"  {C}[{i}] {t}")
+                sub = input(f"{C}═⫸ {W}Select: {C}").strip()
+                if sub.isdigit() and 1 <= int(sub) <= len(timers):
+                    self.config_settings["claim_check_timer"] = timers[int(sub) - 1]
+                    print(f"{G}Updated to {timers[int(sub) - 1]}{X}")
+                    self.save_configs()
+                time.sleep(1)
+
+            elif choice == "3":
+                timers = ["5 minutes", "10 minutes", "15 minutes", "30 minutes"]
+                print(f"\n  Select keep active timer:")
+                for i, t in enumerate(timers, 1):
+                    print(f"  {C}[{i}] {t}")
+                sub = input(f"{C}═⫸ {W}Select: {C}").strip()
+                if sub.isdigit() and 1 <= int(sub) <= len(timers):
+                    self.config_settings["keep_active_timer"] = timers[int(sub) - 1]
+                    print(f"{G}Updated to {timers[int(sub) - 1]}{X}")
+                    self.save_configs()
+                time.sleep(1)
+
+            elif choice == "4":
+                timers = ["off", "30 minutes", "1 hour", "1 hour 30 minutes", "2 hours", "2 hours 30 minutes", "3 hours", "4 hours"]
+                print(f"\n  Select sleep timer:")
+                for i, t in enumerate(timers, 1):
+                    print(f"  {C}[{i}] {t}")
+                sub = input(f"{C}═⫸ {W}Select: {C}").strip()
+                if sub.isdigit() and 1 <= int(sub) <= len(timers):
+                    self.config_settings["sleep_timer"] = timers[int(sub) - 1]
+                    print(f"{G}Updated to {timers[int(sub) - 1]}{X}")
+                    self.save_configs()
+                time.sleep(1)
+
+            elif choice == "5":
+                ranges = ["5~10", "10~15", "15~20", "20~25", "25~30", "30~35", "35~40", "40~45", "45~50", "50~55", "55~60"]
+                print(f"\n  Select success limit before sleep:")
+                for i, r in enumerate(ranges, 1):
+                    print(f"  {C}[{i}] {r}")
+                sub = input(f"{C}═⫸ {W}Select: {C}").strip()
+                if sub.isdigit() and 1 <= int(sub) <= len(ranges):
+                    self.config_settings["success_task_before_sleep"] = ranges[int(sub) - 1]
+                    print(f"{G}Updated to {ranges[int(sub) - 1]}{X}")
+                    self.save_configs()
+                time.sleep(1)
+
+            elif choice == "6":
+                current = self.config_settings.get("auto_renew_initdata", "on")
+                new = "off" if current == "on" else "on"
+                self.config_settings["auto_renew_initdata"] = new
+                self.auto_renew_initdata = (new == "on")
+                print(f"{G}Auto Renew Initdata set to {new.upper()}{X}")
+                self.save_configs()
+                time.sleep(1)
+
+            elif choice == "7":
+                self.telegram_login_menu()
+
+            elif choice == "0":
+                break
+
+    def edit_config_menu(self):
+        while True:
+            self.clear()
+            print(BANNER)
+
+            print(f"\n{C}╔══════════════════════════════════════════════════════════════╗")
+            print(f"║ {W}                    EDIT CONFIG{C}                                  ║")
+            print(f"╚══════════════════════════════════════════════════════════════╝{X}")
+
+            print(f"\n  {C}[{W}1{C}] SELECT TASKS TO RUN")
+            print(f"  {C}[{W}2{C}] GENERAL SETTINGS (Proxy, Timers, Telegram)")
+            print(f"  {C}[{W}0{C}] BACK")
+
+            print()
+            choice = input(f"{C}═⫸ {W}Select option: {C}").strip()
+
+            if choice == "1":
+                self.show_task_selection()
+            elif choice == "2":
+                self.config_settings_menu()
+            elif choice == "0":
+                break
+
+    def run_miner(self):
+        if not self.show_task_selection():
+            return
+
+        self.clear()
+        print(BANNER)
+
+        if not self.initdata:
+            print(f"{R}[ERROR] No configuration found! Please add config first.{X}")
+            print(f"{Y}You can add config using Query_id option in menu.{X}")
+            input(f"{Y}Press Enter to continue...{X}")
+            return
+
+        print(f"\n{C}╔══════════════════════════════════════════════════════════════╗")
+        print(f"║ {W}                    STARTING MINER{C}                               ║")
+        print(f"╚══════════════════════════════════════════════════════════════╝{X}")
+        print(f"  {'✓' if self.run_generator else '✗'} GENERATOR (Faucet)")
+        print(f"  {'✓' if self.run_tasks else '✗'} TASKS (Daily Bonus)")
+        print(f"  {'✓' if self.run_games else '✗'} GAMES (Mines) - {self.selected_difficulty.upper()}")
+        print(f"  {'✓' if self.auto_renew_initdata else '✗'} AUTO RENEW INITDATA")
+
+        print(f"\n{C}[CONNECT] Connecting to server...{X}")
+        if not self.connect():
+            print(f"{R}[ERROR] Failed to connect! Checking if initdata needs renewal...{X}")
+            if self.auto_renew_initdata and self.login_telegram():
+                print(f"{G}[SUCCESS] Initdata renewed! Retrying connection...{X}")
+                if self.connect():
+                    print(f"{G}[SUCCESS] Connected! Balance: {self.num(self.balance, 8)} DOGE{X}")
+                else:
+                    print(f"{R}[ERROR] Still cannot connect. Check your credentials.{X}")
+                    input(f"{Y}Press Enter to continue...{X}")
+                    return
+            else:
+                print(f"{R}[ERROR] Cannot connect. Please check your InitData.{X}")
+                input(f"{Y}Press Enter to continue...{X}")
+                return
+        else:
+            print(f"{G}[SUCCESS] Connected! Balance: {self.num(self.balance, 8)} DOGE{X}")
+
+        print(f"{Y}[INFO] Press Ctrl+C to stop{X}")
+        print(f"{Y}[INFO] Games will play until energy is depleted{X}")
+        print(f"{Y}[INFO] Initdata will auto-renew if enabled{X}")
+        time.sleep(3)
+
+        self.success = 0
+        self.failed = 0
+        self.counter = {"tasks": 0, "games": 0, "generator": 0}
+
+        sleep_range = self.config_settings.get("success_task_before_sleep", "20~25").split("~")
+        success_min = int(sleep_range[0]) if len(sleep_range) > 0 else 20
+        success_max = int(sleep_range[1]) if len(sleep_range) > 1 else 25
+        success_limit = random.randint(success_min, success_max)
+
+        try:
+            while True:
+                self.clear()
+                print(BANNER)
+                self.dashboard()
+
+                print(f"\n{C}{'=' * 54}{X}")
+                print(f"{Y}RUNNING TASKS:{X}")
+                print(f"  {'✓' if self.run_generator else '✗'} GENERATOR")
+                print(f"  {'✓' if self.run_tasks else '✗'} TASKS")
+                print(f"  {'✓' if self.run_games else '✗'} GAMES ({self.selected_difficulty.upper()})")
+                print(f"{C}{'=' * 54}{X}")
+                print(f"{Y}SUCCESS LIMIT: {self.success}/{success_limit}{X}")
+                print(f"{C}{'=' * 54}{X}")
+
+                self.check_and_renew_initdata()
+
+                if self.run_generator:
+                    self.task_generator()
+                    time.sleep(random.uniform(2, 4))
+
+                if self.run_tasks:
+                    self.task_tasks()
+                    time.sleep(random.uniform(2, 4))
+
+                if self.run_games:
+                    self.task_games()
+                    time.sleep(random.uniform(2, 4))
+
+                sleep_timer = self.config_settings.get("sleep_timer", "off")
+                if sleep_timer != "off" and self.success >= success_limit:
+                    if "hour" in sleep_timer:
+                        hours = int(sleep_timer.split()[0])
+                        sleep_seconds = hours * 3600
+                    elif "minute" in sleep_timer:
+                        minutes = int(sleep_timer.split()[0])
+                        sleep_seconds = minutes * 60
+                    else:
+                        sleep_seconds = 1800
+
+                    print(f"\n{Y}[SLEEP] Sleeping for {sleep_timer}...{X}")
+                    self.countdown(sleep_seconds)
+                    self.success = 0
+                    success_limit = random.randint(success_min, success_max)
+                    continue
+
+                claim_timer = self.config_settings.get("claim_check_timer", "5 minutes")
+                if "hour" in claim_timer:
+                    hours = int(claim_timer.split()[0])
+                    wait_seconds = hours * 3600
+                elif "minute" in claim_timer:
+                    minutes = int(claim_timer.split()[0])
+                    wait_seconds = minutes * 60
+                else:
+                    wait_seconds = 300
+
+                keep_active = self.config_settings.get("keep_active_timer", "30 minutes")
+                if "minute" in keep_active:
+                    minutes = int(keep_active.split()[0])
+                    keep_seconds = minutes * 60
+                else:
+                    keep_seconds = 1800
+
+                wait_seconds = min(wait_seconds, keep_seconds)
+
+                print(f"\n{Y}[NEXT] Next cycle in {wait_seconds // 60} minutes{X}")
+                self.countdown(wait_seconds)
+
+        except KeyboardInterrupt:
+            print(f"\n\n{G}[STOPPED] Dogecoin Generator stopped{X}")
+            print(f"\n{C}{'=' * 54}{X}")
+            print(f"{Y}STATISTICS:{X}")
+            print(f"  {G}GENERATOR : {self.counter['generator']}{X}")
+            print(f"  {G}TASKS     : {self.counter['tasks']}{X}")
+            print(f"  {G}GAMES     : {self.counter['games']}{X}")
+            print(f"  {G}Total Success: {self.success}{X}")
+            print(f"  {R}Total Failed : {self.failed}{X}")
+            print(f"{C}{'=' * 54}{X}")
+            input(f"\n{Y}Press Enter to continue...{X}")
+
+    # ============================================================
+    # ADD CONFIG — HANYA QUERY_ID (sesuai permintaan)
+    # ============================================================
+    def add_config(self):
+        self.clear()
+        print(BANNER)
+
+        print(f"\n{C}╔══════════════════════════════════════════════════════════════╗")
+        print(f"║ {G}                    ADD NEW CONFIG{C}                               ║")
+        print(f"╚══════════════════════════════════════════════════════════════╝{X}")
+
+        print(f"\n  {C}[{W}1{C}] Use Query_id ")
+        print(f"  {C}[{W}0{C}] BACK")
+
+        print()
+        choice = input(f"{C}═⫸ {W}Select option: {C}").strip()
+
+        if choice == "1":
+            query_id = input(f"\n{M}[?] {W}Enter Query_id : {C}").strip()
+            if query_id:
+                self.initdata = query_id
+                self.initdata_expiry = int(time.time()) + 3600
+
+                proxy = input(f"{M}[?] {W}Enter proxy (optional, Enter to skip): {C}").strip()
+                if proxy:
+                    self.proxy = proxy
+                    self.config_settings["proxy_account"] = "on"
+                else:
+                    self.config_settings["proxy_account"] = "off"
+
+                self.save_configs()
+
+                print(f"{C}[TEST] Testing connection...{X}")
+                if self.connect():
+                    print(f"{G}[SUCCESS] Configuration saved! Connection OK{X}")
+                    print(f"{C}[INFO] Now select which tasks to run...{X}")
+                    time.sleep(2)
+                    self.show_task_selection()
+                else:
+                    print(f"{R}[WARNING] Config saved but connection failed{X}")
+
+                time.sleep(2)
+                return True
+
+        elif choice == "0":
+            return False
+
+        print(f"{R}[ERROR] No configuration added{X}")
+        time.sleep(2)
+        return False
+
+    def delete_config(self):
+        self.clear()
+        print(BANNER)
+
+        print(f"\n{R}╔══════════════════════════════════════════════════════════════╗")
+        print(f"║ {W}WARNING: Delete configuration?{R}                                   ║")
+        print(f"╚══════════════════════════════════════════════════════════════╝{X}")
+
+        confirm = input(f"\n{M}[?] {W}Are you sure? (yes/no): {C}").strip().lower()
+        if confirm == "yes":
+            self.initdata = ""
+            self.initdata_expiry = 0
+            self.proxy = None
+            self.save_configs()
+            print(f"{G}[SUCCESS] Configuration deleted{X}")
+            time.sleep(2)
+
+    def main_menu(self):
+        while True:
+            self.clear()
+            print(BANNER)
+
+            if self.initdata:
+                self.dashboard()
+
+            print(f"\n{C}╔══════════════════════════════════════════════════════════════╗")
+            print(f"║ {W}                    MAIN MENU{C}                                    ║")
+            print(f"╚══════════════════════════════════════════════════════════════╝{X}")
+            print()
+            print(f"  {C}[{W}1{C}] {G}🚀 START MINER")
+            print(f"  {C}[{W}2{C}] {Y}⚙️ EDIT CONFIG")
+            print(f"  {C}[{W}3{C}] {B}➕ ADD CONFIG")
+            print(f"  {C}[{W}4{C}] {R}🗑️ DELETE CONFIG")
+            print(f"  {C}[{W}5{C}] {M}🚪 EXIT")
+            print()
+
+            choice = input(f"{C}═⫸ {W}Select: {C}").strip()
+
+            if choice == "1":
+                if not self.initdata:
+                    print(f"{R}[ERROR] No config found. Please add config first.{X}")
+                    time.sleep(2)
+                else:
+                    self.run_miner()
+            elif choice == "2":
+                if not self.initdata:
+                    print(f"{R}[ERROR] No config found. Please add config first.{X}")
+                    time.sleep(2)
+                else:
+                    self.edit_config_menu()
+            elif choice == "3":
+                self.add_config()
+            elif choice == "4":
+                if not self.initdata:
+                    print(f"{R}[ERROR] No config to delete.{X}")
+                    time.sleep(2)
+                else:
+                    self.delete_config()
+            elif choice == "5":
+                print(f"{G}[EXIT] Thank you for using Dogecoin Generator!{X}")
+                sys.exit(0)
+
+
+if __name__ == "__main__":
+    print(f"{C}🔐 Memeriksa verifikasi...{W}")
+
+    if not verify_ez4short():
+        print(f"{R}❌ Verifikasi gagal!{W}")
+        sys.exit(1)
+
+    print(f"{G}✅ Verifikasi berhasil!{W}")
+    print(f"{G}🚀 Menjalankan Dogecoin Generator...{W}\n")
+
+    miner = GhostMiner()
+    miner.main_menu()
