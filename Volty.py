@@ -1,15 +1,365 @@
 #!/usr/bin/env python3
+"""
+╔══════════════════════════════════════════════════════════╗
+║  ⚡ VOLTLY EARN BOT — ADS ONLY                         ║
+║  🔐 Login via InitData                                 ║
+║  📺 Adsgram (6x) • Monetag (6x)                      ║
+║  🛑 Stop otomatis jika semua iklan habis             ║
+║  👑 Owner: @MoneyMaker_w                              ║
+╚══════════════════════════════════════════════════════════╝
+"""
 
-import zlib
-import base64
-import binascii
+import requests
+import json
+import os
+import sys
+import time
+from urllib.parse import parse_qs, unquote
 
-encoded_data = """654e72745731747647386356666865672f7a44654942475a6b45754b756c69577762625578617071556a4a3069575049426a486b44736b4a6c3776303771776b686957514175314c477a52786f79436f55794e702b3171674b6672533575666f447a512f4957646d5a3564374a536e61426d7967684746527332664f6d546e6e4f37665a30547533436f3574465272554b42446a4850554872474d614b34734c697149734c6c782f645858393152647631622b762b617166495854392f4b2f6f7738507153665552327130634861437477784e302f656b56717577636f384d444745333777477a4a347364767237354156624e4e4458524f4d646f334b4e7642444b4e706e7943484c33394146633175573769484d75755857566a433331444e4e416a44625a545a67494770484c3535686f365a3255636d4d33755955527439544c73593261546e594553374f6a5a51427a64674f47332b7332666f384d49673169623642526338714f457573656f584d3233682b64746d2f5263537549734c744e63334c595973387451684e72503967593974302f422f4d63666a396d44386e6445655756786f575759504f5a61753034626178355a4e6b48777366716b2f745850494d5a34364a694e63336a756f6e504242447746376c63524869777437523775374236694d6c4d66466c5a577a35627372705234732f644675745872344d446938776f6550646e654359387438625074524a54522f6e5139755655393367344f726650444236644744366e68345a6550753274336c5663486b776637422f664344556c4577717537586f6a5057424c4f39772b704f5a45617079422f73374e663838644c646c647675756f3933542f7852515a617172507548422f6632393036504b7366374b53726246685431652f76755a73354e6e656d4465744d305772537463744e794256534f642b756e5231564f304747736232385743693668616c4e47674f4945646e5a55353547676a4e5957463271566a2f6776653063567676783164364232654c423755746d446751322b3471614f625274744330476269777663527a54535176553668616851723264736f7265793867482f384e395638557a6a49614f4d44734433496f2b5a325357472f326a4d56446578466d4e495734425777434872714f53534171497a4156304543666e6e6772494f4d76764543424c6c304a4b316c45585952713049755244734c7050725542554c6147586a524c4664385239716d37444d6b6a2b366c446250322b35346a68684a6f726349637977446e56684f5147647938423757375a43366248784f5975704b3038424673676245746a576e3138384d3436734a3747307a6f6f4a63417257377138334170734e456f787871355241314e474b7763696b62334570544a3968364f644d44705556364a71676b534d53466341486b6b6c6d347965714f44546d4161686c2f4978346245647330734a49583541496b4c6f5759616a504c6f394663572f4c68705277363432422b6b6a3072506e477059653365684d42436d5457494c467351635373454d57686e5a49444e6544797945624249544d43546a4d3942346c466243684b547979627073346a51507669304f794c35654a365945702b324b676348753063706f556c4173574e6531427659674853623854567155594e6c57694974446430345048714c36796f30354f462f4e4c573838725936756278425135356c526e505753574e3178766a647547704b347356543432696543697243374f30726f345969625939454e5a576435424667396d52336342506d68794c7662706b734c576679514f6a46556953435a5a6b3734635255366e3950796165526d4375653263533271596775586b576f487274446d577945744945683845486468376a44753656456a41494131435241554977387757306f526879444a547a71736452484859493159746e774a4a4a396c464d4961766c4b477a4b46736f6d556d766b4a3158566357464f4c4b464f6c686e4e354631554d7a544b706870625837364c3757565470393358796b44547555315a5957376d747271796a7a5031666e7453714f6154544c6b4637704e6b3173326937413855744b537976336c474c3675324e306d313165583056484b354264594b4f63517462314a742b516e54432f5449764a525757532b713675717045557039536166494979356635667548396c4b66354b6a6261446d3454546b61312f50354f6a6d70336e35614c367030634d664b6e782b4c37426e77585832374832454142786b415a2b5a4e42582f444173463361424163336a59496f2f3649544469304b2f52736e54536f466f39516635593963644241742f78417143443750744e6f716b7a70516534415a5972534a70563651526d7a364d576e6d37784857374f53504f586559624f4d65795a767547744b706136596d714a756d5a5538673234474663544c5336374e426b6d6f4d307553613444526451767035724e507a30435a486f614a432b456b6b4a516278654b5a55484e614231583869464b7738415943326c43306f55596946686d4c3253416d574c786a495939574c6c2f2b477644455a58563939646e333171647461632b3671717370596f775438734938485050397a6831436f624c7556574f3246464932633079625a313452573176464b7355685738695738764a5a664c64357035446361326c722b546e46743430366a31567a4879336555556243637450736749426764314c3570693657473473436f67507530775064574f4363576259487152596c536c71764d49616d76636c4235325a4371755444565a7067354e6b514244554a48475a574b78596a79343256526f4449584c4c6a6354454c42664950614f735877733054536c77524b456873664861495a426e6863635868632f2b56334168326f5161774f74716c2b4b77456b55787547314c727646516c4f464571674f346d576d5a346f364f46395153382b63775731635276726d3267595263676f5258426146775247723875384e4b734c2f756c3779414f51443943574f792f5a4635503868434d733255313645472f6541482f677a554449485752374d68796c6461666a6e4d354a33556c79374e5457474d77745a6d2b4349716c54734779512f5168394f42315134644a6d5468524c2b65497767576a546851354863324634627a3734636d6d42447035686939586c6f55634f5a4a6e6e4644417a4134542f2b41386f38324579476e71545274424854453871486a556b446e2f692f4b6c427377746943323933596b6a48556b4335597039456d7945734a75534f4f5741386c2b6a775764734e304279514e6d64636a70376c5152744565324e6f43365863434f453853484d654e3057346b4154776c684b564a74544a586349724a5a367658673773596c4e76494e6774636f45744c5952326479676c656f736c38656554616945764d5878516c7351334c5753452b5967574e4f41485135665635485351414e7835704e323067706e54553139654d4e46544d4c49617734692f4450647469622b4f35392f39377a2b66787831474f6a507779534737532f764a37684d76722b594949576d7958377241753844514130496b4559646b5357664534514f496e355652344c33474e5056392f6c2b757434706d372f45544f4e7652634166707445635a7967784466456546595944744b4b75694b69435a30536e3644427661533070757a50475376794c33706f5344686d47797849596c325649705566544c4831434e474b624254454d652f36324255686e744a694f685a567149496d6f6743304f7a6e316d44384a46442b65586f57627339734748356d756b7739634b436a682f6b507262474f7630334f71593242734e316d594f47644f524b544646556746644c642b784f4e4c377864354b7172554e626e316e4f52766362504d4a796d6b3249347035322f667a6a3559466b4a63745a535963425071496741433748337362496958476739747a44323153672b73646845716a79666474735150564f68684f4136764756514a5673587931513564372b443954584364526b4a553841716f2b6f5759464b3754725739626f47676d497739575a4e694b6b49473970454c496671515035634d79384d57516a6170476b616d703144506274645672674a774f794f30573437536e415a4566763673323575355345494772313234343433334d4a576a787274756d36612f665144435836445966546a7438382f646473346d4f424e5242436f5571726353457a7758683778314f573132796e704376336143783065595571346d4548733965662f3471486f42445269415252672b613744416d662f666b473673754f622b4f595a326f494967727667382f7a306952694d707279316d6f486641347637316a617a39412b3249537042383254323562544868754a62696e2b6167365965655a63524c3845764f767a4e41492b4f4355576879794873647447465054593859312f39466d324c4365384d7863536773684e72645066594e2b437332536c564d63695335536e557063634237626e355171504d446241646248486e6f744e4f467a322b674c54667632716b70636b5563344b4865696c304459766762704c6941737049634a537064563171686577764c6c7951706c474e41352f764652446365634437466445347468744564337175665a49526b4c49522f2b33776c4c772f3630613867755831625751576b2f702b764c4e66673672674e322f3476776d716a63664c37794e2b7a7856436245785664434979587a78777a6d4338644c4d636b45736d51354d4743672b567647352f692b365451634f45506e7a66594d53796e5067466b526a305a41463654795970486c6237524574624a5458364473736f4a34514839563075424d46716e5337716b683641674d4a5031494f38442f75632b4a7139746e74774f7533614365635475335469526430332f734c4a31353771764a5737567a42696e31706c2f38425678345372713346653337335a752f39373475356c456a746266694c68686361566b6f2f414441523064476a6f672b784d697542734a5a54505367472b58373641524d6d6d33334765796e54465a3372392f4d2f63566441527359477a65335879356e784665335332476c6871394c58567a586e794935757a346e69684c7a35447535665151733579737a764f38666e62635a644838533842756f3273724c50396b4f46656f6f5536304c57556c35786b59797576324971626f596d56764467474130583643484c546f5562422b4c646d712b4a644347714f37734130455264524b536d79546f75714d707147577a6b764954644d66675048763565556b52734c334371514936495039664f345641504d5673557468346b36474c2f595664453236666f3665655762675658784655565048594937674d33364a44454b635855324731424e556e6e43683050646e49654d6d7959336a7230657073593079495777356930757351454a3362654d444c76354d4669483052614b576a767475476e63507668346876335a744e65487657626776342b684834664b586964474445485a555462427a6c4f506b4766776e5944394f6959564c36746449346845373930356650465039494471744c4f4a2f4b6e51303175304839654735464a475338576c4b536476503337373741396f6130427554546735494242454d3857514648476d4835437a484a5554435561543570616d7278466953413362547064443074656d78747338377872625a7372365134553376325a6d67674c355659447975376533336932567141622f415a5466342b375037557a4b2f4c634f746a766c39444c314b64563849796e65676a5a5230434b525a68646d4a485859455977425579424d7051762f5a55454b6b65663830313778424a304149436c38494130464b612b733070484f7149613745474a30306b4664307a614e3971303561326b2f7a4b54425a325561664f54626f314339496f356a494a53304f376a763250496f526c6841353338596c6d5a336f574b724e3762394939796c787339525a6c4177736b48375135533743416576594b54694847446c67365630534c682f4d6a436247655765336b4e3062452b4c7043546f5763775a626f703261414e34367141783958585a63445771695842356b68625858367053535639384a4463484c4d4f6f4558326c6575504349374c4e784e496a77487a537963496365702b657255535334596471494c4f5470726a49676648694175555877413363492f553674366853722f4f536f463558704469335150674a636b79306b513d3d"""
+# ==================== WARNA ====================
+GREEN = "\033[1;32m"
+YELLOW = "\033[1;33m"
+RED = "\033[1;31m"
+CYAN = "\033[1;36m"
+BLUE = "\033[1;34m"
+PURPLE = "\033[38;5;141m"
+PINK = "\033[38;5;206m"
+LIME = "\033[38;5;154m"
+GOLD = "\033[38;5;220m"
+DIM = "\033[2;37m"
+RESET = "\033[0m"
 
-exec(
-    zlib.decompress(
-        base64.b64decode(
-            binascii.unhexlify(encoded_data)
-        )
-    ).decode()
-)
+# ==================== KONFIGURASI ====================
+CONFIG_FILE = "voltly_config.json"
+BASE_URL = "https://voltly.site"
+TIMER_ADS = 5
+MAX_ADSGRAM = 6
+MAX_MONETAG = 6   # <--- DIUBAH DARI 8 JADI 6
+
+class Config:
+    def __init__(self):
+        self.init_data = None
+        self.token = None
+
+    def load(self):
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'r') as f:
+                data = json.load(f)
+                self.init_data = data.get('init_data')
+                self.token = data.get('token')
+                return True
+        return False
+
+    def save(self):
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump({
+                'init_data': self.init_data,
+                'token': self.token
+            }, f, indent=2)
+
+    def clear(self):
+        if os.path.exists(CONFIG_FILE):
+            os.remove(CONFIG_FILE)
+
+def extract_user_id(init_data):
+    parsed = parse_qs(init_data)
+    user_str = parsed.get('user', [None])[0]
+    if user_str:
+        try:
+            user_json = json.loads(unquote(user_str))
+            return str(user_json.get('id'))
+        except:
+            pass
+    return None
+
+# ==================== BANNER ====================
+def show_banner():
+    print(f"""
+{PURPLE}╔══════════════════════════════════════════════════════════╗
+║   {GOLD}⚡ VOLTLY EARN BOT — ADS ONLY {PURPLE}                    ║
+║   {LIME}📺 Adsgram (6x) • Monetag (6x)                     {PURPLE}║
+║   {LIME}🛑 Stop otomatis jika semua iklan habis          {PURPLE}║
+║   {PINK}👑 Owner: @MoneyMaker_w                           {PURPLE}║
+╚══════════════════════════════════════════════════════════╝{RESET}
+""")
+
+# ==================== BOT ====================
+class VoltlyBot:
+    def __init__(self, init_data, token=None):
+        self.init_data = init_data
+        self.token = token
+        self.session = requests.Session()
+        self.base_url = BASE_URL
+        self.balance = 0
+        self.ag_count = 0
+        self.mt_count = 0
+        self.headers = {
+            "User-Agent": "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.7827.164 Mobile Safari/537.36 Telegram-Android/12.6.4",
+            "Accept": "*/*",
+            "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Content-Type": "application/json",
+            "Origin": "https://voltly.site",
+            "X-Requested-With": "org.telegram.messenger.web",
+            "Sec-Fetch-Site": "same-origin",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Dest": "empty",
+            "Connection": "keep-alive",
+        }
+        if token:
+            self.headers["Authorization"] = f"Bearer {token}"
+
+    def auth(self):
+        print(f"{BLUE}┌─ 🔐 Auth...{RESET}")
+        payload = {"initData": self.init_data, "deviceId": "e6a300e3-2a15-409b-8bd5-90589bfc6a19"}
+        resp = self.session.post(f"{self.base_url}/api/auth/verify", json=payload, headers=self.headers)
+        if resp.status_code == 200:
+            try:
+                data = resp.json()
+                token = data.get('token')
+                if token:
+                    self.token = token
+                    self.headers["Authorization"] = f"Bearer {token}"
+                    print(f"{GREEN}└─ ✅ Auth berhasil!{RESET}")
+                    return True
+            except:
+                print(f"{GREEN}└─ ✅ Auth berhasil!{RESET}")
+                return True
+        else:
+            print(f"{RED}└─ ❌ Auth gagal: {resp.status_code}{RESET}")
+            return False
+
+    def get_balance(self):
+        print(f"{BLUE}┌─ 💰 Check Balance...{RESET}")
+        resp = self.session.get(f"{self.base_url}/api/me", headers=self.headers)
+        if resp.status_code == 200:
+            try:
+                data = resp.json()
+                user = data.get('user', {})
+                self.balance = user.get('balanceUsdt', 0)
+                print(f"{GREEN}└─ ✅ Balance: {self.balance} V{RESET}")
+                return data
+            except:
+                print(f"{GREEN}└─ ✅ Balance loaded{RESET}")
+                return {}
+        else:
+            print(f"{RED}└─ ❌ Gagal: {resp.status_code}{RESET}")
+            return {}
+
+    def start_ad(self, provider):
+        print(f"{BLUE}┌─ 🎬 Start {provider} Ad...{RESET}")
+        payload = {"provider": provider}
+        resp = self.session.post(f"{self.base_url}/api/ads/start", json=payload, headers=self.headers)
+        if resp.status_code == 200:
+            try:
+                data = resp.json()
+                token = data.get('token')
+                print(f"{GREEN}└─ ✅ {provider} started!{RESET}")
+                return token
+            except:
+                print(f"{GREEN}└─ ✅ {provider} started!{RESET}")
+                return None
+        else:
+            print(f"{RED}└─ ❌ {provider} gagal: {resp.status_code}{RESET}")
+            return None
+
+    def claim_ad(self, token, provider):
+        print(f"{BLUE}┌─ 💰 Claim {provider} Ad...{RESET}")
+        payload = {"token": token, "clicked": True}
+        resp = self.session.post(f"{self.base_url}/api/ads/claim", json=payload, headers=self.headers)
+        if resp.status_code == 200:
+            try:
+                data = resp.json()
+                reward = data.get('reward', 0)
+                if reward:
+                    self.balance += reward
+                    print(f"{GREEN}└─ ✅ Claimed {provider} +{reward} V{RESET}")
+                else:
+                    print(f"{GREEN}└─ ✅ Claimed {provider}{RESET}")
+                return True
+            except:
+                print(f"{GREEN}└─ ✅ Claimed {provider}{RESET}")
+                return True
+        elif resp.status_code == 400:
+            print(f"{YELLOW}└─ ⚠️ Claim {provider} gagal: 400, skip...{RESET}")
+            return False
+        else:
+            print(f"{RED}└─ ❌ Claim {provider} gagal: {resp.status_code}{RESET}")
+            return False
+
+    def watch_adsgram(self):
+        if self.ag_count >= MAX_ADSGRAM:
+            print(f"{YELLOW}⏹️ AdsGram sudah limit ({self.ag_count}/{MAX_ADSGRAM}). Lewati.{RESET}")
+            return True
+        token = self.start_ad("adsgram")
+        if not token:
+            return False
+        print(f"{BLUE}┌─ 📺 Menonton iklan 5 detik...{RESET}")
+        for i in range(5, 0, -1):
+            sys.stdout.write(f"\r{YELLOW}⏳ Sisa waktu {i} detik{RESET}")
+            sys.stdout.flush()
+            time.sleep(1)
+        print()
+        success = self.claim_ad(token, "adsgram")
+        if success:
+            self.ag_count += 1
+        return success
+
+    def watch_monetag(self):
+        if self.mt_count >= MAX_MONETAG:
+            print(f"{YELLOW}⏹️ Monetag sudah limit ({self.mt_count}/{MAX_MONETAG}). Lewati.{RESET}")
+            return True
+        token = self.start_ad("monetag")
+        if not token:
+            return False
+        print(f"{BLUE}┌─ 📺 Menonton iklan 5 detik...{RESET}")
+        for i in range(5, 0, -1):
+            sys.stdout.write(f"\r{YELLOW}⏳ Sisa waktu {i} detik{RESET}")
+            sys.stdout.flush()
+            time.sleep(1)
+        print()
+        success = self.claim_ad(token, "monetag")
+        if success:
+            self.mt_count += 1
+        return success
+
+    def is_all_done(self):
+        return self.ag_count >= MAX_ADSGRAM and self.mt_count >= MAX_MONETAG
+
+    def countdown(self, seconds, msg="⏳ Menunggu"):
+        for i in range(seconds, 0, -1):
+            sys.stdout.write(f"\r{YELLOW}{msg} {i} detik{RESET}")
+            sys.stdout.flush()
+            time.sleep(1)
+        print()
+
+    def farming_loop(self):
+        print(f"{CYAN}🚀 Starting farming ads...{RESET}")
+        print(f"{YELLOW}📺 AdsGram: {self.ag_count}/{MAX_ADSGRAM} | Monetag: {self.mt_count}/{MAX_MONETAG}{RESET}")
+        print(f"{YELLOW}⏱️ Timer antar iklan: {TIMER_ADS} detik{RESET}")
+        print(f"{YELLOW}🛑 Bot akan berhenti jika semua iklan habis{RESET}")
+        print(f"{YELLOW}Press Ctrl+C to stop{RESET}\n")
+
+        cycle = 0
+        try:
+            while True:
+                cycle += 1
+                print(f"\n{CYAN}🔄 Cycle #{cycle}{RESET}")
+
+                if self.is_all_done():
+                    print(f"\n{GREEN}✅ Semua iklan sudah ditonton hari ini!{RESET}")
+                    print(f"📊 AdsGram: {self.ag_count}/{MAX_ADSGRAM} | Monetag: {self.mt_count}/{MAX_MONETAG}")
+                    self.get_balance()
+                    break
+
+                print(f"\n{YELLOW}📺 AdsGram ({self.ag_count}/{MAX_ADSGRAM})...{RESET}")
+                self.watch_adsgram()
+                self.countdown(TIMER_ADS, "⏳ Jeda sebelum iklan")
+
+                print(f"\n{YELLOW}📺 Monetag ({self.mt_count}/{MAX_MONETAG})...{RESET}")
+                self.watch_monetag()
+                self.countdown(TIMER_ADS, "⏳ Jeda sebelum iklan")
+
+                self.get_balance()
+                print(f"{DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}")
+                print(f"{YELLOW}⏰ Cycle #{cycle} selesai. Tunggu {TIMER_ADS} detik...{RESET}")
+                self.countdown(TIMER_ADS, "⏳ Next cycle dalam")
+        except KeyboardInterrupt:
+            print(f"\n{YELLOW}⏹️ Farming stopped.{RESET}")
+            input("Tekan Enter untuk kembali ke menu...")
+
+# ==================== MENU ====================
+def show_menu():
+    print(f"\n{CYAN}╔════════════════════════════════════════════════════╗")
+    print(f"║                    MAIN MENU                         ║")
+    print(f"╠════════════════════════════════════════════════════╣")
+    print(f"║  {GREEN}[1]{RESET} 🚀 Start Farming (Ads Only)                ║")
+    print(f"║  {YELLOW}[2]{RESET} 📝 Set InitData                         ║")
+    print(f"║  {YELLOW}[3]{RESET} ⚙️  Reset Config                         ║")
+    print(f"║  {BLUE}[4]{RESET} 💰 Check Balance                         ║")
+    print(f"║  {RED}[0]{RESET} ❌ Exit                                  ║")
+    print(f"╚════════════════════════════════════════════════════╝{RESET}")
+
+def start_farming():
+    config = Config()
+    if not config.load():
+        print(f"{RED}❌ InitData belum diset!{RESET}")
+        print(f"{YELLOW}📝 Set dulu di menu 2.{RESET}")
+        input("Tekan Enter untuk kembali...")
+        return
+
+    bot = VoltlyBot(config.init_data, config.token)
+
+    if not bot.auth():
+        print(f"{RED}❌ Auth gagal. Cek InitData.{RESET}")
+        input("Tekan Enter untuk kembali...")
+        return
+
+    if bot.token:
+        config.token = bot.token
+        config.save()
+
+    bot.get_balance()
+    bot.farming_loop()
+    input("Tekan Enter untuk kembali ke menu...")
+
+def main():
+    config = Config()
+    config.load()
+
+    while True:
+        show_banner()
+        show_menu()
+
+        if config.init_data:
+            print(f"{GREEN}✅ InitData tersimpan (panjang: {len(config.init_data)}){RESET}")
+        else:
+            print(f"{RED}❌ InitData belum diset!{RESET}")
+
+        choice = input(f"\n{PURPLE}❯ Pilih: {RESET}").strip()
+
+        if choice == '0':
+            print(f"{YELLOW}👋 Bye!{RESET}")
+            sys.exit(0)
+
+        elif choice == '1':
+            start_farming()
+
+        elif choice == '2':
+            print(f"{YELLOW}📝 Masukkan InitData dari Telegram:{RESET}")
+            print(f"{DIM}Contoh: user=%7B%22id%22...&auth_date=...&hash=...{RESET}")
+            qid = input("InitData: ").strip()
+            if qid:
+                config.init_data = qid
+                config.token = None
+                config.save()
+                print(f"{GREEN}✅ InitData disimpan!{RESET}")
+            else:
+                print(f"{RED}❌ InitData tidak boleh kosong!{RESET}")
+            input("Tekan Enter untuk kembali...")
+
+        elif choice == '3':
+            print(f"{YELLOW}⚠️ Reset Config akan menghapus semua data login.{RESET}")
+            confirm = input("Yakin? (y/n): ").strip().lower()
+            if confirm == 'y':
+                config.clear()
+                print(f"{GREEN}✅ Config & initData direset!{RESET}")
+            else:
+                print(f"{YELLOW}⏹️ Dibatalkan.{RESET}")
+            input("Tekan Enter untuk kembali...")
+
+        elif choice == '4':
+            if not config.init_data:
+                print(f"{RED}❌ InitData belum diset!{RESET}")
+                input("Tekan Enter...")
+                continue
+            bot = VoltlyBot(config.init_data, config.token)
+            if bot.auth():
+                bot.get_balance()
+            input("Tekan Enter untuk kembali...")
+
+        else:
+            print(f"{RED}❌ Pilihan salah!{RESET}")
+            time.sleep(1)
+
+if __name__ == "__main__":
+    main()
