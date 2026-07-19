@@ -1,16 +1,384 @@
 #!/usr/bin/env python3
+import requests, json, os, sys, time
+from urllib.parse import parse_qs, unquote
 
-import zlib
-import base64
-import binascii
+GREEN = "\033[1;32m"
+YELLOW = "\033[1;33m"
+RED = "\033[1;31m"
+CYAN = "\033[1;36m"
+BLUE = "\033[1;34m"
+PURPLE = "\033[1;35m"
+DIM = "\033[2;37m"
+RESET = "\033[0m"
 
-encoded_data = """654e7274573174764738635666756576474e4e41785533494a53585a5469784462576c4a466c6a72596b687948634d4a466b50756b4a786f755576747a6c706943414c70513137616f496b6142514863426b3761353759422b744c32352b675031442b685a325a6e6c7a743749536c4b7669494c7756374f3563795a632f764f7a4f786376316231506266617048615632453952663843366a7231636f4c322b347a4c6b6b694f66654d77726f3038397879346a4239363841667a4461493855327137545137357257625370393748724553533769522f474562547a3753506659615251324e7a62324e684271366a34635731352b636e696e65576c5872487765474e72612f64527648515a5376633231754e466931433039726975644c34465a586533486d37457932354132594f4865772b326c4e4b62554c72653249364b6c75347366794447324e38346941707255464977535274355865665961474c624a6d354a57796b6765506f7574566d70585377574330504f78756a383237507a6237392b712f362b4b35782f6577707a4751594348395833317572724777382b576b506e6e352b682b734f445862533256516370765939516166392b3477473673585262512b45547a7673304a434f554f54702f39694e6178395161414a572f6f6a554c303535346139694d7542366a6a474a4c46477a53447537375466472b3764694534553661706d54742f4b752f2f2b2f665879484f414b686e2f3544326b5958745433324736434738774139716f2b535449695a2b7633682b656f70326a3047584b2b6a58664e7a424e6a346b726e474d4a6a30426c5764766d34712f4877715448685841554c5643595731333531356a30376a58434c7742757931736b76354a7932673564707432644f374f34454c312f51336a3464345762394a6c724f2b74564b75343339656a3576724a344c4e696f62467a734c4833322f715755563837614f78795237775a4b2b504f75686772574875384a67613956537573317874626a343237573774723934324763477277706372796a5a7366336934577475736647614c542f6b486a6f46486e5448776f436a63626d2f5548442b2f43373657614b4e6a6533646b347147384734785261467659387443626d4562676f39317a446f445a6c686c4879694e5757727373662f6c4d5856535a6d47456a736743476f74623448526b484e7a44715065423531624243626330684a76416b6631484b776d5279517469464b516a686b585a326355496964705a6775597533346330785a467a6c39597366626c4e474375364168374b4732326c714d476b7943713038586f376531564a76556c506c2f656f6577306b4a55757044546253794c6353645a6c74636c4a614a78543755716734424c6d4f2f61364d443178334b585a6665773559306c3765476e4a436e70504f6b645a307050694d7a30652f33534d43614746565659355769794b3346786c4a4d7a57636d592b61694d326d5645625a50596248564a69316876575153374637515358756d536e674f546a7063484945564f6d4974627a4a444d6c534c7551385469364d7456474d4a777249566f494470367a4132626d474d394c355452453237696e326850617038554a4b64682b7a48377a42326f3068564e75496a6a78756d564a5079585167716161674a5331564252696768495177567a4737636c4a7933535a79764172656356596832464d38714155426378437a41744a795a7731595261526c4a306b2b4a45394a34584c4f52625a727941366a4231307665446f704b6d746d78693041306b54394130444d4f7a687034594459444546712b727152556d6832576a7853465a574d4c596d574a7a425a51473472374e30763037674e68356462304177664f7175775455344870514d56523058587749387172554f2b4164785256553348592b6f356146717a6631476970745564732f7559507174756b36494e764657336651665133562b33324c50434c4e2b3552566279352f6f432f664b705a566b7655577477744f3772337165396d566c53317364337a63496277564e53754e395449313778797431765462795134414b5179347178774d2b714931494b46465735694245716f434c785074643133616f545a766d592b646953353770453163346b4b66646e366e4b7350656f66637261562b72512f6b7953684c37714c4958324267784b343867466e4a4f484c656a4d324b526a6f743765673873694e676434757248704a6e73765539616c5875457462715666637245664433634978556e6d46527534323348464931626a75766c74316f48726e67723075757a5159616362644c695975564e44676e70563742466e354a597539453438424d6d505542366366416a36626b705a776c654d687670515a304876316d704b41754c4565566f614f797a726947726b2f45375842554d2b53706b6448373235666e5a352b6a4638374f765552313649656e7a7571374c744b77343976342b487644677942326b7949504d4f73515945495161674559784f5054363046615a514e2f78784f424b49426d424a6445715a376f366e684f333231553559686c4a3331794e4f366f577879512b6d4f34787a48775052476d4349486b53566c4e6a666474787061776753475a4b4e703233414f326754726642796a6a5a5350447078744f30716a2f4656697868555051686c795a6e5a31776835332f35497442486b37686437464872576c6f6465576b49675969356b6a30474c46436a4562372f4d686968677a7659576b4844704152484530644d4a446b447579573050364f3166664d6a326f637536454136504f4b6d4e4e586d5a44674a5453354d635a436f344e6f4a77764e347551526d56477854574e455a36567065422f41625658474d4b714e695a4d64585a3968634f4a557774465545375a646a33766d6d4a495439556b314a6a4841567069536733784270514562716d6334526374694c4675582f34597679594c48762b53627549704d76783248423338557535626d535072733438717a3543376d484541797a31735757786445723036437a6a49636e6a746d3249365a616159555578394161393444524c79435a36717753486a617678704a5357584a734253634963504d7461566e424d72614738694750386277464c54744f75755159752b70364c536943544c366d355966574d4856386631575379472b61544359565a63376d4f59464b4a596c72365031684d4f5949516236656254695444436a667233494e574c4c79374963634f39596e633345784f6554784c4a637868586e6c6c732f6a375078644c6a34462f46786467494b4d643061732b394e504d6a714178637763455362416952672f4a7843386f514541516434314c705a367a6f734c2b545956695845616c4632394f56396f364d745a366e696f79316972714c6d4f4b7643672b76712b65496c4d2b426a445573656773643375504b694e7237562f755971534f35387a67612b7971323752486d576f4e457853483157485365496a37664c492f462f30694d3956356146757a7039714e69326e64526a5571487645383639375449386e687457344f696f427972796b505045645166653462554c7a785174474538556b4646792f6e486c6544762b4a36797043347a736875454e416167734c32654f415668614556793377525333303179336e6d4a384338716937674330587a475351724d736566486f436b765a6c69453941647a525a466a6c3764306d52357661644a4d764a38707755615a584a684d463274736d6b4d6f50356f55586859675a306d633332737a456f4a304c63574c6f394a5a4a4c64722f366c386f75502b7373755a6952774259306353724c6a32476e526d344f5476794d744a772b4a4a30444d7a4d314f5464736a69477945357a2f3571466a624c4e5a67714d38415a774a463850445a5155537879526c794a45557278494d7734486e787347357355374b732f6f7a76453248743568787a5946756f59347a6765326952765a4f51357269686864444d2b57774b5362485634786a3451786547345346444d794b58744e4d2b36574256386a6f2f4c6731427a676c31584d46754352504d764e775354336f6c4e416b7630575a435a72436235305561464b6f797341686956346c4f6f566a763370306b685038475a316d51436656784f59417146444e6d51413168366d393078696c2b4f50464d43723530554e4d6c4b385970734a4a7644615943686d5946615a6d73504758686c516872363855715a49617568525355632f416c6d5667307a4d4536775a34524b744c557038647974366c576659624562624e71536d467568544c377a494a4a6258785045533136527a62386a4d4f6a375163322f544b714f6431566f744356385432375537484c385a6d78543831344d654c794d563268333842496a7656797169796d496744337341444b5a754f7a2f526a6c7a49436d766e5944573169434d4f4d304a434f67426c4744374d31454b5051746e79766d3841502f733237376c6d453945754c57674b495961625877546a5444377058333974753747786d566f72502b6472593756473755326f36544d3449444e3932474949435058364f6d335649496b7850505a674232544b6e6e336c43776b31452f42536b4934306b76753874493647503378415438383976694d5750795468395361733161466e6a6238364f7578522b635664524d69672b5171377461746d4f394c45645268742b324535365070623747634652585263337154667477446d6b42616e513735554e445842457764506b3363684a314751474b676e6c7276346d6b5a4368515a4b59684d383556454a37667648387a36666f4c6a6353694d4c455a6c524839306b504d672b4b44676e716753746c706e304a4d31374b696b42525561426e4a5744484e505632334958347271696c6d412f75434b6a50692b642f2f41634b766c792f5068515448303234494a424a394e6e62635547677143546261707a68783748614a4a424c48367a6c5270734d6737704131476b53792b384633702f4e634d6268327a544f30397562714e54304479472b5148705144524b4471356a4f656e777151514262764f6c4e6d6b61345154707442736f612b453168506c784654324e6553597465452f4d52552b754e62556a5a667665472f32577332314d3744542b684e52476e6f3741462b5258784d4144436755696e304643396d534d7a6f457834794a47723643644675304e4f6d4551474539613576574a2b35724f3973664d77502b3370595771484e684e63536f4b5549726a56492f4d756556564a58485052636e4d4e35637065576b3776466b7a427331317637415369765368412f66426d792b427665544b515365475478552b6b78514a61502f7363375450734d6c67756965775a58566761702b4d3768302b575970532f2b52355354775a674558795a5052646448764b6531434b69505070746e464347706a3776564734682f546636394866795a3762694446664b6e4f4d3037665568664a666b6269526b7a4a4a637544325a7359453162596b7563674135524a42676d4251574f426b62474b327551385739476d7233665a6e77426e654c67636f2f30514e713065344b697672427174476c2f5a493665306c6946533355466c616d4a504f6e66304233422b52612f724b5567506d55617071364f784962596a4578684554707953715958554c434a557a66386c474a727933516b6a626867386c415a7355447767462b677964644343444650345356695669684150526b39414a574762555457325541534b4345364770584b546d664d6c4b745169756b4c6832496176556951566f4b485068694e30307965326c5a417559646c58736932677769486c3859754a41554c7943334748666a5377577a7344622b4150306c73685a4965374a474d6c5541747044756d39755658786e5670703861785064664d725a4759563039614472594e6358797766556e625a5a436c46425067454a304d716c5970494f38637351367a576469712f7069666852596d68706f414e323273656366386d464354312f4a5a756c4933484b556a455674555561306b32714644726c366a4e2b73504b4c70726354787463726b3764616a704666484c36566d6a5267624e662b793568516b346e635655574d64516e77494e2f6e656b4c2b4e6e2b4a43436a505367427747636d4862357a74554f624b64624e545477425169754d44534848544a5a6a3866466734647a3745373132593134365442546b566f676131387a7739574639317255376577466d483951666c5658333442795444457a544c443449734c7735425879344b56787638426e30304c78673d3d"""
+def show_banner():
+    print(f"""
+{CYAN}╔══════════════════════════════════════════════════════════╗
+║   {YELLOW}ARCADEPXC — AUTO CLAIM + 3 ADS (SKIP 429)         {CYAN}║
+║   {GREEN}⚡ Daily • Claim • Interstitial • Gigapub • Monetag {CYAN}║
+║   {YELLOW}⏭️  429 = Skip lanjut iklan lain                 {CYAN}║
+║   {CYAN}👑 Owner: @MoneyMaker_w                             ║
+╚══════════════════════════════════════════════════════════╝{RESET}
+""")
 
-exec(
-    zlib.decompress(
-        base64.b64decode(
-            binascii.unhexlify(encoded_data)
-        )
-    ).decode()
-)
+CONFIG_FILE = "arcadepxc_config.json"
+BASE_URL = "https://app.arcadepxc.xyz"
+INTERVAL_ACTION = 5
+INTERVAL_AD = 15
+INTERVAL_CYCLE = 15   # <--- DIUBAH DARI 60 JADI 15
+DAILY_BLOCK_ID = "int-34589"
+MAX_INTERSTITIAL = 8
+MAX_GIGAPUB = 20
+MAX_MONETAG = 15
 
+class Config:
+    def __init__(self):
+        self.init_data = None
+        self.user_id = None
+        self.session_cookie = None
+    def load(self):
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'r') as f:
+                data = json.load(f)
+                self.init_data = data.get('init_data')
+                self.user_id = data.get('user_id')
+                self.session_cookie = data.get('session_cookie')
+                return True
+        return False
+    def save(self):
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump({'init_data':self.init_data,'user_id':self.user_id,'session_cookie':self.session_cookie}, f, indent=2)
+    def clear(self):
+        if os.path.exists(CONFIG_FILE): os.remove(CONFIG_FILE)
+
+def extract_user_id(init_data):
+    parsed = parse_qs(init_data)
+    user_str = parsed.get('user', [None])[0]
+    if user_str:
+        try:
+            user_json = json.loads(unquote(user_str))
+            return str(user_json.get('id'))
+        except: pass
+    return None
+
+class ArcadePXC:
+    def __init__(self, init_data, user_id):
+        self.init_data = init_data
+        self.user_id = user_id
+        self.session = requests.Session()
+        self.base_url = BASE_URL
+        self.session_cookie = None
+        self.balance = 0
+        self.daily_claimed = False
+        self.inter_count = 0
+        self.giga_count = 0
+        self.monetag_count = 0
+        self.headers = {
+            "User-Agent": "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36",
+            "Accept": "*/*",
+            "Accept-Language": "id-ID,id;q=0.9",
+            "Content-Type": "application/json",
+            "Origin": "https://app.arcadepxc.xyz",
+            "Referer": f"https://app.arcadepxc.xyz/tasks?user_id={user_id}",
+            "X-Requested-With": "org.telegram.messenger.web",
+            "Sec-Fetch-Site": "same-origin",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Dest": "empty",
+            "Connection": "keep-alive",
+        }
+    def set_cookie(self, cookie):
+        self.session_cookie = cookie
+        self.session.cookies.set("session", cookie)
+    def auth_session(self):
+        print(f"{BLUE}┌─ 🔐 Auth Session...{RESET}")
+        payload = {"initData": self.init_data}
+        resp = self.session.post(f"{self.base_url}/api/auth/session", json=payload, headers=self.headers)
+        if resp.status_code == 200:
+            for cookie in self.session.cookies:
+                if cookie.name == "session":
+                    self.session_cookie = cookie.value
+            print(f"{GREEN}└─ ✅ Auth berhasil!{RESET}")
+            return True
+        else:
+            print(f"{RED}└─ ❌ Auth gagal: {resp.status_code}{RESET}")
+            return False
+    def sync_data(self):
+        print(f"{BLUE}┌─ 📡 Sync Telegram Data...{RESET}")
+        payload = {"user_id": self.user_id, "username": "MoneyMaker_w", "first_name": "MoneyMaker", "last_name": None, "init_data": self.init_data}
+        resp = self.session.post(f"{self.base_url}/api/sync-telegram-data", json=payload, headers=self.headers)
+        if resp.status_code == 200:
+            print(f"{GREEN}└─ ✅ Sync berhasil!{RESET}")
+            return True
+        else:
+            print(f"{RED}└─ ❌ Sync gagal: {resp.status_code}{RESET}")
+            return False
+    def claim_daily(self):
+        if self.daily_claimed:
+            print(f"{YELLOW}⏹️ Daily sudah diklaim hari ini.{RESET}")
+            return True
+        print(f"{BLUE}┌─ 📅 Claim Daily Challenge...{RESET}")
+        resp = self.session.get(f"{self.base_url}/api/daily-challenge?user_id={self.user_id}&lang=en", headers=self.headers)
+        if resp.status_code == 200:
+            try:
+                data = resp.json()
+                if data.get('success'):
+                    reward = data.get('reward', 0)
+                    self.balance += reward
+                    self.daily_claimed = True
+                    print(f"{GREEN}└─ ✅ Daily claimed! +{reward} PXC{RESET}")
+                    return True
+                else:
+                    print(f"{YELLOW}└─ ⚠️ Daily sudah diklaim.{RESET}")
+                    self.daily_claimed = True
+                    return True
+            except:
+                print(f"{GREEN}└─ ✅ Daily claimed!{RESET}")
+                self.daily_claimed = True
+                return True
+        else:
+            print(f"{RED}└─ ❌ Daily gagal: {resp.status_code}{RESET}")
+            return False
+    def claim_pxc(self):
+        print(f"{BLUE}┌─ 💰 Claim PXC...{RESET}")
+        resp = self.session.post(f"{self.base_url}/api/claim?user_id={self.user_id}", headers=self.headers)
+        if resp.status_code == 200:
+            try:
+                data = resp.json()
+                if data.get('success') or data.get('claimed'):
+                    print(f"{GREEN}└─ ✅ Claim PXC berhasil!{RESET}")
+                    return True
+            except:
+                print(f"{GREEN}└─ ✅ Claim PXC berhasil!{RESET}")
+                return True
+        else:
+            print(f"{RED}└─ ❌ Claim PXC gagal: {resp.status_code}{RESET}")
+            return False
+
+    # ---- ADS ----
+    def watch_interstitial(self):
+        if self.inter_count >= MAX_INTERSTITIAL:
+            print(f"{YELLOW}⏹️ Interstitial limit ({self.inter_count}/{MAX_INTERSTITIAL}){RESET}")
+            return True
+        print(f"{BLUE}┌─ 📺 Watch Interstitial Ad...{RESET}")
+        payload = {"user_id": self.user_id, "block_id": DAILY_BLOCK_ID}
+        resp = self.session.post(f"{self.base_url}/api/adsgram/interstitial-reward", json=payload, headers=self.headers)
+        if resp.status_code == 200:
+            try:
+                data = resp.json()
+                if data.get('success'):
+                    reward = data.get('reward', 0)
+                    self.balance += reward
+                    self.inter_count += 1
+                    print(f"{GREEN}└─ ✅ Interstitial +{reward} PXC ({self.inter_count}/{MAX_INTERSTITIAL}){RESET}")
+                    return True
+                else:
+                    err = data.get('message', '')
+                    if 'limit' in err.lower() or 'already' in err.lower():
+                        print(f"{YELLOW}└─ ⚠️ Interstitial limit: {err}{RESET}")
+                        self.inter_count = MAX_INTERSTITIAL
+                        return True
+                    else:
+                        print(f"{RED}└─ ❌ Interstitial gagal: {err}{RESET}")
+                        return False
+            except:
+                print(f"{GREEN}└─ ✅ Interstitial berhasil!{RESET}")
+                self.inter_count += 1
+                return True
+        elif resp.status_code == 429:
+            print(f"{YELLOW}└─ ⏳ Interstitial 429 (rate limit) — SKIP{RESET}")
+            return True
+        else:
+            print(f"{RED}└─ ❌ Interstitial gagal: {resp.status_code}{RESET}")
+            return False
+
+    def watch_gigapub(self):
+        if self.giga_count >= MAX_GIGAPUB:
+            print(f"{YELLOW}⏹️ Gigapub limit ({self.giga_count}/{MAX_GIGAPUB}){RESET}")
+            return True
+        print(f"{BLUE}┌─ 📺 Watch Gigapub Ad...{RESET}")
+        payload = {"user_id": self.user_id}
+        resp = self.session.post(f"{self.base_url}/api/gigapub/reward", json=payload, headers=self.headers)
+        if resp.status_code == 200:
+            try:
+                data = resp.json()
+                if data.get('success'):
+                    reward = data.get('reward', 0)
+                    self.balance += reward
+                    self.giga_count += 1
+                    print(f"{GREEN}└─ ✅ Gigapub +{reward} PXC ({self.giga_count}/{MAX_GIGAPUB}){RESET}")
+                    return True
+                else:
+                    err = data.get('message', '')
+                    if 'limit' in err.lower() or 'already' in err.lower():
+                        print(f"{YELLOW}└─ ⚠️ Gigapub limit: {err}{RESET}")
+                        self.giga_count = MAX_GIGAPUB
+                        return True
+                    else:
+                        print(f"{RED}└─ ❌ Gigapub gagal: {err}{RESET}")
+                        return False
+            except:
+                print(f"{GREEN}└─ ✅ Gigapub berhasil!{RESET}")
+                self.giga_count += 1
+                return True
+        elif resp.status_code == 429:
+            print(f"{YELLOW}└─ ⏳ Gigapub 429 (rate limit) — SKIP{RESET}")
+            return True
+        else:
+            print(f"{RED}└─ ❌ Gigapub gagal: {resp.status_code}{RESET}")
+            return False
+
+    def watch_monetag(self):
+        if self.monetag_count >= MAX_MONETAG:
+            print(f"{YELLOW}⏹️ Monetag limit ({self.monetag_count}/{MAX_MONETAG}){RESET}")
+            return True
+        print(f"{BLUE}┌─ 📺 Watch Monetag Ad...{RESET}")
+        payload = {"user_id": self.user_id}
+        resp = self.session.post(f"{self.base_url}/api/monetag/reward", json=payload, headers=self.headers)
+        if resp.status_code == 200:
+            try:
+                data = resp.json()
+                if data.get('success'):
+                    reward = data.get('reward', 0)
+                    self.balance += reward
+                    self.monetag_count += 1
+                    print(f"{GREEN}└─ ✅ Monetag +{reward} PXC ({self.monetag_count}/{MAX_MONETAG}){RESET}")
+                    return True
+                else:
+                    err = data.get('message', '')
+                    if 'limit' in err.lower() or 'already' in err.lower():
+                        print(f"{YELLOW}└─ ⚠️ Monetag limit: {err}{RESET}")
+                        self.monetag_count = MAX_MONETAG
+                        return True
+                    else:
+                        print(f"{RED}└─ ❌ Monetag gagal: {err}{RESET}")
+                        return False
+            except:
+                print(f"{GREEN}└─ ✅ Monetag berhasil!{RESET}")
+                self.monetag_count += 1
+                return True
+        elif resp.status_code == 429:
+            print(f"{YELLOW}└─ ⏳ Monetag 429 (rate limit) — SKIP{RESET}")
+            return True
+        else:
+            print(f"{RED}└─ ❌ Monetag gagal: {resp.status_code}{RESET}")
+            return False
+
+    def is_all_ads_limit_reached(self):
+        return (self.inter_count >= MAX_INTERSTITIAL and
+                self.giga_count >= MAX_GIGAPUB and
+                self.monetag_count >= MAX_MONETAG)
+
+    def countdown(self, seconds, msg="⏳ Menunggu"):
+        for i in range(seconds, 0, -1):
+            sys.stdout.write(f"\r{YELLOW}{msg} {i} detik{RESET}")
+            sys.stdout.flush()
+            time.sleep(1)
+        print()
+
+# ==================== FARMING ====================
+def farming(bot):
+    if not bot.claim_daily():
+        print(f"{RED}❌ Daily gagal, stop.{RESET}")
+        return
+    bot.countdown(INTERVAL_ACTION, "⏳ Jeda setelah daily")
+    cycle = 0
+    while True:
+        if bot.is_all_ads_limit_reached():
+            print(f"\n{GREEN}✅ Semua iklan sudah habis hari ini.{RESET}")
+            print(f"📊 Interstitial: {bot.inter_count}/{MAX_INTERSTITIAL}")
+            print(f"📊 Gigapub: {bot.giga_count}/{MAX_GIGAPUB}")
+            print(f"📊 Monetag: {bot.monetag_count}/{MAX_MONETAG}")
+            print(f"{YELLOW}🛑 Bot berhenti. Kembali ke menu...{RESET}")
+            time.sleep(2)
+            return
+        cycle += 1
+        print(f"\n{CYAN}╔════════════════════════════════════════════════════╗")
+        print(f"║                 🎮 CYCLE #{cycle}                        ║")
+        print(f"╚════════════════════════════════════════════════════╝{RESET}")
+        if not bot.claim_pxc():
+            print(f"{RED}❌ Claim PXC gagal, stop.{RESET}")
+            return
+        bot.countdown(INTERVAL_ACTION, "⏳ Jeda sebelum iklan")
+        if not bot.watch_interstitial():
+            print(f"{RED}❌ Interstitial gagal (bukan 429/limit), stop.{RESET}")
+            return
+        bot.countdown(INTERVAL_AD, "⏳ Jeda iklan 15s")
+        if not bot.watch_gigapub():
+            print(f"{RED}❌ Gigapub gagal (bukan 429/limit), stop.{RESET}")
+            return
+        bot.countdown(INTERVAL_AD, "⏳ Jeda iklan 15s")
+        if not bot.watch_monetag():
+            print(f"{RED}❌ Monetag gagal (bukan 429/limit), stop.{RESET}")
+            return
+        bot.countdown(INTERVAL_AD, "⏳ Jeda iklan 15s")
+        print(f"{DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}")
+        print(f"{YELLOW}⏰ Cycle #{cycle} selesai. Tunggu {INTERVAL_CYCLE} detik...{RESET}")
+        bot.countdown(INTERVAL_CYCLE, "⏳ Next cycle dalam")
+
+# ==================== MENU ====================
+def main():
+    config = Config()
+    config.load()
+    while True:
+        show_banner()
+        print(f"{CYAN}╔════════════════════════════════════════════════════╗")
+        print(f"║                    MAIN MENU                         ║")
+        print(f"╠════════════════════════════════════════════════════╣")
+        print(f"║  {GREEN}[1]{RESET} 🚀 Start Farming                          ║")
+        print(f"║  {YELLOW}[2]{RESET} 📝 Set InitData                         ║")
+        print(f"║  {RED}[0]{RESET} ❌ Exit                                  ║")
+        print(f"╚════════════════════════════════════════════════════╝{RESET}")
+        if config.init_data:
+            print(f"{GREEN}✅ InitData tersimpan (user_id: {config.user_id}){RESET}")
+        else:
+            print(f"{RED}❌ InitData belum diset!{RESET}")
+        choice = input(f"\n{PURPLE}❯ Pilih: {RESET}").strip()
+        if choice == '0':
+            print(f"{YELLOW}👋 Bye!{RESET}")
+            sys.exit(0)
+        elif choice == '1':
+            if not config.init_data:
+                print(f"{RED}❌ InitData belum diset! Set dulu (menu 2).{RESET}")
+                input("Tekan Enter untuk kembali...")
+                continue
+            bot = ArcadePXC(config.init_data, config.user_id)
+            if config.session_cookie:
+                bot.set_cookie(config.session_cookie)
+            if not bot.auth_session():
+                print(f"{RED}❌ Auth gagal.{RESET}")
+                input("Tekan Enter...")
+                continue
+            if not bot.sync_data():
+                print(f"{RED}❌ Sync gagal.{RESET}")
+                input("Tekan Enter...")
+                continue
+            if bot.session_cookie:
+                config.session_cookie = bot.session_cookie
+                config.save()
+            try:
+                farming(bot)
+            except KeyboardInterrupt:
+                print(f"\n{YELLOW}⏹️ Farming dihentikan.{RESET}")
+            input("Tekan Enter untuk kembali ke menu...")
+        elif choice == '2':
+            print(f"{YELLOW}📝 Masukkan InitData:{RESET}")
+            qid = input("InitData: ").strip()
+            if qid:
+                config.init_data = qid
+                user_id = extract_user_id(qid)
+                if user_id:
+                    config.user_id = user_id
+                    print(f"{GREEN}✅ User ID: {user_id}{RESET}")
+                else:
+                    config.user_id = input("Masukkan User ID manual: ").strip()
+                config.save()
+                print(f"{GREEN}✅ InitData disimpan!{RESET}")
+            else:
+                print(f"{RED}❌ InitData kosong!{RESET}")
+            input("Tekan Enter...")
+        else:
+            print(f"{RED}❌ Pilihan salah!{RESET}")
+            time.sleep(1)
+
+if __name__ == "__main__":
+    main()
