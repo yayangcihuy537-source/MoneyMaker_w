@@ -64,8 +64,8 @@
           "runner": "python3"
         },
         "4": {
-          "label": "Coming Soon",
-          "file": "",
+          "label": "PaidAdzbot",
+          "file": "paid.py",
           "runner": "python3"
         },
         "5": {
