@@ -64,18 +64,18 @@
           "runner": "python3"
         },
         "4": {
-          "label": "DogecoinGenerator",
-          "file": "Doge.py",
+          "label": "Coming Soon",
+          "file": "",
           "runner": "python3"
         },
         "5": {
-          "label": "DigibyteGenerator",
-          "file": "Digi.py",
+          "label": "Coming Soon",
+          "file": "",
           "runner": "python3"
         },
         "6": {
-          "label": "LtcGenerator",
-          "file": "ltc.py",
+          "label": "Coming Soon",
+          "file": "",
           "runner": "python3"
         },
         "7": {
