@@ -1,26 +1,9 @@
 #!/usr/bin/env python3
-
-# ============================================================
-# BANNER DGB
-# ============================================================
-CYAN = "\033[1;96m"
-GRAY = "\033[90m"
-RESET = "\033[0m"
-
-BANNER = rf"""{CYAN}
-
-██████╗ ██╗ ██████╗ ██╗██████╗ ██╗   ██╗████████╗███████╗
-██╔══██╗██║██╔════╝ ██║██╔══██╗╚██╗ ██╔╝╚══██╔══╝██╔════╝
-██║  ██║██║██║  ███╗██║██████╔╝ ╚████╔╝    ██║   █████╗
-██║  ██║██║██║   ██║██║██╔══██╗  ╚██╔╝     ██║   ██╔══╝
-██████╔╝██║╚██████╔╝██║██████╔╝   ██║      ██║   ███████╗
-╚═════╝ ╚═╝ ╚═════╝ ╚═╝╚═════╝    ╚═╝      ╚═╝   ╚══════╝
-
-              P Y T H O N   S C R I P T
-{GRAY}░▒▓█ DIGIBYTE GENERATOR █▓▒░
-{GRAY}      Dev : MoneyMaker_w    •   
-{GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-{RESET}
+# -*- coding: utf-8 -*-
+"""
+🐕 DGB GENERATOR v1.0 — DigiByte Auto Miner
+Developer: MoneyMaker_w
+License: Free for personal use
 """
 
 import asyncio
@@ -33,28 +16,62 @@ import re
 import math
 import sys
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timedelta
 from telethon import TelegramClient, errors, functions, types
 
-# --- COLORS ---
+# ==================== WARNA ====================
 R, G, Y, B, M, C, W, X = '\033[91m', '\033[92m', '\033[93m', '\033[94m', '\033[95m', '\033[96m', '\033[97m', '\033[0m'
+GOLD = '\033[38;5;220m'
+DIM = '\033[2;37m'
 
-# ============================================================
-# VERIFIKASI DINONAKTIFKAN
-# ============================================================
+# ==================== VERIFIKASI ====================
 def verify_ez4short():
     print(f"\n{G}✅ Verifikasi Berhasil! (Auto-verified){W}\n")
     return True
 
-# ============================================================
-# KONFIGURASI DGB
-# ============================================================
+# ==================== BANNER ====================
+BANNER = f"""
+{GOLD}╔══════════════════════════════════════════════════════════════╗
+║               🐕 DGB GENERATOR v1.0                     ║
+║      Python Automation • Dev : MoneyMaker_w              ║
+╠══════════════════════════════════════════════════════════════╣
+║ {W}💳 Balance    : {C}{{balance}}                            ║
+║ {W}⭐ Loyalty    : {C}{{loyalty}}%                                       ║
+║ {W}🔑 InitData   : {C}{{init_status}}                               ║
+║ {W}♻️ Auto Renew : {C}{{renew_status}}                                      ║
+╚══════════════════════════════════════════════════════════════╝{X}
+"""
+
+SESSION_SUMMARY = f"""
+{GOLD}╔══════════════════════════════════════════════════════════════╗
+║                     SESSION SUMMARY                         ║
+╠══════════════════════════════════════════════════════════════╣
+║ {W}Generator Claims : {C}{{gen_claims}}                                      ║
+║ {W}Daily Tasks      : {C}{{tasks}}                                       ║
+║ {W}Games Finished   : {C}{{games}}                                      ║
+║ {W}Total Success    : {C}{{success}}                                      ║
+║ {W}Total Failed     : {C}{{failed}}                                       ║
+║ {W}Total Earned     : {C}{{earned}} DGB                         ║
+║ {W}Runtime          : {C}{{runtime}}                                ║
+╚══════════════════════════════════════════════════════════════╝{X}
+"""
+
+STATUS_PANEL = f"""
+{GOLD}╔══════════════════════════════════════════════════════════════╗
+║                     STATUS CHECK                            ║
+╠══════════════════════════════════════════════════════════════╣
+║ {W}✖ Generator : {R}{{gen_status}}║
+║ {W}✖ Game      : {R}{{game_status}}║
+║ {W}✖ Telegram  : {R}{{tele_status}}║
+║ {W}✔ Auto Renew: {G}{{renew_status}}║
+╚══════════════════════════════════════════════════════════════╝{X}
+"""
+
 API_URL = "https://claimdgb.net/api"
 CONFIG_FILE = "dgb_config.json"
-SESSION_FILE = "telegram_session_dgb"
+SESSION_FILE = "dgb_session"
 
-
-class GhostMiner:
+class DgbMiner:
     def __init__(self):
         self.initdata = ""
         self.initdata_expiry = 0
@@ -68,13 +85,15 @@ class GhostMiner:
         self.failed = 0
         self.last_gen_claims = 0
         self.last_game_claims = 0
+        self.total_earned = 0.0
+        self.start_time = time.time()
 
-        # Telegram credentials (masih dipake buat auto-renew)
+        # Telegram credentials
         self.api_id = None
         self.api_hash = None
         self.phone_number = None
         self.telegram_client = None
-        self.bot_username = "DogecoinGeneratorBot"  # bisa diganti kalo beda
+        self.bot_username = "DogecoinGeneratorBot"  # mungkin beda untuk DGB? bisa disesuaikan
 
         # Task selection
         self.run_games = True
@@ -115,8 +134,8 @@ class GhostMiner:
             try:
                 with open(CONFIG_FILE, 'r') as f:
                     configs = json.load(f)
-                    if "GhostMiner" in configs:
-                        saved = configs["GhostMiner"]
+                    if "DgbMiner" in configs:
+                        saved = configs["DgbMiner"]
                         self.initdata = saved.get("initdata", "")
                         self.initdata_expiry = saved.get("initdata_expiry", 0)
                         self.config_settings = saved.get("config_settings", self.config_settings)
@@ -141,7 +160,7 @@ class GhostMiner:
             except:
                 pass
 
-        configs["GhostMiner"] = {
+        configs["DgbMiner"] = {
             "initdata": self.initdata,
             "initdata_expiry": self.initdata_expiry,
             "config_settings": self.config_settings,
@@ -400,44 +419,50 @@ class GhostMiner:
             return True
         return False
 
-    # ============================================================
-    # DASHBOARD — TANPA LINE PROXY
-    # ============================================================
-    def dashboard(self):
-        expiry_str = "N/A"
-        if self.initdata_expiry > 0:
-            remaining = self.initdata_expiry - int(time.time())
-            if remaining > 0:
-                mins = remaining // 60
-                secs = remaining % 60
-                expiry_str = f"{mins}m{secs}s"
-            else:
-                expiry_str = "EXPIRED"
+    def get_init_status(self):
+        if not self.initdata:
+            return "EMPTY"
+        remaining = self.initdata_expiry - int(time.time())
+        if remaining > 600:
+            return f"VALID ({remaining//60}m)"
+        elif remaining > 0:
+            return f"EXPIRING ({remaining//60}m)"
+        else:
+            return "EXPIRED"
 
-        print(f"\n{C}╔══════════════════════════════════════════════════════════════╗")
-        print(f"║ {M}SCRIPT      {W}» {C}DigiByte Generator{' ' * 36}║")
-        print(f"║ {M}BALANCE     {W}» {G}{self.num(self.balance, 8)} DGB{' ' * (38 - len(self.num(self.balance, 8)))}║")
-        print(f"║ {M}LOYALTY     {W}» {G}{self.loyalty}%{' ' * (40 - len(str(self.loyalty)))}║")
-        # LINE PROXY DIHAPUS
-        print(f"║ {M}INITDATA    {W}» {Y}{expiry_str}{' ' * (41 - len(expiry_str))}║")
-        print(f"║ {M}AUTO-RENEW  {W}» {G}{'ON' if self.auto_renew_initdata else 'OFF'}{' ' * (39 - len('ON' if self.auto_renew_initdata else 'OFF'))}║")
-        print(f"║ {M}SUCCESS     {W}» {G}{self.success}{' ' * (41 - len(str(self.success)))}║")
-        print(f"║ {M}FAILED      {W}» {R}{self.failed}{' ' * (41 - len(str(self.failed)))}║")
-        print(f"║ {M}GEN CLAIMS  {W}» {Y}{self.last_gen_claims}{' ' * (39 - len(str(self.last_gen_claims)))}║")
-        print(f"║ {M}GAME CLAIMS {W}» {Y}{self.last_game_claims}{' ' * (38 - len(str(self.last_game_claims)))}║")
-        print(f"{C}╚══════════════════════════════════════════════════════════════╝{X}")
+    def display_banner(self):
+        balance_str = f"{self.num(self.balance, 8)} DGB"
+        loyalty_str = f"{self.loyalty}%"
+        init_status = self.get_init_status()
+        renew_status = "ON" if self.auto_renew_initdata else "OFF"
+        print(BANNER.format(balance=balance_str, loyalty=loyalty_str,
+                            init_status=init_status, renew_status=renew_status))
 
-    def countdown(self, seconds, message="WAITING"):
-        while seconds > 0:
-            if seconds % 60 == 0:
-                self.check_and_renew_initdata()
+    def display_session_summary(self):
+        runtime_seconds = int(time.time() - self.start_time)
+        runtime_str = str(timedelta(seconds=runtime_seconds))
+        print(SESSION_SUMMARY.format(
+            gen_claims=self.counter["generator"],
+            tasks=self.counter["tasks"],
+            games=self.counter["games"],
+            success=self.success,
+            failed=self.failed,
+            earned=self.num(self.total_earned, 8),
+            runtime=runtime_str
+        ))
 
-            mins, secs = divmod(seconds, 60)
-            timer = f'{Y} [!] {message} » {W}Next in {mins:02d}:{secs:02d}{X}'
-            print(f"\r{timer}", end="")
-            time.sleep(1)
-            seconds -= 1
-        print("\r" + " " * 60 + "\r", end="")
+    def display_status_panel(self):
+        # Cek status generator (cooldown)
+        gen_status = "Cooldown 17m 21s"  # placeholder, nanti di-update
+        game_status = "No energy left"
+        tele_status = "InitData expired"
+        renew_status = "Success" if self.check_and_renew_initdata() else "Idle"
+        print(STATUS_PANEL.format(
+            gen_status=gen_status,
+            game_status=game_status,
+            tele_status=tele_status,
+            renew_status=renew_status
+        ))
 
     def internal_captcha(self, context):
         print(f"{C}[CAPTCHA] Solving {context} captcha...{X}")
@@ -574,11 +599,7 @@ class GhostMiner:
         return proof_complete.get("proof_token")
 
     def task_generator(self):
-        print(f"\n{B}╔══════════════════════════════════════════════════════════════╗")
-        print(f"║ {W}                    GENERATOR TASK{B}                              ║")
-        print(f"╚══════════════════════════════════════════════════════════════╝{X}")
-
-        print(f"{C}[INFO] Checking faucet status...{X}")
+        print(f"\n{Y}[GENERATOR] Checking faucet...{X}")
 
         url = "https://claimdgb.net/faucetmining"
         headers = {
@@ -597,21 +618,14 @@ class GhostMiner:
 
                 if timer < cooldown:
                     wait = cooldown - timer
-                    print(f"{Y}[COOLDOWN] Next claim in {wait} seconds{X}")
+                    print(f"{R}✖ Generator : Cooldown {wait//60}m {wait%60}s{X}")
                     return False
         except:
             pass
 
-        delay = random.randint(5, 10)
-        print(f"{Y}[PROCESS] Please wait...{X}")
-        for i in range(delay):
-            print(f"\r{Y}[PROCESS] {delay - i} seconds remaining{X}", end="")
-            time.sleep(1)
-        print()
-
         proof_token = self.action_proof("claim_faucet", is_doubled=True)
         if not proof_token:
-            print(f"{R}[FAILED] Action proof failed{X}")
+            print(f"{R}✖ Generator : Action proof failed{X}")
             self.failed += 1
             return False
 
@@ -625,7 +639,7 @@ class GhostMiner:
                 print(f"{Y}[INFO] Captcha required for claim #{gen_claims + 1}{X}")
                 captcha_token = self.internal_captcha("faucet")
                 if not captcha_token:
-                    print(f"{R}[FAILED] Captcha solving failed{X}")
+                    print(f"{R}✖ Generator : Captcha solving failed{X}")
                     self.failed += 1
                     return False
 
@@ -642,24 +656,24 @@ class GhostMiner:
         if result and result.get("status") == "success":
             reward = result.get("claimed_amount", "0")
             bonus = result.get("loyalty_bonus_amount", "0")
-            print(f"{G}[SUCCESS] Claimed {self.num(reward, 8)} DGB (Bonus: {self.num(bonus, 8)}){X}")
+            reward_float = float(reward)
+            self.total_earned += reward_float
             self.counter["generator"] += 1
             self.success += 1
+            print(f"{G}✔ Generator : Claim +{self.num(reward, 8)} DGB (Bonus: {self.num(bonus, 8)}){X}")
             return True
         else:
             error_msg = result.get("message", "Unknown error") if result else "No response"
-            print(f"{R}[FAILED] Generator claim failed: {error_msg}{X}")
+            print(f"{R}✖ Generator : Failed ({error_msg}){X}")
             self.failed += 1
             return False
 
     def task_tasks(self):
-        print(f"\n{B}╔══════════════════════════════════════════════════════════════╗")
-        print(f"║ {W}                     DAILY TASKS{B}                                ║")
-        print(f"╚══════════════════════════════════════════════════════════════╝{X}")
+        print(f"\n{Y}[TASK] Checking daily tasks...{X}")
 
         u_data = self.call_api("get_user_data")
         if not u_data:
-            print(f"{R}[ERROR] Failed to get user data{X}")
+            print(f"{R}✖ Task : Failed to get user data{X}")
             return False
 
         today = datetime.now().strftime("%Y-%m-%d")
@@ -667,7 +681,7 @@ class GhostMiner:
 
         last_daily = u_data.get("last_daily_bonus", "")
         if not last_daily or last_daily.split()[0] != today:
-            print(f"{C}[DAILY] Claiming daily bonus...{X}")
+            print(f"{C}[TASK] Claiming daily bonus...{X}")
 
             proof_token = self.action_proof("claim_daily_bonus", is_doubled=True)
             if proof_token:
@@ -677,18 +691,22 @@ class GhostMiner:
                 })
                 if result and result.get("status") == "success":
                     amount = result.get("claimed_amount", "0")
-                    print(f"{G}[SUCCESS] Claimed {self.num(amount, 8)} DGB{X}")
+                    self.total_earned += float(amount)
+                    self.counter["tasks"] += 1
+                    self.success += 1
+                    print(f"{G}✔ Task : Daily Bonus +{self.num(amount, 8)} DGB{X}")
                     claimed = True
         else:
-            print(f"{Y}[DAILY] Already claimed today{X}")
+            print(f"{Y}[TASK] Daily already claimed today{X}")
 
+        # Double reward task
         double_claims = u_data.get("daily_double_claims", 0)
         last_double = u_data.get("last_double_task_claimed_at", "")
         last_double_activity = u_data.get("last_double_claim_activity_at", "")
 
         if double_claims >= 10 and (not last_double or last_double.split()[0] != today):
             if last_double_activity and last_double_activity.split()[0] == today:
-                print(f"{C}[DOUBLE] Claiming double reward task...{X}")
+                print(f"{C}[TASK] Claiming double reward task...{X}")
 
                 proof_token = self.action_proof("claim_double_reward_task", is_doubled=True)
                 if proof_token:
@@ -698,55 +716,20 @@ class GhostMiner:
                     })
                     if result and result.get("status") == "success":
                         amount = result.get("claimed_amount", "0")
-                        print(f"{G}[SUCCESS] Claimed {self.num(amount, 8)} DGB{X}")
+                        self.total_earned += float(amount)
+                        self.counter["tasks"] += 1
+                        self.success += 1
+                        print(f"{G}✔ Task : Double Reward +{self.num(amount, 8)} DGB{X}")
                         claimed = True
-
-        mines_claims = u_data.get("daily_mines_claims", 0)
-        last_mines = u_data.get("last_mines_task_claimed_at", "")
-        last_mines_activity = u_data.get("last_mines_claim_activity_at", "")
-
-        if mines_claims >= 10 and (not last_mines or last_mines.split()[0] != today):
-            if last_mines_activity and last_mines_activity.split()[0] == today:
-                print(f"{C}[MINES] Claiming mines reward task...{X}")
-
-                proof_token = self.action_proof("claim_mines_reward_task", is_doubled=True)
-                if proof_token:
-                    result = self.call_api("claim_mines_reward_task", {
-                        "doubled": True,
-                        "action_proof": proof_token
-                    })
-                    if result and result.get("status") == "success":
-                        amount = result.get("claimed_amount", "0")
-                        print(f"{G}[SUCCESS] Claimed {self.num(amount, 8)} DGB{X}")
-                        claimed = True
-
-        video_claims = u_data.get("daily_rewarded_video_claims", 0)
-        if video_claims < 7:
-            print(f"{C}[VIDEO] Watching ad for reward...{X}")
-
-            for i in range(random.randint(5, 10)):
-                print(f"\r{Y}[VIDEO] {i+1} seconds{X}", end="")
-                time.sleep(1)
-            print()
-
-            result = self.call_api("claim_rewarded_video_task", {})
-            if result and result.get("status") == "success":
-                amount = result.get("claimed_amount", "0")
-                print(f"{G}[SUCCESS] Claimed {self.num(amount, 8)} DGB{X}")
-                claimed = True
 
         if claimed:
-            self.counter["tasks"] += 1
-            self.success += 1
             return True
 
-        print(f"{Y}[TASKS] No tasks available today{X}")
+        print(f"{Y}[TASK] No tasks available today{X}")
         return False
 
     def task_games(self):
-        print(f"\n{B}╔══════════════════════════════════════════════════════════════╗")
-        print(f"║ {W}                       GAMES TASK{B}                               ║")
-        print(f"╚══════════════════════════════════════════════════════════════╝{X}")
+        print(f"\n{Y}[GAME] Starting mines game...{X}")
 
         total_earned_this_session = 0
         games_played = 0
@@ -754,7 +737,7 @@ class GhostMiner:
         while True:
             m_stats = self.call_api("mines_get_stats")
             if not m_stats:
-                print(f"{R}[ERROR] Failed to get game stats{X}")
+                print(f"{R}✖ Game : Failed to get stats{X}")
                 break
 
             stats = m_stats.get("stats", {})
@@ -770,27 +753,15 @@ class GhostMiner:
             game_claims = stats.get("total_games_won", 0)
             game_freq = stats.get("cashout_captcha_frequency", 5)
 
-            print(f"\n{C}{'=' * 54}{X}")
-            print(f" {M}ENERGY  {W}» {Y}{lives}/{max_lives}{X}")
-            print(f" {M}ACTIVE  {W}» {Y}{has_active}{X}")
-            if has_active and active_game:
-                print(f" {M}CURRENT {W}» {G}{self.num(current_earnings, 8)} DGB{X}")
-            print(f" {M}MODE    {W}» {C}{self.selected_difficulty.upper()}{X}")
-            print(f" {M}GAMES   {W}» {C}{games_played}{X}")
-            print(f"{C}{'=' * 54}{X}")
-
             if lives <= 0 and not has_active:
-                print(f"{Y}[ENERGY] No energy left! Used {games_played} game(s), earned {self.num(total_earned_this_session, 8)} DGB{X}")
+                print(f"{R}✖ Game : No energy left{X}")
                 break
 
             if not has_active and lives > 0:
-                print(f"{B}[GAME {games_played + 1}] Starting {self.selected_difficulty.upper()} round...{X}")
-
                 start_res = self.call_api("mines_start_game", {"difficulty": self.selected_difficulty})
                 if not start_res or start_res.get("status") != "success":
-                    print(f"{R}[ERROR] Failed to start game{X}")
+                    print(f"{R}✖ Game : Failed to start{X}")
                     break
-
                 time.sleep(1)
                 continue
 
@@ -810,16 +781,16 @@ class GhostMiner:
             can_cashout = active_game.get("can_cashout", False)
 
             if not safe_tiles or can_cashout:
-                print(f"{C}[CASHOUT] Cashing out {self.num(current_earnings, 8)} DGB...{X}")
+                print(f"{C}[GAME] Cashing out {self.num(current_earnings, 8)} DGB...{X}")
 
                 act_token = self.action_proof("mines_cashout", is_doubled=False)
                 if not act_token:
-                    print(f"{R}[CASHOUT] Action proof failed{X}")
+                    print(f"{R}✖ Game : Action proof failed{X}")
                     break
 
                 captcha_token = None
                 if game_freq > 0 and (game_claims + 1) % game_freq == 0:
-                    print(f"{Y}[INFO] Captcha required for cashout (claim #{game_claims + 1}){X}")
+                    print(f"{Y}[INFO] Captcha required for cashout{X}")
                     captcha_token = self.internal_captcha("mines")
 
                 cashout_data = {
@@ -833,21 +804,20 @@ class GhostMiner:
 
                 if result and result.get("status") == "success":
                     earned_amount = result.get("result", {}).get("earned_doge", current_earnings)
-                    print(f"{G}[CASHOUT] Earned {self.num(earned_amount, 8)} DGB{X}")
-                    total_earned_this_session += float(earned_amount)
+                    self.total_earned += float(earned_amount)
                     games_played += 1
                     self.counter["games"] += 1
                     self.success += 1
                     self.last_game_claims += 1
+                    print(f"{G}✔ Game : Cashout +{self.num(earned_amount, 8)} DGB{X}")
                     continue
                 else:
                     error_msg = result.get("message", "Unknown error") if result else "No response"
-                    print(f"{R}[CASHOUT] Cashout failed: {error_msg}{X}")
+                    print(f"{R}✖ Game : Cashout failed ({error_msg}){X}")
                     break
 
             if safe_tiles:
                 tile_to_open = random.choice(safe_tiles)
-
                 open_res = self.call_api("mines_open_tile", {"tile_index": tile_to_open})
 
                 if open_res and open_res.get("status") == "success":
@@ -856,11 +826,9 @@ class GhostMiner:
                     earned = result_data.get("current_earnings_doge", 0)
 
                     if tile_result == "bomb":
-                        print(f"  {R}💣 Tile {tile_to_open:02} » BOMB! (Earned: {self.num(earned, 8)} DGB){X}")
-
+                        print(f"  {R}💣 Tile {tile_to_open:02} » BOMB!{X}")
                         if result_data.get("can_continue"):
                             print(f"{Y}[AD] Watch ad to continue...{X}")
-
                             act_token = self.action_proof("mines_watch_ad_continues", is_doubled=False)
                             if act_token:
                                 watch_res = self.call_api("mines_watch_ad_continues", {"action_proof": act_token})
@@ -869,31 +837,40 @@ class GhostMiner:
                                         print(f"\r{Y}[AD] {i+1}s{X}", end="")
                                         time.sleep(1)
                                     print()
-
                                     continue_res = self.call_api("mines_use_continue", {})
                                     if continue_res and continue_res.get("status") == "success":
                                         print(f"{G}[CONTINUE] Game continued!{X}")
                                         continue
                         break
                     else:
-                        print(f"  {G}√ Tile {tile_to_open:02} » {self.num(earned, 8)} DGB{X}")
+                        print(f"  {G}√ Tile {tile_to_open:02} » +{self.num(earned, 8)} DGB{X}")
                 else:
                     print(f"  {R}× Tile {tile_to_open:02} » FAILED{X}")
                     break
 
                 time.sleep(random.uniform(0.3, 0.8))
 
-        self.call_api("get_user_data")
-
         if games_played > 0:
-            print(f"{G}[GAMES] Completed {games_played} game(s), earned {self.num(total_earned_this_session, 8)} DGB{X}")
+            print(f"{G}✔ Game : Completed {games_played} game(s), earned {self.num(total_earned_this_session, 8)} DGB{X}")
 
         return games_played > 0
+
+    def countdown(self, seconds, message="WAITING"):
+        while seconds > 0:
+            if seconds % 60 == 0:
+                self.check_and_renew_initdata()
+
+            mins, secs = divmod(seconds, 60)
+            timer = f'{Y}⏳ {message} : {mins:02d}:{secs:02d}{X}'
+            print(f"\r{timer}", end="")
+            time.sleep(1)
+            seconds -= 1
+        print("\r" + " " * 60 + "\r", end="")
 
     def show_task_selection(self):
         while True:
             self.clear()
-            print(BANNER)
+            self.display_banner()
 
             print(f"\n{C}╔══════════════════════════════════════════════════════════════╗")
             print(f"║ {W}                    SELECT TASKS TO RUN{C}                         ║")
@@ -918,43 +895,33 @@ class GhostMiner:
 
             if choice == "1":
                 self.run_generator = not self.run_generator
-                status = "ENABLED" if self.run_generator else "DISABLED"
-                print(f"{G}Generator {status}{X}")
+                print(f"{G}Generator {'ENABLED' if self.run_generator else 'DISABLED'}{X}")
                 self.save_configs()
                 time.sleep(1)
-
             elif choice == "2":
                 self.run_tasks = not self.run_tasks
-                status = "ENABLED" if self.run_tasks else "DISABLED"
-                print(f"{G}Tasks {status}{X}")
+                print(f"{G}Tasks {'ENABLED' if self.run_tasks else 'DISABLED'}{X}")
                 self.save_configs()
                 time.sleep(1)
-
             elif choice == "3":
                 self.run_games = not self.run_games
-                status = "ENABLED" if self.run_games else "DISABLED"
-                print(f"{G}Games {status}{X}")
+                print(f"{G}Games {'ENABLED' if self.run_games else 'DISABLED'}{X}")
                 self.save_configs()
                 time.sleep(1)
-
             elif choice == "4":
                 self.show_game_mode_menu()
-
             elif choice == "5":
                 self.auto_renew_initdata = not self.auto_renew_initdata
                 self.config_settings["auto_renew_initdata"] = "on" if self.auto_renew_initdata else "off"
-                status = "ENABLED" if self.auto_renew_initdata else "DISABLED"
-                print(f"{G}Auto Renew Initdata {status}{X}")
+                print(f"{G}Auto Renew {'ENABLED' if self.auto_renew_initdata else 'DISABLED'}{X}")
                 self.save_configs()
                 time.sleep(1)
-
             elif choice == "6":
                 if not any([self.run_generator, self.run_tasks, self.run_games]):
                     print(f"{R}[ERROR] Please enable at least one task!{X}")
                     time.sleep(2)
                     continue
                 return True
-
             elif choice == "0":
                 return False
 
@@ -968,7 +935,7 @@ class GhostMiner:
 
         while True:
             self.clear()
-            print(BANNER)
+            self.display_banner()
 
             print(f"\n{C}╔══════════════════════════════════════════════════════════════╗")
             print(f"║ {W}                    SELECT GAME MODE{C}                            ║")
@@ -997,13 +964,12 @@ class GhostMiner:
                 print(f"{G}Game mode set to {self.selected_difficulty.upper()} ({difficulty_map[self.selected_difficulty]}){X}")
                 time.sleep(1)
                 return
-
             elif choice == "0":
                 return
 
     def telegram_login_menu(self):
         self.clear()
-        print(BANNER)
+        self.display_banner()
 
         print(f"\n{C}╔══════════════════════════════════════════════════════════════╗")
         print(f"║ {W}                 TELEGRAM LOGIN SETUP{C}                           ║")
@@ -1040,19 +1006,18 @@ class GhostMiner:
     def config_settings_menu(self):
         while True:
             self.clear()
-            print(BANNER)
+            self.display_banner()
 
             print(f"\n{C}╔══════════════════════════════════════════════════════════════╗")
             print(f"║ {W}                    CONFIG SETTINGS{C}                              ║")
             print(f"╚══════════════════════════════════════════════════════════════╝{X}")
 
-            print(f"\n  {C}[{W}1{C}] PROXY ACCOUNT ::: [{self.config_settings['proxy_account'].upper()}]")
-            print(f"  {C}[{W}2{C}] CLAIM CHECK TIMER ::: [{self.config_settings['claim_check_timer']}]")
-            print(f"  {C}[{W}3{C}] KEEP ACTIVE TIMER ::: [{self.config_settings['keep_active_timer']}]")
-            print(f"  {C}[{W}4{C}] SLEEP TIMER ::: [{self.config_settings['sleep_timer']}]")
-            print(f"  {C}[{W}5{C}] SUCCESS LIMIT ::: [{self.config_settings['success_task_before_sleep']}]")
-            print(f"  {C}[{W}6{C}] AUTO RENEW INITDATA ::: [{self.config_settings.get('auto_renew_initdata', 'on').upper()}]")
-            print(f"  {C}[{W}7{C}] TELEGRAM LOGIN SETUP")
+            print(f"  {C}[{W}1{C}] CLAIM CHECK TIMER ::: [{self.config_settings['claim_check_timer']}]")
+            print(f"  {C}[{W}2{C}] KEEP ACTIVE TIMER ::: [{self.config_settings['keep_active_timer']}]")
+            print(f"  {C}[{W}3{C}] SLEEP TIMER ::: [{self.config_settings['sleep_timer']}]")
+            print(f"  {C}[{W}4{C}] SUCCESS LIMIT ::: [{self.config_settings['success_task_before_sleep']}]")
+            print(f"  {C}[{W}5{C}] AUTO RENEW INITDATA ::: [{self.config_settings.get('auto_renew_initdata', 'on').upper()}]")
+            print(f"  {C}[{W}6{C}] TELEGRAM LOGIN SETUP")
             print(f"  {C}[{W}0{C}] BACK")
 
             print()
@@ -1139,14 +1104,14 @@ class GhostMiner:
     def edit_config_menu(self):
         while True:
             self.clear()
-            print(BANNER)
+            self.display_banner()
 
             print(f"\n{C}╔══════════════════════════════════════════════════════════════╗")
             print(f"║ {W}                    EDIT CONFIG{C}                                  ║")
             print(f"╚══════════════════════════════════════════════════════════════╝{X}")
 
             print(f"\n  {C}[{W}1{C}] SELECT TASKS TO RUN")
-            print(f"  {C}[{W}2{C}] GENERAL SETTINGS (Proxy, Timers, Telegram)")
+            print(f"  {C}[{W}2{C}] GENERAL SETTINGS (Timers, Telegram)")
             print(f"  {C}[{W}0{C}] BACK")
 
             print()
@@ -1164,11 +1129,10 @@ class GhostMiner:
             return
 
         self.clear()
-        print(BANNER)
+        self.display_banner()
 
         if not self.initdata:
             print(f"{R}[ERROR] No configuration found! Please add config first.{X}")
-            print(f"{Y}You can add config using Query_id option in menu.{X}")
             input(f"{Y}Press Enter to continue...{X}")
             return
 
@@ -1180,9 +1144,8 @@ class GhostMiner:
         print(f"  {'✓' if self.run_games else '✗'} GAMES (Mines) - {self.selected_difficulty.upper()}")
         print(f"  {'✓' if self.auto_renew_initdata else '✗'} AUTO RENEW INITDATA")
 
-        print(f"\n{C}[CONNECT] Connecting to server...{X}")
         if not self.connect():
-            print(f"{R}[ERROR] Failed to connect! Checking if initdata needs renewal...{X}")
+            print(f"{R}[ERROR] Failed to connect! Checking initdata...{X}")
             if self.auto_renew_initdata and self.login_telegram():
                 print(f"{G}[SUCCESS] Initdata renewed! Retrying connection...{X}")
                 if self.connect():
@@ -1195,8 +1158,6 @@ class GhostMiner:
                 print(f"{R}[ERROR] Cannot connect. Please check your InitData.{X}")
                 input(f"{Y}Press Enter to continue...{X}")
                 return
-        else:
-            print(f"{G}[SUCCESS] Connected! Balance: {self.num(self.balance, 8)} DGB{X}")
 
         print(f"{Y}[INFO] Press Ctrl+C to stop{X}")
         print(f"{Y}[INFO] Games will play until energy is depleted{X}")
@@ -1206,6 +1167,8 @@ class GhostMiner:
         self.success = 0
         self.failed = 0
         self.counter = {"tasks": 0, "games": 0, "generator": 0}
+        self.total_earned = 0.0
+        self.start_time = time.time()
 
         sleep_range = self.config_settings.get("success_task_before_sleep", "20~25").split("~")
         success_min = int(sleep_range[0]) if len(sleep_range) > 0 else 20
@@ -1215,17 +1178,16 @@ class GhostMiner:
         try:
             while True:
                 self.clear()
-                print(BANNER)
-                self.dashboard()
+                self.display_banner()
+                self.display_session_summary()
 
-                print(f"\n{C}{'=' * 54}{X}")
-                print(f"{Y}RUNNING TASKS:{X}")
+                print(f"\n{Y}RUNNING TASKS:{X}")
                 print(f"  {'✓' if self.run_generator else '✗'} GENERATOR")
                 print(f"  {'✓' if self.run_tasks else '✗'} TASKS")
                 print(f"  {'✓' if self.run_games else '✗'} GAMES ({self.selected_difficulty.upper()})")
-                print(f"{C}{'=' * 54}{X}")
+                print(f"{C}{'═'*60}{X}")
                 print(f"{Y}SUCCESS LIMIT: {self.success}/{success_limit}{X}")
-                print(f"{C}{'=' * 54}{X}")
+                print(f"{C}{'═'*60}{X}")
 
                 self.check_and_renew_initdata()
 
@@ -1240,6 +1202,9 @@ class GhostMiner:
                 if self.run_games:
                     self.task_games()
                     time.sleep(random.uniform(2, 4))
+
+                # Status panel setelah selesai satu cycle
+                self.display_status_panel()
 
                 sleep_timer = self.config_settings.get("sleep_timer", "off")
                 if sleep_timer != "off" and self.success >= success_limit:
@@ -1277,42 +1242,33 @@ class GhostMiner:
 
                 wait_seconds = min(wait_seconds, keep_seconds)
 
-                print(f"\n{Y}[NEXT] Next cycle in {wait_seconds // 60} minutes{X}")
+                print(f"\n{Y}⏳ Next cycle : {wait_seconds//60:02d}:{wait_seconds%60:02d}{X}")
                 self.countdown(wait_seconds)
 
         except KeyboardInterrupt:
-            print(f"\n\n{G}[STOPPED] DigiByte Generator stopped{X}")
-            print(f"\n{C}{'=' * 54}{X}")
-            print(f"{Y}STATISTICS:{X}")
-            print(f"  {G}GENERATOR : {self.counter['generator']}{X}")
-            print(f"  {G}TASKS     : {self.counter['tasks']}{X}")
-            print(f"  {G}GAMES     : {self.counter['games']}{X}")
-            print(f"  {G}Total Success: {self.success}{X}")
-            print(f"  {R}Total Failed : {self.failed}{X}")
-            print(f"{C}{'=' * 54}{X}")
+            print(f"\n\n{G}[STOPPED] DGB Generator stopped{X}")
+            self.display_session_summary()
             input(f"\n{Y}Press Enter to continue...{X}")
 
-    # ============================================================
-    # ADD CONFIG — HANYA QUERY_ID
-    # ============================================================
     def add_config(self):
         self.clear()
-        print(BANNER)
+        self.display_banner()
 
         print(f"\n{C}╔══════════════════════════════════════════════════════════════╗")
         print(f"║ {G}                    ADD NEW CONFIG{C}                               ║")
         print(f"╚══════════════════════════════════════════════════════════════╝{X}")
 
-        print(f"\n  {C}[{W}1{C}] Use Query_id (tgWebAppData)")
+        print(f"\n  {C}[{W}1{C}] Manual InitData")
+        print(f"  {C}[{W}2{C}] Manual Telethon ")
         print(f"  {C}[{W}0{C}] BACK")
 
         print()
         choice = input(f"{C}═⫸ {W}Select option: {C}").strip()
 
         if choice == "1":
-            query_id = input(f"\n{M}[?] {W}Enter Query_id (tgWebAppData): {C}").strip()
-            if query_id:
-                self.initdata = query_id
+            initdata = input(f"\n{M}[?] {W}Enter InitData: {C}").strip()
+            if initdata:
+                self.initdata = initdata
                 self.initdata_expiry = int(time.time()) + 3600
 
                 proxy = input(f"{M}[?] {W}Enter proxy (optional, Enter to skip): {C}").strip()
@@ -1336,8 +1292,12 @@ class GhostMiner:
                 time.sleep(2)
                 return True
 
-        elif choice == "0":
-            return False
+        elif choice == "2":
+            if self.telegram_login_menu():
+                print(f"{G}[SUCCESS] Config created via Telegram login!{X}")
+                time.sleep(2)
+                self.show_task_selection()
+                return True
 
         print(f"{R}[ERROR] No configuration added{X}")
         time.sleep(2)
@@ -1345,7 +1305,7 @@ class GhostMiner:
 
     def delete_config(self):
         self.clear()
-        print(BANNER)
+        self.display_banner()
 
         print(f"\n{R}╔══════════════════════════════════════════════════════════════╗")
         print(f"║ {W}WARNING: Delete configuration?{R}                                   ║")
@@ -1363,10 +1323,10 @@ class GhostMiner:
     def main_menu(self):
         while True:
             self.clear()
-            print(BANNER)
+            self.display_banner()
 
             if self.initdata:
-                self.dashboard()
+                self.display_session_summary()
 
             print(f"\n{C}╔══════════════════════════════════════════════════════════════╗")
             print(f"║ {W}                    MAIN MENU{C}                                    ║")
@@ -1402,9 +1362,8 @@ class GhostMiner:
                 else:
                     self.delete_config()
             elif choice == "5":
-                print(f"{G}[EXIT] Thank you for using DigiByte Generator!{X}")
+                print(f"{G}[EXIT] Thank you for using DGB Generator!{X}")
                 sys.exit(0)
-
 
 if __name__ == "__main__":
     print(f"{C}🔐 Memeriksa verifikasi...{W}")
@@ -1414,7 +1373,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     print(f"{G}✅ Verifikasi berhasil!{W}")
-    print(f"{G}🚀 Menjalankan DigiByte Generator...{W}\n")
+    print(f"{G}🚀 Menjalankan DGB Generator...{W}\n")
 
-    miner = GhostMiner()
+    miner = DgbMiner()
     miner.main_menu()
