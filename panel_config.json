@@ -29,59 +29,66 @@
       "name": "Apikey",
       "items": {
         "1": {
-          "label": "",
+          "label": "Coming Soon",
           "file": "",
           "runner": ""
         },
         "2": {
-          "label": "",
+          "label": "Coming Soon",
+          "file": "",
+          "runner": ""
+        },
+        "3": {
+          "label": "Coming Soon",
           "file": "",
           "runner": ""
         }
       }
     },
-"3": {
-  "name": "Telegram",
-  "items": {
-    "1": {
-      "label": "Volt",
-      "file": "Volty.py",
-      "runner": "python3"
-    },
-    "2": {
-      "label": "ArcadePXC",
-      "file": "Pxc.py",
-      "runner": "python3"
-    },
     "3": {
-      "label": "BossDoge",
-      "file": "obf_Bossdoge.py",
-      "runner": "python3"
-    },
-    "4": {
-      "label": "DogecoinGenerator",
-      "file": "Doge.py",
-      "runner": "python3"
-    },
-    "5": {
-      "label": "DigibyteGenerator",
-      "file": "Digi.py",
-      "runner": "python3"
-    },
-    "6": {
-      "label": "LtcGenerator",
-      "file": "ltc.py",
-      "runner": "python3"
-    },
-    "7": {
-      "label": "",
-      "file": "",
-      "runner": "python3"
-    },
-    "8": {
-      "label": "",
-      "file": "",
-      "runner": "python3"
+      "name": "Telegram",
+      "items": {
+        "1": {
+          "label": "Volt",
+          "file": "Volty.py",
+          "runner": "python3"
+        },
+        "2": {
+          "label": "ArcadePXC",
+          "file": "Pxc.py",
+          "runner": "python3"
+        },
+        "3": {
+          "label": "BossDoge",
+          "file": "obf_Bossdoge.py",
+          "runner": "python3"
+        },
+        "4": {
+          "label": "DogecoinGenerator",
+          "file": "Doge.py",
+          "runner": "python3"
+        },
+        "5": {
+          "label": "DigibyteGenerator",
+          "file": "Digi.py",
+          "runner": "python3"
+        },
+        "6": {
+          "label": "LtcGenerator",
+          "file": "ltc.py",
+          "runner": "python3"
+        },
+        "7": {
+          "label": "Coming Soon",
+          "file": "",
+          "runner": ""
+        },
+        "8": {
+          "label": "Coming Soon",
+          "file": "",
+          "runner": ""
+        }
+      }
     }
   }
 }
