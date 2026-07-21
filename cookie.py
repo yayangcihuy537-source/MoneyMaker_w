@@ -174,7 +174,7 @@ async def get_phpsessid_from_bot(client, bot_username):
         return None
 
 async def main():
-    print("\n🐸 🔑 AUTO GET PHPSESSID DARI BOT TELEGRAM")
+    print("\n🐸 🔑 AUTO GET PHPSESSID DARI BOT TELEGRAM DEV : MoneyMaker_w")
     print("=" * 55)
 
     # Login ke Telegram
