@@ -87,6 +87,31 @@
           "label": "Coming Soon",
           "file": "",
           "runner": ""
+        },
+        "9": {
+          "label": "Coming Soon",
+          "file": "",
+          "runner": ""
+        }
+      }
+    },
+    "4": {
+      "name": "Tools",
+      "items": {
+        "1": {
+          "label": "Get PHPSESSID",
+          "file": "cookie.py",
+          "runner": "python3"
+        },
+        "2": {
+          "label": "Get Query_ID/Init data",
+          "file": "",
+          "runner": ""
+        },
+        "3": {
+          "label": "Coming soon",
+          "file": "",
+          "runner": ""
         }
       }
     }
