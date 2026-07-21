@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """
-🔑 AUTO GET PHPSESSID DARI BOT TELEGRAM (FIXED ENDPOINT)
-Cukup masukkan nomor HP + OTP, script akan:
-1. Login ke Telegram via Telethon
-2. Buka WebView bot yang diinginkan
-3. Ambil initData dari URL WebView
-4. Kirim ke /actions/tg_auth.php (multipart/form-data)
-5. Dapatkan PHPSESSID dari cookie
+╔══════════════════════════════════════════════════════════════╗
+║  🔑 AUTO GET PHPSESSID FROM BOT TELEGRAM v1.0              ║
+║  DEVELOPED BY MoneyMaker_w                                 ║
+║  Ambil PHPSESSID dari bot Telegram via WebView            ║
+╚══════════════════════════════════════════════════════════════╝
 """
 
 import asyncio
@@ -17,6 +15,13 @@ import os
 import sys
 from telethon import TelegramClient, functions, types
 
+# ==================== WARNA ====================
+R, G, Y, B, M, C, W, X = '\033[91m', '\033[92m', '\033[93m', '\033[94m', '\033[95m', '\033[96m', '\033[97m', '\033[0m'
+GOLD = '\033[38;5;220m'
+CYAN = '\033[1;96m'
+PINK = '\033[38;5;206m'
+DIM = '\033[2;37m'
+
 # ==================== KONFIGURASI ====================
 API_ID = 21578873
 API_HASH = "b7562db4c393baff2f415d14a14d1f76"
@@ -24,30 +29,39 @@ DEFAULT_BOT = "PepeFlowOfficialBot"
 SESSION_FILE = "telegram_session_phpsessid"
 BASE_URL = "https://pepeflow.com"
 
+# ==================== BANNER ====================
+def show_banner():
+    print(f"""
+{GOLD}╔══════════════════════════════════════════════════════════════╗
+║  {CYAN}🔑 AUTO GET PHPSESSID FROM BOT TELEGRAM v1.0{GOLD}           ║
+║  {PINK}DEVELOPED BY MoneyMaker_w{GOLD}                              ║
+║  Ambil PHPSESSID dari bot Telegram via WebView            ║
+╚══════════════════════════════════════════════════════════════╝{X}
+""")
+
 # ==================== FUNGSI ====================
 async def get_webview_initdata(client, bot_username):
     """Buka WebView bot dan ambil initData dari URL"""
     try:
         bot = await client.get_input_entity(bot_username)
     except Exception as e:
-        print(f"❌ Gagal menemukan bot @{bot_username}: {e}")
+        print(f"{R}❌ Gagal menemukan bot @{bot_username}: {e}{X}")
         return None
 
-    # Ambil info bot untuk mendapatkan URL menu
     try:
         full_user = await client(functions.users.GetFullUserRequest(id=bot))
         bot_info = full_user.full_user.bot_info
         target_url = "https://pepeflow.com/miniapp.php"
         if bot_info and bot_info.menu_button and hasattr(bot_info.menu_button, 'url'):
             target_url = bot_info.menu_button.url
-            print(f"🔗 Auto-detected URL: {target_url}")
+            print(f"{G}🔗 Auto-detected URL: {target_url}{X}")
         else:
-            print(f"⚠️ Tidak dapat mendeteksi URL menu, menggunakan default: {target_url}")
+            print(f"{Y}⚠️ Tidak dapat mendeteksi URL menu, menggunakan default: {target_url}{X}")
     except Exception as e:
-        print(f"⚠️ Gagal mengambil info bot: {e}, menggunakan URL default")
+        print(f"{Y}⚠️ Gagal mengambil info bot: {e}, menggunakan URL default{X}")
         target_url = "https://pepeflow.com/miniapp.php"
 
-    print(f"📱 Meminta WebView untuk @{bot_username}...")
+    print(f"{C}📱 Meminta WebView untuk @{bot_username}...{X}")
     try:
         result = await client(functions.messages.RequestWebViewRequest(
             peer=bot,
@@ -57,13 +71,12 @@ async def get_webview_initdata(client, bot_username):
             url=target_url
         ))
     except Exception as e:
-        print(f"❌ Gagal meminta WebView: {e}")
+        print(f"{R}❌ Gagal meminta WebView: {e}{X}")
         return None
 
     parsed = urllib.parse.urlparse(result.url)
     init_data = None
 
-    # Cari tgWebAppData di fragment atau query
     if parsed.fragment:
         params = urllib.parse.parse_qs(parsed.fragment)
         init_data = params.get('tgWebAppData', [None])[0]
@@ -72,10 +85,10 @@ async def get_webview_initdata(client, bot_username):
         init_data = params.get('tgWebAppData', [None])[0]
 
     if init_data:
-        print("✅ initData berhasil didapat.")
+        print(f"{G}✅ initData berhasil didapat.{X}")
         return init_data
     else:
-        print("❌ Tidak ditemukan tgWebAppData di URL WebView.")
+        print(f"{R}❌ Tidak ditemukan tgWebAppData di URL WebView.{X}")
         return None
 
 async def login_telegram():
@@ -84,24 +97,24 @@ async def login_telegram():
     await client.connect()
 
     if not await client.is_user_authorized():
-        print("\n📱 Login ke Telegram diperlukan.")
-        phone = input("📞 Masukkan nomor HP (dengan kode negara, +628...): ").strip()
+        print(f"\n{C}📱 Login ke Telegram diperlukan.{X}")
+        phone = input(f"{G}📞 Masukkan nomor HP (dengan kode negara, +628...): {X}").strip()
         if not phone:
-            print("❌ Nomor HP tidak boleh kosong.")
+            print(f"{R}❌ Nomor HP tidak boleh kosong.{X}")
             return None, None
 
         try:
             await client.send_code_request(phone)
-            code = input("🔑 Masukkan kode OTP yang dikirim ke Telegram: ").strip()
+            code = input(f"{G}🔑 Masukkan kode OTP yang dikirim ke Telegram: {X}").strip()
             if not code:
-                print("❌ Kode OTP tidak boleh kosong.")
+                print(f"{R}❌ Kode OTP tidak boleh kosong.{X}")
                 return None, None
             await client.sign_in(phone, code)
         except Exception as e:
-            print(f"❌ Login gagal: {e}")
+            print(f"{R}❌ Login gagal: {e}{X}")
             return None, None
 
-    print("✅ Login sukses!")
+    print(f"{G}✅ Login sukses!{X}")
     return client, await client.get_me()
 
 async def get_phpsessid_from_bot(client, bot_username):
@@ -110,25 +123,21 @@ async def get_phpsessid_from_bot(client, bot_username):
     if not init_data:
         return None
 
-    print("\n🔐 Mengirim initData ke /actions/tg_auth.php...")
+    print(f"\n{C}🔐 Mengirim initData ke /actions/tg_auth.php...{X}")
     session = requests.Session()
     
-    # Ekstrak telegram_id dan username dari initData
-    import urllib.parse
     parsed_init = urllib.parse.parse_qs(init_data)
     user_str = parsed_init.get('user', [None])[0]
     telegram_id = None
     telegram_username = None
     if user_str:
         try:
-            import json
             user_json = json.loads(urllib.parse.unquote(user_str))
             telegram_id = str(user_json.get('id', ''))
             telegram_username = user_json.get('username', '')
         except:
             pass
 
-    # Headers sesuai capture
     headers = {
         "User-Agent": "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.47 Mobile Safari/537.36 Telegram-Android/12.6.4 (Samsung SM-A556E; Android 16; SDK 36; HIGH)",
         "Origin": BASE_URL,
@@ -141,7 +150,6 @@ async def get_phpsessid_from_bot(client, bot_username):
         "Accept-Language": "id,id-ID;q=0.9,en-US;q=0.8,en;q=0.7",
     }
 
-    # Multipart form data
     files = {
         "init_data": (None, init_data),
         "telegram_id": (None, telegram_id or "0"),
@@ -152,56 +160,52 @@ async def get_phpsessid_from_bot(client, bot_username):
     try:
         resp = session.post(f"{BASE_URL}/actions/tg_auth.php", headers=headers, files=files)
         if resp.status_code == 200:
-            # Ambil PHPSESSID dari cookie
             for cookie in session.cookies:
                 if cookie.name == "PHPSESSID":
-                    print("✅ PHPSESSID ditemukan dari /actions/tg_auth.php")
+                    print(f"{G}✅ PHPSESSID ditemukan dari /actions/tg_auth.php{X}")
                     return cookie.value
-            # Kalau gak ada di cookie, coba dari response header
             if 'Set-Cookie' in resp.headers:
                 for cookie in resp.headers.get('Set-Cookie', '').split(';'):
                     if 'PHPSESSID' in cookie:
                         phpsessid = cookie.split('=')[1].strip()
-                        print("✅ PHPSESSID ditemukan dari Set-Cookie header")
+                        print(f"{G}✅ PHPSESSID ditemukan dari Set-Cookie header{X}")
                         return phpsessid
-            print("⚠️ Response sukses tapi tidak ada PHPSESSID di cookie.")
+            print(f"{Y}⚠️ Response sukses tapi tidak ada PHPSESSID di cookie.{X}")
             return None
         else:
-            print(f"❌ Request ke /actions/tg_auth.php gagal: {resp.status_code}")
+            print(f"{R}❌ Request ke /actions/tg_auth.php gagal: {resp.status_code}{X}")
             return None
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"{R}❌ Error: {e}{X}")
         return None
 
 async def main():
-    print("\n🐸 🔑 AUTO GET PHPSESSID DARI BOT TELEGRAM DEV : MoneyMaker_w")
-    print("=" * 55)
+    show_banner()
+    print(f"{C}{'═' * 55}{X}")
 
-    # Login ke Telegram
     client, me = await login_telegram()
     if not client:
-        print("❌ Gagal login. Keluar.")
+        print(f"{R}❌ Gagal login. Keluar.{X}")
         return
-    print(f"👤 Login sebagai: @{me.username if me.username else me.first_name}")
+    print(f"{G}👤 Login sebagai: @{me.username if me.username else me.first_name}{X}")
 
-    # Minta nama bot
-    bot_name = input(f"\n🤖 Masukkan username bot (default: {DEFAULT_BOT}): ").strip()
+    bot_name = input(f"\n{C}🤖 Masukkan username bot (default: {DEFAULT_BOT}): {X}").strip()
     if not bot_name:
         bot_name = DEFAULT_BOT
     if not bot_name.startswith('@'):
         bot_name = '@' + bot_name
 
-    print(f"\n🔍 Mencari PHPSESSID dari bot {bot_name}...")
+    print(f"\n{C}🔍 Mencari PHPSESSID dari bot {bot_name}...{X}")
     phpsessid = await get_phpsessid_from_bot(client, bot_name)
 
     await client.disconnect()
 
     if phpsessid:
-        print("\n" + "=" * 55)
-        print(f"🎯 PHPSESSID: {phpsessid}")
-        print("=" * 55)
-        print("\n📌 Simpan nilai ini untuk digunakan di script PepeFlow.")
-        save = input("\n💾 Simpan ke file config PepeFlow? (y/n): ").strip().lower()
+        print(f"\n{GOLD}{'═' * 55}{X}")
+        print(f"{G}🎯 PHPSESSID: {phpsessid}{X}")
+        print(f"{GOLD}{'═' * 55}{X}")
+        print(f"\n{C}📌 Simpan nilai ini untuk digunakan di script PepeFlow.{X}")
+        save = input(f"\n{G}💾 Simpan ke file config PepeFlow? (y/n): {X}").strip().lower()
         if save == 'y':
             config_file = "pepeflow_config.json"
             if os.path.exists(config_file):
@@ -215,14 +219,14 @@ async def main():
             config['phpsessid'] = phpsessid
             with open(config_file, 'w') as f:
                 json.dump(config, f, indent=2)
-            print(f"✅ PHPSESSID disimpan ke {config_file}")
+            print(f"{G}✅ PHPSESSID disimpan ke {config_file}{X}")
     else:
-        print("\n❌ Gagal mendapatkan PHPSESSID.")
-        print("💡 Coba manual: buka bot di Telegram, buka WebView, lalu ambil cookie dari browser.")
+        print(f"\n{R}❌ Gagal mendapatkan PHPSESSID.{X}")
+        print(f"{Y}💡 Coba manual: buka bot di Telegram, buka WebView, lalu ambil cookie dari browser.{X}")
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\n⚠️ Dihentikan oleh user.")
+        print(f"\n{Y}⚠️ Dihentikan oleh user.{X}")
         sys.exit(0)
