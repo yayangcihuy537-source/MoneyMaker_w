@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """
-🔑 AMBIL INIT_DATA / QUERY_ID DARI BOT TELEGRAM
-Cukup masukkan username bot, script akan:
-1. Login ke Telegram via Telethon
-2. Buka WebView bot tersebut
-3. Ambil tgWebAppData (init_data) dari URL
-4. Tampilkan init_data lengkap
+╔══════════════════════════════════════════════════════════════╗
+║  🔑 INIT_DATA / QUERY_ID EXTRACTOR v1.0                    ║
+║  DEVELOPED BY MoneyMaker_w                                 ║
+║  Ambil tgWebAppData dari bot Telegram via Telethon        ║
+╚══════════════════════════════════════════════════════════════╝
 """
 
 import asyncio
@@ -15,10 +14,26 @@ import os
 import sys
 from telethon import TelegramClient, functions, types
 
+# ==================== WARNA ====================
+R, G, Y, B, M, C, W, X = '\033[91m', '\033[92m', '\033[93m', '\033[94m', '\033[95m', '\033[96m', '\033[97m', '\033[0m'
+GOLD = '\033[38;5;220m'
+CYAN = '\033[1;96m'
+PINK = '\033[38;5;206m'
+DIM = '\033[2;37m'
+
 # ==================== KONFIGURASI ====================
 API_ID = 21578873
 API_HASH = "b7562db4c393baff2f415d14a14d1f76"
 SESSION_FILE = "telegram_session_initdata"
+
+# ==================== BANNER ====================
+def show_banner():
+    print(f"""
+{GOLD}╔══════════════════════════════════════════════════════════════╗
+║  {CYAN}🔑 INIT_DATA / QUERY_ID EXTRACTOR v1.0{GOLD}                    ║
+║  {PINK}DEVELOPED BY MoneyMaker_w{GOLD}                                 ║        
+╚══════════════════════════════════════════════════════════════╝{X}
+""")
 
 # ==================== FUNGSI ====================
 async def get_webview_initdata(client, bot_username):
@@ -26,7 +41,7 @@ async def get_webview_initdata(client, bot_username):
     try:
         bot = await client.get_input_entity(bot_username)
     except Exception as e:
-        print(f"❌ Gagal menemukan bot @{bot_username}: {e}")
+        print(f"{R}❌ Gagal menemukan bot @{bot_username}: {e}{X}")
         return None
 
     # Ambil info bot untuk mendapatkan URL menu
@@ -36,16 +51,15 @@ async def get_webview_initdata(client, bot_username):
         target_url = None
         if bot_info and bot_info.menu_button and hasattr(bot_info.menu_button, 'url'):
             target_url = bot_info.menu_button.url
-            print(f"🔗 Auto-detected URL: {target_url}")
+            print(f"{G}🔗 Auto-detected URL: {target_url}{X}")
         else:
-            # fallback: coba URL umum
             target_url = f"https://t.me/{bot_username}"
-            print(f"⚠️ Tidak dapat mendeteksi URL menu, menggunakan: {target_url}")
+            print(f"{Y}⚠️ Tidak dapat mendeteksi URL menu, menggunakan: {target_url}{X}")
     except Exception as e:
-        print(f"⚠️ Gagal mengambil info bot: {e}")
+        print(f"{Y}⚠️ Gagal mengambil info bot: {e}{X}")
         target_url = f"https://t.me/{bot_username}"
 
-    print(f"📱 Meminta WebView untuk @{bot_username}...")
+    print(f"{C}📱 Meminta WebView untuk @{bot_username}...{X}")
     try:
         result = await client(functions.messages.RequestWebViewRequest(
             peer=bot,
@@ -55,13 +69,12 @@ async def get_webview_initdata(client, bot_username):
             url=target_url
         ))
     except Exception as e:
-        print(f"❌ Gagal meminta WebView: {e}")
+        print(f"{R}❌ Gagal meminta WebView: {e}{X}")
         return None
 
     parsed = urllib.parse.urlparse(result.url)
     init_data = None
 
-    # Cari tgWebAppData di fragment atau query
     if parsed.fragment:
         params = urllib.parse.parse_qs(parsed.fragment)
         init_data = params.get('tgWebAppData', [None])[0]
@@ -70,11 +83,11 @@ async def get_webview_initdata(client, bot_username):
         init_data = params.get('tgWebAppData', [None])[0]
 
     if init_data:
-        print("✅ initData berhasil didapat.")
+        print(f"{G}✅ initData berhasil didapat.{X}")
         return init_data
     else:
-        print("❌ Tidak ditemukan tgWebAppData di URL WebView.")
-        print(f"URL: {result.url}")
+        print(f"{R}❌ Tidak ditemukan tgWebAppData di URL WebView.{X}")
+        print(f"{DIM}URL: {result.url}{X}")
         return None
 
 async def login_telegram():
@@ -83,75 +96,71 @@ async def login_telegram():
     await client.connect()
 
     if not await client.is_user_authorized():
-        print("\n📱 Login ke Telegram diperlukan.")
-        phone = input("📞 Masukkan nomor HP (dengan kode negara, +628...): ").strip()
+        print(f"\n{C}📱 Login ke Telegram diperlukan.{X}")
+        phone = input(f"{G}📞 Masukkan nomor HP (dengan kode negara, +628...): {X}").strip()
         if not phone:
-            print("❌ Nomor HP tidak boleh kosong.")
+            print(f"{R}❌ Nomor HP tidak boleh kosong.{X}")
             return None, None
 
         try:
             await client.send_code_request(phone)
-            code = input("🔑 Masukkan kode OTP yang dikirim ke Telegram: ").strip()
+            code = input(f"{G}🔑 Masukkan kode OTP yang dikirim ke Telegram: {X}").strip()
             if not code:
-                print("❌ Kode OTP tidak boleh kosong.")
+                print(f"{R}❌ Kode OTP tidak boleh kosong.{X}")
                 return None, None
             await client.sign_in(phone, code)
         except Exception as e:
-            print(f"❌ Login gagal: {e}")
+            print(f"{R}❌ Login gagal: {e}{X}")
             return None, None
 
-    print("✅ Login sukses!")
+    print(f"{G}✅ Login sukses!{X}")
     return client, await client.get_me()
 
 async def main():
-    print("\n🐸 🔑 AMBIL INIT_DATA DARI BOT TELEGRAM DEV : MoneyMaker_w")
-    print("=" * 55)
+    show_banner()
+    print(f"{C}{'═' * 55}{X}")
 
-    # Login ke Telegram
     client, me = await login_telegram()
     if not client:
-        print("❌ Gagal login. Keluar.")
+        print(f"{R}❌ Gagal login. Keluar.{X}")
         return
-    print(f"👤 Login sebagai: @{me.username if me.username else me.first_name}")
+    print(f"{G}👤 Login sebagai: @{me.username if me.username else me.first_name}{X}")
 
-    # Minta nama bot
-    bot_name = input("\n🤖 Masukkan username bot (tanpa @, contoh: PepeFlowOfficialBot): ").strip()
+    bot_name = input(f"\n{C}🤖 Masukkan username bot (tanpa @, contoh: PepeFlowOfficialBot): {X}").strip()
     if not bot_name:
-        print("❌ Nama bot tidak boleh kosong!")
+        print(f"{R}❌ Nama bot tidak boleh kosong!{X}")
         await client.disconnect()
         return
     if not bot_name.startswith('@'):
         bot_name = '@' + bot_name
 
-    print(f"\n🔍 Mengambil initData dari bot {bot_name}...")
+    print(f"\n{C}🔍 Mengambil initData dari bot {bot_name}...{X}")
     init_data = await get_webview_initdata(client, bot_name)
 
     await client.disconnect()
 
     if init_data:
-        print("\n" + "=" * 55)
-        print(f"🎯 INIT_DATA (tgWebAppData):\n{init_data}")
-        print("=" * 55)
+        print(f"\n{GOLD}{'═' * 55}{X}")
+        print(f"{G}🎯 INIT_DATA (tgWebAppData):{X}\n{init_data}")
+        print(f"{GOLD}{'═' * 55}{X}")
 
-        # Parse query_id dari init_data
         parsed = urllib.parse.parse_qs(init_data)
         query_id = parsed.get('query_id', [None])[0]
         if query_id:
-            print(f"\n📌 Query ID: {query_id}")
+            print(f"\n{C}📌 Query ID: {G}{query_id}{X}")
 
-        # Tawarkan untuk menyimpan ke file
-        save = input("\n💾 Simpan ke file init_data.txt? (y/n): ").strip().lower()
+        save = input(f"\n{G}💾 Simpan ke file init_data.txt? (y/n): {X}").strip().lower()
         if save == 'y':
             with open("init_data.txt", "w") as f:
                 f.write(init_data)
-            print("✅ init_data disimpan ke init_data.txt")
+            print(f"{G}✅ init_data disimpan ke init_data.txt{X}")
     else:
-        print("\n❌ Gagal mendapatkan initData.")
-        print("💡 Coba manual: buka bot di Telegram, buka WebView, lalu ambil tgWebAppData dari URL.")
+        print(f"\n{R}❌ Gagal mendapatkan initData.{X}")
+        print(f"{Y}💡 Coba manual: buka bot di Telegram, buka WebView, lalu ambil tgWebAppData dari URL.{X}")
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\n⚠️ Dihentikan oleh user.")
+        print(f"\n{Y}⚠️ Dihentikan oleh user.{X}")
         sys.exit(0)
