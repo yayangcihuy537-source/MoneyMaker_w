@@ -105,8 +105,8 @@
         },
         "2": {
           "label": "Get Query_ID/Init data",
-          "file": "",
-          "runner": ""
+          "file": "init.py",
+          "runner": "python3"
         },
         "3": {
           "label": "Coming soon",
