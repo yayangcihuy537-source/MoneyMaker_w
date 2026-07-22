@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
 ╔══════════════════════════════════════════════════════════════╗
-║  🔑 INIT_DATA / QUERY_ID EXTRACTOR v1.0                    ║
+║  🔑 AMBIL INIT_DATA / QUERY_ID DARI BOT TELEGRAM v1.1      ║
 ║  DEVELOPED BY MoneyMaker_w                                 ║
-║  Ambil tgWebAppData dari bot Telegram via Telethon        ║
+║  Ambil tgWebAppData (init_data) dari bot via WebView      ║
+║  📞 Nomor HP tersimpan otomatis (tidak perlu input ulang)  ║
 ╚══════════════════════════════════════════════════════════════╝
 """
 
@@ -25,17 +26,37 @@ DIM = '\033[2;37m'
 API_ID = 21578873
 API_HASH = "b7562db4c393baff2f415d14a14d1f76"
 SESSION_FILE = "telegram_session_initdata"
+PHONE_FILE = "phone_number.txt"
 
 # ==================== BANNER ====================
 def show_banner():
     print(f"""
 {GOLD}╔══════════════════════════════════════════════════════════════╗
-║  {CYAN}🔑 INIT_DATA / QUERY_ID EXTRACTOR v1.0{GOLD}                    ║
-║  {PINK}DEVELOPED BY MoneyMaker_w{GOLD}                                 ║        
+║  {CYAN}🔑 AMBIL INIT_DATA / QUERY_ID DARI BOT TELEGRAM v1.1{GOLD}   ║
+║  {PINK}DEVELOPED BY MoneyMaker_w{GOLD}                              ║
+║  Ambil tgWebAppData (init_data) dari bot via WebView        ║
+║  📞 Nomor HP tersimpan otomatis (tidak perlu input ulang){GOLD}║
 ╚══════════════════════════════════════════════════════════════╝{X}
 """)
 
 # ==================== FUNGSI ====================
+def save_phone(phone):
+    try:
+        with open(PHONE_FILE, 'w') as f:
+            f.write(phone.strip())
+        return True
+    except:
+        return False
+
+def load_phone():
+    try:
+        if os.path.exists(PHONE_FILE):
+            with open(PHONE_FILE, 'r') as f:
+                return f.read().strip()
+    except:
+        pass
+    return None
+
 async def get_webview_initdata(client, bot_username):
     """Buka WebView bot dan ambil initData dari URL"""
     try:
@@ -44,16 +65,14 @@ async def get_webview_initdata(client, bot_username):
         print(f"{R}❌ Gagal menemukan bot @{bot_username}: {e}{X}")
         return None
 
-    # Ambil info bot untuk mendapatkan URL menu
     try:
         full_user = await client(functions.users.GetFullUserRequest(id=bot))
         bot_info = full_user.full_user.bot_info
-        target_url = None
+        target_url = f"https://t.me/{bot_username}"
         if bot_info and bot_info.menu_button and hasattr(bot_info.menu_button, 'url'):
             target_url = bot_info.menu_button.url
             print(f"{G}🔗 Auto-detected URL: {target_url}{X}")
         else:
-            target_url = f"https://t.me/{bot_username}"
             print(f"{Y}⚠️ Tidak dapat mendeteksi URL menu, menggunakan: {target_url}{X}")
     except Exception as e:
         print(f"{Y}⚠️ Gagal mengambil info bot: {e}{X}")
@@ -91,27 +110,37 @@ async def get_webview_initdata(client, bot_username):
         return None
 
 async def login_telegram():
-    """Login ke Telegram dan ekstrak initData"""
+    """Login ke Telegram, gunakan nomor tersimpan jika ada"""
     client = TelegramClient(SESSION_FILE, API_ID, API_HASH)
     await client.connect()
 
-    if not await client.is_user_authorized():
+    if await client.is_user_authorized():
+        print(f"{G}✅ Session masih aktif! Login otomatis.{X}")
+        return client, await client.get_me()
+
+    saved_phone = load_phone()
+    if saved_phone:
+        print(f"{G}📞 Menggunakan nomor tersimpan: {saved_phone}{X}")
+        phone = saved_phone
+    else:
         print(f"\n{C}📱 Login ke Telegram diperlukan.{X}")
         phone = input(f"{G}📞 Masukkan nomor HP (dengan kode negara, +628...): {X}").strip()
         if not phone:
             print(f"{R}❌ Nomor HP tidak boleh kosong.{X}")
             return None, None
 
-        try:
-            await client.send_code_request(phone)
-            code = input(f"{G}🔑 Masukkan kode OTP yang dikirim ke Telegram: {X}").strip()
-            if not code:
-                print(f"{R}❌ Kode OTP tidak boleh kosong.{X}")
-                return None, None
-            await client.sign_in(phone, code)
-        except Exception as e:
-            print(f"{R}❌ Login gagal: {e}{X}")
+    try:
+        await client.send_code_request(phone)
+        code = input(f"{G}🔑 Masukkan kode OTP yang dikirim ke Telegram: {X}").strip()
+        if not code:
+            print(f"{R}❌ Kode OTP tidak boleh kosong.{X}")
             return None, None
+        await client.sign_in(phone, code)
+        save_phone(phone)
+        print(f"{G}✅ Nomor HP tersimpan.{X}")
+    except Exception as e:
+        print(f"{R}❌ Login gagal: {e}{X}")
+        return None, None
 
     print(f"{G}✅ Login sukses!{X}")
     return client, await client.get_me()
