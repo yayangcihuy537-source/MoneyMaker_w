@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
 ╔══════════════════════════════════════════════════════════════╗
-║  🔑 AUTO GET PHPSESSID FROM BOT TELEGRAM v1.0              ║
+║  🔑 AUTO GET PHPSESSID FROM BOT TELEGRAM v1.1              ║
 ║  DEVELOPED BY MoneyMaker_w                                 ║
 ║  Ambil PHPSESSID dari bot Telegram via WebView            ║
+║  📞 Nomor HP tersimpan otomatis, tidak perlu input ulang  ║
 ╚══════════════════════════════════════════════════════════════╝
 """
 
@@ -28,18 +29,39 @@ API_HASH = "b7562db4c393baff2f415d14a14d1f76"
 DEFAULT_BOT = "PepeFlowOfficialBot"
 SESSION_FILE = "telegram_session_phpsessid"
 BASE_URL = "https://pepeflow.com"
+PHONE_FILE = "phone_number.txt"  # file untuk menyimpan nomor HP
 
 # ==================== BANNER ====================
 def show_banner():
     print(f"""
 {GOLD}╔══════════════════════════════════════════════════════════════╗
-║  {CYAN}🔑 AUTO GET PHPSESSID FROM BOT TELEGRAM v1.0{GOLD}           ║
+║  {CYAN}🔑 AUTO GET PHPSESSID FROM BOT TELEGRAM v1.1{GOLD}           ║
 ║  {PINK}DEVELOPED BY MoneyMaker_w{GOLD}                              ║
 ║  Ambil PHPSESSID dari bot Telegram via WebView            ║
+║  📞 Nomor HP tersimpan otomatis (tidak perlu input ulang){GOLD}║
 ╚══════════════════════════════════════════════════════════════╝{X}
 """)
 
 # ==================== FUNGSI ====================
+def save_phone(phone):
+    """Simpan nomor HP ke file"""
+    try:
+        with open(PHONE_FILE, 'w') as f:
+            f.write(phone.strip())
+        return True
+    except:
+        return False
+
+def load_phone():
+    """Baca nomor HP dari file"""
+    try:
+        if os.path.exists(PHONE_FILE):
+            with open(PHONE_FILE, 'r') as f:
+                return f.read().strip()
+    except:
+        pass
+    return None
+
 async def get_webview_initdata(client, bot_username):
     """Buka WebView bot dan ambil initData dari URL"""
     try:
@@ -92,27 +114,40 @@ async def get_webview_initdata(client, bot_username):
         return None
 
 async def login_telegram():
-    """Login ke Telegram dan ekstrak initData"""
+    """Login ke Telegram, gunakan nomor tersimpan jika ada"""
     client = TelegramClient(SESSION_FILE, API_ID, API_HASH)
     await client.connect()
 
-    if not await client.is_user_authorized():
+    # Cek apakah sudah login (session masih valid)
+    if await client.is_user_authorized():
+        print(f"{G}✅ Session masih aktif! Login otomatis.{X}")
+        return client, await client.get_me()
+
+    # Coba load nomor HP dari file
+    saved_phone = load_phone()
+    if saved_phone:
+        print(f"{G}📞 Menggunakan nomor tersimpan: {saved_phone}{X}")
+        phone = saved_phone
+    else:
         print(f"\n{C}📱 Login ke Telegram diperlukan.{X}")
         phone = input(f"{G}📞 Masukkan nomor HP (dengan kode negara, +628...): {X}").strip()
         if not phone:
             print(f"{R}❌ Nomor HP tidak boleh kosong.{X}")
             return None, None
 
-        try:
-            await client.send_code_request(phone)
-            code = input(f"{G}🔑 Masukkan kode OTP yang dikirim ke Telegram: {X}").strip()
-            if not code:
-                print(f"{R}❌ Kode OTP tidak boleh kosong.{X}")
-                return None, None
-            await client.sign_in(phone, code)
-        except Exception as e:
-            print(f"{R}❌ Login gagal: {e}{X}")
+    try:
+        await client.send_code_request(phone)
+        code = input(f"{G}🔑 Masukkan kode OTP yang dikirim ke Telegram: {X}").strip()
+        if not code:
+            print(f"{R}❌ Kode OTP tidak boleh kosong.{X}")
             return None, None
+        await client.sign_in(phone, code)
+        # Simpan nomor HP setelah login sukses
+        save_phone(phone)
+        print(f"{G}✅ Nomor HP tersimpan untuk下次.{X}")
+    except Exception as e:
+        print(f"{R}❌ Login gagal: {e}{X}")
+        return None, None
 
     print(f"{G}✅ Login sukses!{X}")
     return client, await client.get_me()
