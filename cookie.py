@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 ╔══════════════════════════════════════════════════════════════╗
-║  🔑 AUTO GET PHPSESSID FROM BOT TELEGRAM v1.2 (FIX LOCK)  ║
+║  🔑 AUTO GET PHPSESSID FROM BOT TELEGRAM v1.3 (FIX SESSION)║
 ║  DEVELOPED BY MoneyMaker_w                                 ║
 ║  Ambil PHPSESSID dari bot Telegram via WebView            ║
-║  📞 Nomor HP tersimpan otomatis (tidak perlu input ulang) ║
+║  📞 Nomor HP tersimpan • Session otomatis (skip OTP)     ║
 ║  🔓 Auto-clear session jika database terkunci             ║
 ╚══════════════════════════════════════════════════════════════╝
 """
@@ -30,7 +30,7 @@ DIM = '\033[2;37m'
 API_ID = 21578873
 API_HASH = "b7562db4c393baff2f415d14a14d1f76"
 DEFAULT_BOT = "PepeFlowOfficialBot"
-SESSION_FILE = "telegram_session_phpsessid.db"
+SESSION_FILE = "telegram_session_phpsessid"
 BASE_URL = "https://pepeflow.com"
 PHONE_FILE = "phone_number.txt"
 
@@ -38,11 +38,11 @@ PHONE_FILE = "phone_number.txt"
 def show_banner():
     print(f"""
 {GOLD}╔══════════════════════════════════════════════════════════════╗
-║  {CYAN}🔑 AUTO GET PHPSESSID FROM BOT TELEGRAM v1.2{GOLD}           ║
+║  {CYAN}🔑 AUTO GET PHPSESSID FROM BOT TELEGRAM v1.3{GOLD}           ║
 ║  {PINK}DEVELOPED BY MoneyMaker_w{GOLD}                              ║
 ║  Ambil PHPSESSID dari bot Telegram via WebView            ║
-║  📞 Nomor HP tersimpan otomatis (tidak perlu input ulang){GOLD}║
-║  🔓 Auto-clear session jika database terkunci            ║
+║  📞 Nomor HP tersimpan • Session otomatis (skip OTP)     ║
+║  🔓 Auto-clear session jika database terkunci             ║
 ╚══════════════════════════════════════════════════════════════╝{X}
 """)
 
@@ -64,23 +64,30 @@ def load_phone():
         pass
     return None
 
-def clear_session_if_locked():
-    """Hapus session file jika terjadi lock"""
-    if os.path.exists(SESSION_FILE):
-        try:
-            # Coba buka database untuk cek lock
-            conn = sqlite3.connect(SESSION_FILE, timeout=0.1)
-            conn.close()
-            return False  # tidak terkunci
-        except sqlite3.OperationalError as e:
-            if "database is locked" in str(e):
-                try:
-                    os.remove(SESSION_FILE)
-                    print(f"{Y}🗑️ Session file terkunci, dihapus.{X}")
-                    return True
-                except:
-                    pass
-    return False
+def is_session_valid():
+    """Cek apakah session file ada dan valid (bisa dibuka)"""
+    if not os.path.exists(SESSION_FILE + ".session"):
+        return False
+    try:
+        # Coba buka database
+        conn = sqlite3.connect(SESSION_FILE + ".session", timeout=0.1)
+        c = conn.cursor()
+        c.execute("SELECT COUNT(*) FROM sessions")
+        count = c.fetchone()[0]
+        conn.close()
+        return count > 0
+    except:
+        return False
+
+def clear_session():
+    """Hapus session file"""
+    try:
+        if os.path.exists(SESSION_FILE + ".session"):
+            os.remove(SESSION_FILE + ".session")
+            print(f"{Y}🗑️ Session file dihapus.{X}")
+        return True
+    except:
+        return False
 
 async def get_webview_initdata(client, bot_username):
     try:
@@ -133,66 +140,51 @@ async def get_webview_initdata(client, bot_username):
         return None
 
 async def login_telegram():
-    """Login ke Telegram, handle database lock dengan auto-clear session"""
-    max_retries = 3
-    for attempt in range(max_retries):
+    """Login ke Telegram dengan session tersimpan"""
+    # Cek session valid
+    if is_session_valid():
+        print(f"{G}✅ Session Telegram ditemukan! Login otomatis...{X}")
         try:
-            # Cek lock dan clear jika perlu
-            clear_session_if_locked()
-            
             client = TelegramClient(SESSION_FILE, API_ID, API_HASH)
             await client.connect()
-            
             if await client.is_user_authorized():
-                print(f"{G}✅ Session masih aktif! Login otomatis.{X}")
+                print(f"{G}✅ Session valid! Login sukses.{X}")
                 return client, await client.get_me()
-            
-            # Jika belum login, proses login
-            saved_phone = load_phone()
-            if saved_phone:
-                print(f"{G}📞 Menggunakan nomor tersimpan: {saved_phone}{X}")
-                phone = saved_phone
             else:
-                print(f"\n{C}📱 Login ke Telegram diperlukan.{X}")
-                phone = input(f"{G}📞 Masukkan nomor HP (dengan kode negara, +628...): {X}").strip()
-                if not phone:
-                    print(f"{R}❌ Nomor HP tidak boleh kosong.{X}")
-                    return None, None
-
-            try:
-                await client.send_code_request(phone)
-                code = input(f"{G}🔑 Masukkan kode OTP yang dikirim ke Telegram: {X}").strip()
-                if not code:
-                    print(f"{R}❌ Kode OTP tidak boleh kosong.{X}")
-                    return None, None
-                await client.sign_in(phone, code)
-                save_phone(phone)
-                print(f"{G}✅ Nomor HP tersimpan.{X}")
-            except Exception as e:
-                print(f"{R}❌ Login gagal: {e}{X}")
-                return None, None
-
-            print(f"{G}✅ Login sukses!{X}")
-            return client, await client.get_me()
-            
-        except sqlite3.OperationalError as e:
-            if "database is locked" in str(e):
-                print(f"{Y}⚠️ Database terkunci, percobaan {attempt+1}/{max_retries}{X}")
-                if os.path.exists(SESSION_FILE):
-                    try:
-                        os.remove(SESSION_FILE)
-                        print(f"{Y}🗑️ Session file dihapus.{X}")
-                    except:
-                        pass
-                time.sleep(1)
-            else:
-                raise
+                print(f"{Y}⚠️ Session tidak valid, login ulang.{X}")
+                clear_session()
         except Exception as e:
-            print(f"{R}❌ Error: {e}{X}")
+            print(f"{Y}⚠️ Session error: {e}, login ulang.{X}")
+            clear_session()
+
+    # Jika session tidak ada, login manual
+    print(f"\n{C}📱 Login ke Telegram diperlukan.{X}")
+    saved_phone = load_phone()
+    if saved_phone:
+        print(f"{G}📞 Menggunakan nomor tersimpan: {saved_phone}{X}")
+        phone = saved_phone
+    else:
+        phone = input(f"{G}📞 Masukkan nomor HP (dengan kode negara, +628...): {X}").strip()
+        if not phone:
+            print(f"{R}❌ Nomor HP tidak boleh kosong.{X}")
             return None, None
-    
-    print(f"{R}❌ Gagal login setelah {max_retries} percobaan.{X}")
-    return None, None
+
+    client = TelegramClient(SESSION_FILE, API_ID, API_HASH)
+    await client.connect()
+
+    try:
+        await client.send_code_request(phone)
+        code = input(f"{G}🔑 Masukkan kode OTP yang dikirim ke Telegram: {X}").strip()
+        if not code:
+            print(f"{R}❌ Kode OTP tidak boleh kosong.{X}")
+            return None, None
+        await client.sign_in(phone, code)
+        save_phone(phone)
+        print(f"{G}✅ Login sukses! Session tersimpan.{X}")
+        return client, await client.get_me()
+    except Exception as e:
+        print(f"{R}❌ Login gagal: {e}{X}")
+        return None, None
 
 async def get_phpsessid_from_bot(client, bot_username):
     init_data = await get_webview_initdata(client, bot_username)
@@ -259,8 +251,11 @@ async def main():
     show_banner()
     print(f"{C}{'═' * 55}{X}")
 
-    # Clear session jika ada lock di awal
-    clear_session_if_locked()
+    # Cek session di awal
+    if is_session_valid():
+        print(f"{G}📁 Session Telegram ditemukan! Akan login otomatis.{X}")
+    else:
+        print(f"{Y}⚠️ Session Telegram tidak ditemukan. Perlu login ulang.{X}")
 
     client, me = await login_telegram()
     if not client:
