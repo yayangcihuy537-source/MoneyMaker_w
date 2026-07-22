@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
 ╔══════════════════════════════════════════════════════════════╗
-║  🔑 AMBIL INIT_DATA / QUERY_ID DARI BOT TELEGRAM v1.1      ║
+║  🔑 AMBIL INIT_DATA / QUERY_ID DARI BOT TELEGRAM v1.2      ║
 ║  DEVELOPED BY MoneyMaker_w                                 ║
 ║  Ambil tgWebAppData (init_data) dari bot via WebView      ║
-║  📞 Nomor HP tersimpan otomatis (tidak perlu input ulang)  ║
+║  📞 Nomor HP tersimpan otomatis (tidak perlu input ulang) ║
+║  🔓 Auto-clear session jika database terkunci             ║
 ╚══════════════════════════════════════════════════════════════╝
 """
 
@@ -13,6 +14,7 @@ import urllib.parse
 import json
 import os
 import sys
+import sqlite3
 from telethon import TelegramClient, functions, types
 
 # ==================== WARNA ====================
@@ -32,10 +34,11 @@ PHONE_FILE = "phone_number.txt"
 def show_banner():
     print(f"""
 {GOLD}╔══════════════════════════════════════════════════════════════╗
-║  {CYAN}🔑 AMBIL INIT_DATA / QUERY_ID DARI BOT TELEGRAM v1.1{GOLD}   ║
+║  {CYAN}🔑 AMBIL INIT_DATA / QUERY_ID DARI BOT TELEGRAM v1.2{GOLD}   ║
 ║  {PINK}DEVELOPED BY MoneyMaker_w{GOLD}                              ║
 ║  Ambil tgWebAppData (init_data) dari bot via WebView        ║
 ║  📞 Nomor HP tersimpan otomatis (tidak perlu input ulang){GOLD}║
+║  🔓 Auto-clear session jika database terkunci             ║
 ╚══════════════════════════════════════════════════════════════╝{X}
 """)
 
@@ -56,6 +59,24 @@ def load_phone():
     except:
         pass
     return None
+
+def clear_session_if_locked():
+    """Hapus session file jika terjadi lock"""
+    session_path = SESSION_FILE + ".session"
+    if os.path.exists(session_path):
+        try:
+            conn = sqlite3.connect(session_path, timeout=0.1)
+            conn.close()
+            return False
+        except sqlite3.OperationalError as e:
+            if "database is locked" in str(e):
+                try:
+                    os.remove(session_path)
+                    print(f"{Y}🗑️ Session file terkunci, dihapus.{X}")
+                    return True
+                except:
+                    pass
+    return False
 
 async def get_webview_initdata(client, bot_username):
     """Buka WebView bot dan ambil initData dari URL"""
@@ -110,24 +131,40 @@ async def get_webview_initdata(client, bot_username):
         return None
 
 async def login_telegram():
-    """Login ke Telegram, gunakan nomor tersimpan jika ada"""
-    client = TelegramClient(SESSION_FILE, API_ID, API_HASH)
-    await client.connect()
+    """Login ke Telegram, gunakan session & nomor tersimpan"""
+    clear_session_if_locked()
+    
+    # Cek session valid
+    session_path = SESSION_FILE + ".session"
+    if os.path.exists(session_path):
+        try:
+            client = TelegramClient(SESSION_FILE, API_ID, API_HASH)
+            await client.connect()
+            if await client.is_user_authorized():
+                print(f"{G}✅ Session Telegram ditemukan! Login otomatis.{X}")
+                return client, await client.get_me()
+            else:
+                print(f"{Y}⚠️ Session tidak valid, login ulang.{X}")
+                os.remove(session_path)
+        except Exception as e:
+            print(f"{Y}⚠️ Session error: {e}{X}")
+            if os.path.exists(session_path):
+                try: os.remove(session_path)
+                except: pass
 
-    if await client.is_user_authorized():
-        print(f"{G}✅ Session masih aktif! Login otomatis.{X}")
-        return client, await client.get_me()
-
+    print(f"\n{C}📱 Login ke Telegram diperlukan.{X}")
     saved_phone = load_phone()
     if saved_phone:
         print(f"{G}📞 Menggunakan nomor tersimpan: {saved_phone}{X}")
         phone = saved_phone
     else:
-        print(f"\n{C}📱 Login ke Telegram diperlukan.{X}")
         phone = input(f"{G}📞 Masukkan nomor HP (dengan kode negara, +628...): {X}").strip()
         if not phone:
             print(f"{R}❌ Nomor HP tidak boleh kosong.{X}")
             return None, None
+
+    client = TelegramClient(SESSION_FILE, API_ID, API_HASH)
+    await client.connect()
 
     try:
         await client.send_code_request(phone)
@@ -137,13 +174,11 @@ async def login_telegram():
             return None, None
         await client.sign_in(phone, code)
         save_phone(phone)
-        print(f"{G}✅ Nomor HP tersimpan.{X}")
+        print(f"{G}✅ Login sukses! Session tersimpan.{X}")
+        return client, await client.get_me()
     except Exception as e:
         print(f"{R}❌ Login gagal: {e}{X}")
         return None, None
-
-    print(f"{G}✅ Login sukses!{X}")
-    return client, await client.get_me()
 
 async def main():
     show_banner()
