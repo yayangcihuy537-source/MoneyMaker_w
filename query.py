@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 ╔══════════════════════════════════════════════════════════════╗
-║  🔑 AMBIL INIT_DATA / QUERY_ID DARI BOT TELEGRAM v1.2      ║
+║  🔑 AMBIL INIT_DATA / QUERY_ID DARI BOT TELEGRAM v1.4      ║
 ║  DEVELOPED BY MoneyMaker_w                                 ║
 ║  Ambil tgWebAppData (init_data) dari bot via WebView      ║
-║  📞 Nomor HP tersimpan otomatis (tidak perlu input ulang) ║
+║  📞 Nomor HP tersimpan • Auto-detect URL + fallback      ║
 ║  🔓 Auto-clear session jika database terkunci             ║
 ╚══════════════════════════════════════════════════════════════╝
 """
@@ -29,15 +29,16 @@ API_ID = 21578873
 API_HASH = "b7562db4c393baff2f415d14a14d1f76"
 SESSION_FILE = "telegram_session_initdata"
 PHONE_FILE = "phone_number.txt"
+URL_CACHE_FILE = "webview_url_cache.json"
 
 # ==================== BANNER ====================
 def show_banner():
     print(f"""
 {GOLD}╔══════════════════════════════════════════════════════════════╗
-║  {CYAN}🔑 AMBIL INIT_DATA / QUERY_ID DARI BOT TELEGRAM v1.2{GOLD}   ║
+║  {CYAN}🔑 AMBIL INIT_DATA / QUERY_ID DARI BOT TELEGRAM v1.4{GOLD}   ║
 ║  {PINK}DEVELOPED BY MoneyMaker_w{GOLD}                              ║
 ║  Ambil tgWebAppData (init_data) dari bot via WebView        ║
-║  📞 Nomor HP tersimpan otomatis (tidak perlu input ulang){GOLD}║
+║  📞 Nomor HP tersimpan • Auto-detect URL + fallback        ║
 ║  🔓 Auto-clear session jika database terkunci             ║
 ╚══════════════════════════════════════════════════════════════╝{X}
 """)
@@ -61,7 +62,6 @@ def load_phone():
     return None
 
 def clear_session_if_locked():
-    """Hapus session file jika terjadi lock"""
     session_path = SESSION_FILE + ".session"
     if os.path.exists(session_path):
         try:
@@ -78,7 +78,42 @@ def clear_session_if_locked():
                     pass
     return False
 
-async def get_webview_initdata(client, bot_username):
+def save_url_cache(bot_username, url):
+    try:
+        cache = {}
+        if os.path.exists(URL_CACHE_FILE):
+            with open(URL_CACHE_FILE, 'r') as f:
+                cache = json.load(f)
+        cache[bot_username] = url
+        with open(URL_CACHE_FILE, 'w') as f:
+            json.dump(cache, f, indent=2)
+        return True
+    except:
+        return False
+
+def load_url_cache(bot_username):
+    try:
+        if os.path.exists(URL_CACHE_FILE):
+            with open(URL_CACHE_FILE, 'r') as f:
+                cache = json.load(f)
+                return cache.get(bot_username)
+    except:
+        pass
+    return None
+
+def get_common_urls(bot_username):
+    """Dapatkan daftar URL umum yang sering dipakai bot sejenis"""
+    name = bot_username.lstrip('@')
+    return [
+        f"https://t.me/{name}/app",
+        f"https://{name}.t.me",
+        f"https://{name}.vercel.app",
+        f"https://{name}.xyz",
+        f"https://{name}.com",
+        f"https://t.me/{name}"
+    ]
+
+async def get_webview_initdata(client, bot_username, custom_url=None):
     """Buka WebView bot dan ambil initData dari URL"""
     try:
         bot = await client.get_input_entity(bot_username)
@@ -86,18 +121,74 @@ async def get_webview_initdata(client, bot_username):
         print(f"{R}❌ Gagal menemukan bot @{bot_username}: {e}{X}")
         return None
 
-    try:
-        full_user = await client(functions.users.GetFullUserRequest(id=bot))
-        bot_info = full_user.full_user.bot_info
-        target_url = f"https://t.me/{bot_username}"
-        if bot_info and bot_info.menu_button and hasattr(bot_info.menu_button, 'url'):
-            target_url = bot_info.menu_button.url
-            print(f"{G}🔗 Auto-detected URL: {target_url}{X}")
-        else:
-            print(f"{Y}⚠️ Tidak dapat mendeteksi URL menu, menggunakan: {target_url}{X}")
-    except Exception as e:
-        print(f"{Y}⚠️ Gagal mengambil info bot: {e}{X}")
-        target_url = f"https://t.me/{bot_username}"
+    # Coba dapatkan URL dari cache
+    cached_url = load_url_cache(bot_username)
+    if cached_url:
+        print(f"{G}🔗 Menggunakan URL dari cache: {cached_url}{X}")
+        target_url = cached_url
+    elif custom_url:
+        target_url = custom_url
+        print(f"{G}🔗 Menggunakan URL yang diberikan: {target_url}{X}")
+        save_url_cache(bot_username, target_url)
+    else:
+        # Coba auto-detect dari menu button
+        try:
+            full_user = await client(functions.users.GetFullUserRequest(id=bot))
+            bot_info = full_user.full_user.bot_info
+            if bot_info and bot_info.menu_button and hasattr(bot_info.menu_button, 'url'):
+                target_url = bot_info.menu_button.url
+                print(f"{G}🔗 Auto-detected URL: {target_url}{X}")
+                save_url_cache(bot_username, target_url)
+            else:
+                # Tidak ada menu button, coba URL umum
+                print(f"{Y}⚠️ Tidak dapat mendeteksi URL menu otomatis.{X}")
+                print(f"{C}🔍 Mencoba URL umum...{X}")
+                common_urls = get_common_urls(bot_username)
+                found = False
+                for url in common_urls:
+                    print(f"{DIM}  Coba: {url}{X}")
+                    try:
+                        # Coba request WebView dengan URL ini
+                        result = await client(functions.messages.RequestWebViewRequest(
+                            peer=bot,
+                            bot=bot,
+                            platform='android',
+                            from_bot_menu=True,
+                            url=url
+                        ))
+                        # Jika berhasil, ambil initData
+                        parsed = urllib.parse.urlparse(result.url)
+                        init_data = None
+                        if parsed.fragment:
+                            params = urllib.parse.parse_qs(parsed.fragment)
+                            init_data = params.get('tgWebAppData', [None])[0]
+                        if not init_data and parsed.query:
+                            params = urllib.parse.parse_qs(parsed.query)
+                            init_data = params.get('tgWebAppData', [None])[0]
+                        if init_data:
+                            print(f"{G}✅ URL berhasil: {url}{X}")
+                            save_url_cache(bot_username, url)
+                            return init_data
+                    except Exception as e:
+                        print(f"{DIM}    Gagal: {e}{X}")
+                        continue
+                if not found:
+                    print(f"{R}❌ Semua URL umum gagal.{X}")
+                    # Minta input manual
+                    manual_url = input(f"{G}🔗 Masukkan URL WebView (contoh: https://paidadz.xyz): {X}").strip()
+                    if not manual_url:
+                        print(f"{R}❌ URL tidak boleh kosong.{X}")
+                        return None
+                    target_url = manual_url
+                    save_url_cache(bot_username, target_url)
+        except Exception as e:
+            print(f"{Y}⚠️ Gagal mengambil info bot: {e}{X}")
+            manual_url = input(f"{G}🔗 Masukkan URL WebView (contoh: https://paidadz.xyz): {X}").strip()
+            if not manual_url:
+                print(f"{R}❌ URL tidak boleh kosong.{X}")
+                return None
+            target_url = manual_url
+            save_url_cache(bot_username, target_url)
 
     print(f"{C}📱 Meminta WebView untuk @{bot_username}...{X}")
     try:
@@ -134,7 +225,6 @@ async def login_telegram():
     """Login ke Telegram, gunakan session & nomor tersimpan"""
     clear_session_if_locked()
     
-    # Cek session valid
     session_path = SESSION_FILE + ".session"
     if os.path.exists(session_path):
         try:
