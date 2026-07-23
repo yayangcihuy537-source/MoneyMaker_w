@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """
-╔══════════════════════════════════════════════════════════════╗
-║  🔑 AMBIL INIT_DATA / QUERY_ID DARI BOT TELEGRAM v1.4      ║
-║  DEVELOPED BY MoneyMaker_w                                 ║
-║  Ambil tgWebAppData (init_data) dari bot via WebView      ║
-║  📞 Nomor HP tersimpan • Auto-detect URL + fallback      ║
-║  🔓 Auto-clear session jika database terkunci             ║
-╚══════════════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════════════════════╗
+║  🔥 DARK INITDATA GRABBER + AUTO POST TO API v2.0                ║
+║  DEVELOPED BY MoneyMaker_w | FIXED BY DARK NIGHT                 ║
+║  Fitur: Auto fallback URL • Kirim langsung ke API • Simpan sesi ║
+╚══════════════════════════════════════════════════════════════════════╝
 """
 
 import asyncio
@@ -15,6 +13,7 @@ import json
 import os
 import sys
 import sqlite3
+import requests
 from telethon import TelegramClient, functions, types
 
 # ==================== WARNA ====================
@@ -29,21 +28,19 @@ API_ID = 21578873
 API_HASH = "b7562db4c393baff2f415d14a14d1f76"
 SESSION_FILE = "telegram_session_initdata"
 PHONE_FILE = "phone_number.txt"
-URL_CACHE_FILE = "webview_url_cache.json"
+TARGET_API = "https://paidadz.xyz/api/auth/telegram"  # Endpoint tujuan
 
 # ==================== BANNER ====================
 def show_banner():
     print(f"""
-{GOLD}╔══════════════════════════════════════════════════════════════╗
-║  {CYAN}🔑 AMBIL INIT_DATA / QUERY_ID DARI BOT TELEGRAM v1.4{GOLD}   ║
-║  {PINK}DEVELOPED BY MoneyMaker_w{GOLD}                              ║
-║  Ambil tgWebAppData (init_data) dari bot via WebView        ║
-║  📞 Nomor HP tersimpan • Auto-detect URL + fallback        ║
-║  🔓 Auto-clear session jika database terkunci             ║
-╚══════════════════════════════════════════════════════════════╝{X}
+{GOLD}╔══════════════════════════════════════════════════════════════════════╗
+║  {CYAN}🔥 MAKER INITDATA GRABBER + AUTO POST TO API v2.0{GOLD}             ║
+║  {PINK}DEVELOPED BY MoneyMaker_w | FIXED BY MoneyMaker_w{GOLD}              ║
+║  Auto fallback URL • Kirim langsung ke API • Simpan sesi              ║
+╚══════════════════════════════════════════════════════════════════════╝{X}
 """)
 
-# ==================== FUNGSI ====================
+# ==================== FUNGSI PENDUKUNG ====================
 def save_phone(phone):
     try:
         with open(PHONE_FILE, 'w') as f:
@@ -78,119 +75,77 @@ def clear_session_if_locked():
                     pass
     return False
 
-def save_url_cache(bot_username, url):
-    try:
-        cache = {}
-        if os.path.exists(URL_CACHE_FILE):
-            with open(URL_CACHE_FILE, 'r') as f:
-                cache = json.load(f)
-        cache[bot_username] = url
-        with open(URL_CACHE_FILE, 'w') as f:
-            json.dump(cache, f, indent=2)
-        return True
-    except:
-        return False
-
-def load_url_cache(bot_username):
-    try:
-        if os.path.exists(URL_CACHE_FILE):
-            with open(URL_CACHE_FILE, 'r') as f:
-                cache = json.load(f)
-                return cache.get(bot_username)
-    except:
-        pass
-    return None
-
-def get_common_urls(bot_username):
-    """Dapatkan daftar URL umum yang sering dipakai bot sejenis"""
-    name = bot_username.lstrip('@')
+def generate_fallback_urls(bot_name):
+    """Generate daftar URL umum yang sering dipakai bot Telegram WebApp"""
+    name = bot_name.replace('@', '').strip()
     return [
-        f"https://t.me/{name}/app",
-        f"https://{name}.t.me",
         f"https://{name}.vercel.app",
+        f"https://{name}.t.me",
+        f"https://t.me/{name}/app",
         f"https://{name}.xyz",
-        f"https://{name}.com",
-        f"https://t.me/{name}"
+        f"https://{name}.web.app"
     ]
 
+# ==================== AMBIL INITDATA ====================
 async def get_webview_initdata(client, bot_username, custom_url=None):
-    """Buka WebView bot dan ambil initData dari URL"""
+    """Buka WebView bot dengan fallback otomatis"""
     try:
         bot = await client.get_input_entity(bot_username)
     except Exception as e:
         print(f"{R}❌ Gagal menemukan bot @{bot_username}: {e}{X}")
         return None
 
-    # Coba dapatkan URL dari cache
-    cached_url = load_url_cache(bot_username)
-    if cached_url:
-        print(f"{G}🔗 Menggunakan URL dari cache: {cached_url}{X}")
-        target_url = cached_url
-    elif custom_url:
-        target_url = custom_url
-        print(f"{G}🔗 Menggunakan URL yang diberikan: {target_url}{X}")
-        save_url_cache(bot_username, target_url)
-    else:
-        # Coba auto-detect dari menu button
+    target_url = custom_url
+
+    # Jika tidak ada custom_url, coba deteksi otomatis
+    if not target_url:
+        print(f"{C}🔍 Mendeteksi URL WebView otomatis...{X}")
+        # Coba menu button resmi
         try:
             full_user = await client(functions.users.GetFullUserRequest(id=bot))
             bot_info = full_user.full_user.bot_info
             if bot_info and bot_info.menu_button and hasattr(bot_info.menu_button, 'url'):
                 target_url = bot_info.menu_button.url
-                print(f"{G}🔗 Auto-detected URL: {target_url}{X}")
-                save_url_cache(bot_username, target_url)
-            else:
-                # Tidak ada menu button, coba URL umum
-                print(f"{Y}⚠️ Tidak dapat mendeteksi URL menu otomatis.{X}")
-                print(f"{C}🔍 Mencoba URL umum...{X}")
-                common_urls = get_common_urls(bot_username)
-                found = False
-                for url in common_urls:
-                    print(f"{DIM}  Coba: {url}{X}")
-                    try:
-                        # Coba request WebView dengan URL ini
-                        result = await client(functions.messages.RequestWebViewRequest(
-                            peer=bot,
-                            bot=bot,
-                            platform='android',
-                            from_bot_menu=True,
-                            url=url
-                        ))
-                        # Jika berhasil, ambil initData
-                        parsed = urllib.parse.urlparse(result.url)
-                        init_data = None
-                        if parsed.fragment:
-                            params = urllib.parse.parse_qs(parsed.fragment)
-                            init_data = params.get('tgWebAppData', [None])[0]
-                        if not init_data and parsed.query:
-                            params = urllib.parse.parse_qs(parsed.query)
-                            init_data = params.get('tgWebAppData', [None])[0]
-                        if init_data:
-                            print(f"{G}✅ URL berhasil: {url}{X}")
-                            save_url_cache(bot_username, url)
-                            return init_data
-                    except Exception as e:
-                        print(f"{DIM}    Gagal: {e}{X}")
-                        continue
-                if not found:
-                    print(f"{R}❌ Semua URL umum gagal.{X}")
-                    # Minta input manual
-                    manual_url = input(f"{G}🔗 Masukkan URL WebView (contoh: https://paidadz.xyz): {X}").strip()
-                    if not manual_url:
-                        print(f"{R}❌ URL tidak boleh kosong.{X}")
-                        return None
-                    target_url = manual_url
-                    save_url_cache(bot_username, target_url)
+                print(f"{G}✅ Auto-detected menu URL: {target_url}{X}")
         except Exception as e:
-            print(f"{Y}⚠️ Gagal mengambil info bot: {e}{X}")
-            manual_url = input(f"{G}🔗 Masukkan URL WebView (contoh: https://paidadz.xyz): {X}").strip()
+            print(f"{Y}⚠️ Gagal ambil menu button: {e}{X}")
+
+        # Jika masih None, coba fallback URL
+        if not target_url:
+            fallbacks = generate_fallback_urls(bot_username)
+            print(f"{C}🔄 Mencoba {len(fallbacks)} URL fallback...{X}")
+            for idx, url in enumerate(fallbacks, 1):
+                print(f"  Coba {idx}: {url}")
+                try:
+                    # Tes akses URL (bisa di-skip, kita coba langsung minta WebView)
+                    test_result = await client(functions.messages.RequestWebViewRequest(
+                        peer=bot,
+                        bot=bot,
+                        platform='android',
+                        from_bot_menu=True,
+                        url=url
+                    ))
+                    # Jika berhasil sampai sini, tandanya URL valid
+                    target_url = url
+                    print(f"  {G}✅ URL berhasil: {url}{X}")
+                    break
+                except Exception as e:
+                    err_msg = str(e)
+                    if "URL" in err_msg or "invalid" in err_msg:
+                        print(f"  {R}❌ Gagal: {err_msg[:80]}...{X}")
+                    else:
+                        print(f"  {Y}⚠️ Skip: {err_msg[:60]}...{X}")
+
+        # Jika semua fallback gagal, minta manual
+        if not target_url:
+            print(f"{Y}⚠️ Semua URL otomatis gagal. Mohon input manual.{X}")
+            manual_url = input(f"{G}🔗 Masukkan URL WebView (misal: https://paidadz.xyz): {X}").strip()
             if not manual_url:
                 print(f"{R}❌ URL tidak boleh kosong.{X}")
                 return None
             target_url = manual_url
-            save_url_cache(bot_username, target_url)
 
-    print(f"{C}📱 Meminta WebView untuk @{bot_username}...{X}")
+    print(f"{C}📱 Meminta WebView ke URL: {target_url}{X}")
     try:
         result = await client(functions.messages.RequestWebViewRequest(
             peer=bot,
@@ -217,15 +172,15 @@ async def get_webview_initdata(client, bot_username, custom_url=None):
         print(f"{G}✅ initData berhasil didapat.{X}")
         return init_data
     else:
-        print(f"{R}❌ Tidak ditemukan tgWebAppData di URL WebView.{X}")
+        print(f"{R}❌ Tidak ditemukan tgWebAppData di URL.{X}")
         print(f"{DIM}URL: {result.url}{X}")
         return None
 
+# ==================== LOGIN TELEGRAM ====================
 async def login_telegram():
-    """Login ke Telegram, gunakan session & nomor tersimpan"""
     clear_session_if_locked()
-    
     session_path = SESSION_FILE + ".session"
+
     if os.path.exists(session_path):
         try:
             client = TelegramClient(SESSION_FILE, API_ID, API_HASH)
@@ -270,9 +225,54 @@ async def login_telegram():
         print(f"{R}❌ Login gagal: {e}{X}")
         return None, None
 
+# ==================== KIRIM KE API ====================
+def send_init_to_api(init_data):
+    """Kirim initData ke endpoint target dan simpan response"""
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 Chrome/150.0.7871.124 Mobile Safari/537.36 Telegram-Android/12.6.4",
+        "Origin": "https://paidadz.xyz",
+        "Referer": "https://paidadz.xyz/",
+        "Accept": "*/*",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Accept-Language": "id,id-ID;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Sec-Fetch-Site": "same-origin",
+        "Sec-Fetch-Mode": "cors"
+    }
+    payload = {"initData": init_data}
+
+    print(f"\n{C}🚀 Mengirim ke API {TARGET_API}...{X}")
+    try:
+        resp = requests.post(TARGET_API, json=payload, headers=headers, timeout=20)
+        print(f"{G}📦 Status Code: {resp.status_code}{X}")
+
+        try:
+            json_resp = resp.json()
+            print(f"{G}📨 Response JSON:{X}")
+            print(json.dumps(json_resp, indent=2, ensure_ascii=False))
+
+            # Simpan response ke file
+            with open("api_response.json", "w") as f:
+                json.dump(json_resp, f, indent=2)
+            print(f"{G}💾 Response disimpan ke api_response.json{X}")
+
+            # Cek apakah ada session token/cookie
+            if 'token' in json_resp:
+                print(f"{G}🔑 Token ditemukan: {json_resp['token'][:30]}...{X}")
+            elif 'session' in json_resp:
+                print(f"{G}🔑 Session ditemukan: {json_resp['session'][:30]}...{X}")
+        except:
+            print(f"{Y}⚠️ Response bukan JSON valid:{X}\n{resp.text[:500]}")
+
+        return resp
+    except Exception as e:
+        print(f"{R}❌ Gagal kirim ke API: {e}{X}")
+        return None
+
+# ==================== MAIN ====================
 async def main():
     show_banner()
-    print(f"{C}{'═' * 55}{X}")
+    print(f"{C}{'═' * 60}{X}")
 
     client, me = await login_telegram()
     if not client:
@@ -280,7 +280,7 @@ async def main():
         return
     print(f"{G}👤 Login sebagai: @{me.username if me.username else me.first_name}{X}")
 
-    bot_name = input(f"\n{C}🤖 Masukkan username bot (tanpa @, contoh: PepeFlowOfficialBot): {X}").strip()
+    bot_name = input(f"\n{C}🤖 Masukkan username bot (tanpa @, contoh: Paid_Adzbot): {X}").strip()
     if not bot_name:
         print(f"{R}❌ Nama bot tidak boleh kosong!{X}")
         await client.disconnect()
@@ -293,24 +293,32 @@ async def main():
 
     await client.disconnect()
 
-    if init_data:
-        print(f"\n{GOLD}{'═' * 55}{X}")
-        print(f"{G}🎯 INIT_DATA (tgWebAppData):{X}\n{init_data}")
-        print(f"{GOLD}{'═' * 55}{X}")
-
-        parsed = urllib.parse.parse_qs(init_data)
-        query_id = parsed.get('query_id', [None])[0]
-        if query_id:
-            print(f"\n{C}📌 Query ID: {G}{query_id}{X}")
-
-        save = input(f"\n{G}💾 Simpan ke file init_data.txt? (y/n): {X}").strip().lower()
-        if save == 'y':
-            with open("init_data.txt", "w") as f:
-                f.write(init_data)
-            print(f"{G}✅ init_data disimpan ke init_data.txt{X}")
-    else:
+    if not init_data:
         print(f"\n{R}❌ Gagal mendapatkan initData.{X}")
-        print(f"{Y}💡 Coba manual: buka bot di Telegram, buka WebView, lalu ambil tgWebAppData dari URL.{X}")
+        return
+
+    print(f"\n{GOLD}{'═' * 60}{X}")
+    print(f"{G}🎯 INIT_DATA (tgWebAppData):{X}\n{init_data}")
+    print(f"{GOLD}{'═' * 60}{X}")
+
+    parsed = urllib.parse.parse_qs(init_data)
+    query_id = parsed.get('query_id', [None])[0]
+    if query_id:
+        print(f"\n{C}📌 Query ID: {G}{query_id}{X}")
+
+    # Simpan ke file lokal
+    save_local = input(f"\n{G}💾 Simpan ke file init_data.txt? (y/n): {X}").strip().lower()
+    if save_local == 'y':
+        with open("init_data.txt", "w") as f:
+            f.write(init_data)
+        print(f"{G}✅ init_data disimpan ke init_data.txt{X}")
+
+    # Kirim langsung ke API
+    send_api = input(f"\n{G}🚀 Kirim langsung ke API [ Pilih No ] {TARGET_API}? (y/n): {X}").strip().lower()
+    if send_api == 'y':
+        send_init_to_api(init_data)
+
+    print(f"\n{G}✅ Ty From MoneyMaker_w !{X}")
 
 if __name__ == "__main__":
     try:
