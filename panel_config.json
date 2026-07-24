@@ -74,8 +74,8 @@
           "runner": "python3"
         },
         "6": {
-          "label": "Coming Soon",
-          "file": "",
+          "label": "BabyDogeTap",
+          "file": "tap.py",
           "runner": "python3"
         },
         "7": {
