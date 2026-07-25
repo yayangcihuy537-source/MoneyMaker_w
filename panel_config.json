@@ -79,9 +79,9 @@
           "runner": "python3"
         },
         "7": {
-          "label": "Coming Soon",
-          "file": "",
-          "runner": ""
+          "label": "DogecoinGenerator",
+          "file": "Doge.py",
+          "runner": "python3"
         },
         "8": {
           "label": "Coming Soon",
