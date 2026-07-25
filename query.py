@@ -2,7 +2,7 @@
 """
 ╔══════════════════════════════════════════════════════════════════════╗
 ║  🔥 QUERY GRABBER v2 — Ambil tgWebAppData dari Bot Manapun       ║
-║  👑 Author: MoneyMaker_w | Fix: SouGPT                          ║
+║  👑 Author: MoneyMaker_w | Fix: VoltXSou                          ║
 ║  ✅ Support semua bot • Auto fallback URL • Parse query        ║
 ║  ✅ Tampilkan user ID, query_id, auth_date, hash, dll.         ║
 ╚══════════════════════════════════════════════════════════════════════╝
