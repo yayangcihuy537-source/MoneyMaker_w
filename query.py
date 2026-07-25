@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
 ╔══════════════════════════════════════════════════════════════════════╗
-║  🔥 DARK INITDATA GRABBER + AUTO POST TO API v2.0                ║
-║  DEVELOPED BY MoneyMaker_w | FIXED BY DARK NIGHT                 ║
+║  🔥 DARK INITDATA GRABBER + AUTO POST TO API v2.0 (FIXED)        ║
+║  DEVELOPED BY MoneyMaker_w | FIXED BY SouGPT                    ║
 ║  Fitur: Auto fallback URL • Kirim langsung ke API • Simpan sesi ║
+║  ✅ Prioritas URL khusus untuk Paid_Adzbot → paidadz.xyz        ║
 ╚══════════════════════════════════════════════════════════════════════╝
 """
 
@@ -30,13 +31,19 @@ SESSION_FILE = "telegram_session_initdata"
 PHONE_FILE = "phone_number.txt"
 TARGET_API = "https://paidadz.xyz/api/auth/telegram"  # Endpoint tujuan
 
+# Daftar URL khusus untuk bot tertentu (prioritas utama)
+SPECIAL_URLS = {
+    "Paid_Adzbot": "https://paidadz.xyz",
+    # Tambahkan bot lain di sini jika perlu
+}
+
 # ==================== BANNER ====================
 def show_banner():
     print(f"""
 {GOLD}╔══════════════════════════════════════════════════════════════════════╗
-║  {CYAN}🔥 MAKER INITDATA GRABBER + AUTO POST TO API v2.0{GOLD}             ║
-║  {PINK}DEVELOPED BY MoneyMaker_w | FIXED BY MoneyMaker_w{GOLD}              ║
-║  Auto fallback URL • Kirim langsung ke API • Simpan sesi              ║
+║  {CYAN}🔥 MAKER INITDATA GRABBER + AUTO POST TO API v2.0 (FIXED){GOLD}  ║
+║  {PINK}DEVELOPED BY MoneyMaker_w | FIXED BY SouGPT{GOLD}              ║
+║  ✅ Prioritas URL khusus untuk bot populer                           ║
 ╚══════════════════════════════════════════════════════════════════════╝{X}
 """)
 
@@ -78,13 +85,26 @@ def clear_session_if_locked():
 def generate_fallback_urls(bot_name):
     """Generate daftar URL umum yang sering dipakai bot Telegram WebApp"""
     name = bot_name.replace('@', '').strip()
-    return [
+    # Jika ada di SPECIAL_URLS, taruh di awal
+    urls = []
+    if name in SPECIAL_URLS:
+        urls.append(SPECIAL_URLS[name])
+    # Tambahkan varian umum
+    urls.extend([
         f"https://{name}.vercel.app",
         f"https://{name}.t.me",
         f"https://t.me/{name}/app",
         f"https://{name}.xyz",
         f"https://{name}.web.app"
-    ]
+    ])
+    # Hapus duplikat
+    seen = set()
+    unique = []
+    for url in urls:
+        if url not in seen:
+            seen.add(url)
+            unique.append(url)
+    return unique
 
 # ==================== AMBIL INITDATA ====================
 async def get_webview_initdata(client, bot_username, custom_url=None):
@@ -100,7 +120,8 @@ async def get_webview_initdata(client, bot_username, custom_url=None):
     # Jika tidak ada custom_url, coba deteksi otomatis
     if not target_url:
         print(f"{C}🔍 Mendeteksi URL WebView otomatis...{X}")
-        # Coba menu button resmi
+        
+        # 1. Coba ambil dari menu button resmi
         try:
             full_user = await client(functions.users.GetFullUserRequest(id=bot))
             bot_info = full_user.full_user.bot_info
@@ -110,19 +131,19 @@ async def get_webview_initdata(client, bot_username, custom_url=None):
         except Exception as e:
             print(f"{Y}⚠️ Gagal ambil menu button: {e}{X}")
 
-        # Jika masih None, coba fallback URL
+        # 2. Jika gagal, coba fallback URL (dengan prioritas khusus)
         if not target_url:
             fallbacks = generate_fallback_urls(bot_username)
             print(f"{C}🔄 Mencoba {len(fallbacks)} URL fallback...{X}")
             for idx, url in enumerate(fallbacks, 1):
                 print(f"  Coba {idx}: {url}")
                 try:
-                    # Tes akses URL (bisa di-skip, kita coba langsung minta WebView)
-                    test_result = await client(functions.messages.RequestWebViewRequest(
+                    # Kita coba request WebView dengan URL ini
+                    result = await client(functions.messages.RequestWebViewRequest(
                         peer=bot,
                         bot=bot,
                         platform='android',
-                        from_bot_menu=True,
+                        from_bot_menu=False,  # tidak harus dari menu
                         url=url
                     ))
                     # Jika berhasil sampai sini, tandanya URL valid
@@ -131,12 +152,12 @@ async def get_webview_initdata(client, bot_username, custom_url=None):
                     break
                 except Exception as e:
                     err_msg = str(e)
-                    if "URL" in err_msg or "invalid" in err_msg:
+                    if "URL" in err_msg or "invalid" in err_msg or "Cannot parse" in err_msg:
                         print(f"  {R}❌ Gagal: {err_msg[:80]}...{X}")
                     else:
                         print(f"  {Y}⚠️ Skip: {err_msg[:60]}...{X}")
 
-        # Jika semua fallback gagal, minta manual
+        # 3. Jika semua fallback gagal, minta manual
         if not target_url:
             print(f"{Y}⚠️ Semua URL otomatis gagal. Mohon input manual.{X}")
             manual_url = input(f"{G}🔗 Masukkan URL WebView (misal: https://paidadz.xyz): {X}").strip()
@@ -151,7 +172,7 @@ async def get_webview_initdata(client, bot_username, custom_url=None):
             peer=bot,
             bot=bot,
             platform='android',
-            from_bot_menu=True,
+            from_bot_menu=True,  # setelah tahu URL, gunakan mode menu agar dapat initData
             url=target_url
         ))
     except Exception as e:
@@ -306,19 +327,17 @@ async def main():
     if query_id:
         print(f"\n{C}📌 Query ID: {G}{query_id}{X}")
 
-    # Simpan ke file lokal
-    save_local = input(f"\n{G}💾 Simpan ke file init_data.txt? (y/n): {X}").strip().lower()
-    if save_local == 'y':
-        with open("init_data.txt", "w") as f:
-            f.write(init_data)
-        print(f"{G}✅ init_data disimpan ke init_data.txt{X}")
+    # Simpan ke file lokal (otomatis)
+    with open("init_data.txt", "w") as f:
+        f.write(init_data)
+    print(f"{G}💾 init_data disimpan ke init_data.txt{X}")
 
     # Kirim langsung ke API
-    send_api = input(f"\n{G}🚀 Kirim langsung ke API [ Pilih No ] {TARGET_API}? (y/n): {X}").strip().lower()
+    send_api = input(f"\n{G}🚀 Kirim langsung ke API {TARGET_API}? (y/n): {X}").strip().lower()
     if send_api == 'y':
         send_init_to_api(init_data)
 
-    print(f"\n{G}✅ Ty From MoneyMaker_w !{X}")
+    print(f"\n{G}✅ Selesai! Ty From MoneyMaker_w & SouGPT{X}")
 
 if __name__ == "__main__":
     try:
