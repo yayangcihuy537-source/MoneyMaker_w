@@ -79,7 +79,7 @@
           "runner": "python3"
         },
         "7": {
-          "label": "DogecoinGenerator",
+          "label": "DogeGenerator",
           "file": "Doge.py",
           "runner": "python3"
         },
