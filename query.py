@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 ╔══════════════════════════════════════════════════════════════════════╗
-║  🔥 DARK INITDATA GRABBER + AUTO POST TO API v2.0 (FIXED)        ║
-║  DEVELOPED BY MoneyMaker_w | FIXED BY SouGPT                    ║
-║  Fitur: Auto fallback URL • Kirim langsung ke API • Simpan sesi ║
-║  ✅ Prioritas URL khusus untuk Paid_Adzbot → paidadz.xyz        ║
+║  🔥 QUERY GRABBER v2 — Ambil tgWebAppData dari Bot Manapun       ║
+║  👑 Author: MoneyMaker_w | Fix: SouGPT                          ║
+║  ✅ Support semua bot • Auto fallback URL • Parse query        ║
+║  ✅ Tampilkan user ID, query_id, auth_date, hash, dll.         ║
 ╚══════════════════════════════════════════════════════════════════════╝
 """
 
@@ -15,333 +15,201 @@ import os
 import sys
 import sqlite3
 import requests
-from telethon import TelegramClient, functions, types
+from telethon import TelegramClient, functions
 
 # ==================== WARNA ====================
-R, G, Y, B, M, C, W, X = '\033[91m', '\033[92m', '\033[93m', '\033[94m', '\033[95m', '\033[96m', '\033[97m', '\033[0m'
-GOLD = '\033[38;5;220m'
-CYAN = '\033[1;96m'
-PINK = '\033[38;5;206m'
-DIM = '\033[2;37m'
+R, G, Y, B, M, C, W, X = '\033[91m','\033[92m','\033[93m','\033[94m','\033[95m','\033[96m','\033[97m','\033[0m'
+GOLD, CYAN, PINK, DIM = '\033[38;5;220m','\033[1;96m','\033[38;5;206m','\033[2;37m'
 
-# ==================== KONFIGURASI ====================
+# ==================== KONFIG ====================
 API_ID = 21578873
 API_HASH = "b7562db4c393baff2f415d14a14d1f76"
-SESSION_FILE = "telegram_session_initdata"
-PHONE_FILE = "phone_number.txt"
-TARGET_API = "https://paidadz.xyz/api/auth/telegram"  # Endpoint tujuan
-
-# Daftar URL khusus untuk bot tertentu (prioritas utama)
-SPECIAL_URLS = {
-    "Paid_Adzbot": "https://paidadz.xyz",
-    # Tambahkan bot lain di sini jika perlu
-}
+SESSION_FILE = "telegram_session"
 
 # ==================== BANNER ====================
 def show_banner():
     print(f"""
 {GOLD}╔══════════════════════════════════════════════════════════════════════╗
-║  {CYAN}🔥 MAKER INITDATA GRABBER + AUTO POST TO API v2.0 (FIXED){GOLD}  ║
-║  {PINK}DEVELOPED BY MoneyMaker_w | FIXED BY MoneyMaker_w{GOLD}              ║
-║  ✅ Prioritas URL khusus untuk bot populer                           ║
+║  {CYAN}🔥 QUERY GRABBER v2 — Ambil tgWebAppData dari Bot Manapun{GOLD}   ║
+║  {PINK}👑 Author: MoneyMaker_w | Fix: VoltXSou{GOLD}                       ║
+║  {C}✅ Support semua bot • Auto fallback URL • Parse query{GOLD}        ║
+║  {C}✅ Tampilkan user ID, query_id, auth_date, hash, dll.{GOLD}         ║
 ╚══════════════════════════════════════════════════════════════════════╝{X}
 """)
 
-# ==================== FUNGSI PENDUKUNG ====================
-def save_phone(phone):
-    try:
-        with open(PHONE_FILE, 'w') as f:
-            f.write(phone.strip())
-        return True
-    except:
-        return False
-
-def load_phone():
-    try:
-        if os.path.exists(PHONE_FILE):
-            with open(PHONE_FILE, 'r') as f:
-                return f.read().strip()
-    except:
-        pass
-    return None
-
-def clear_session_if_locked():
+# ==================== FUNGSI ====================
+def force_clear_session():
     session_path = SESSION_FILE + ".session"
     if os.path.exists(session_path):
         try:
-            conn = sqlite3.connect(session_path, timeout=0.1)
-            conn.close()
-            return False
-        except sqlite3.OperationalError as e:
-            if "database is locked" in str(e):
-                try:
-                    os.remove(session_path)
-                    print(f"{Y}🗑️ Session file terkunci, dihapus.{X}")
-                    return True
-                except:
-                    pass
-    return False
+            os.remove(session_path)
+            print(f"{Y}🗑️ Session file terkunci dihapus.{X}")
+        except:
+            pass
 
-def generate_fallback_urls(bot_name):
-    """Generate daftar URL umum yang sering dipakai bot Telegram WebApp"""
-    name = bot_name.replace('@', '').strip()
-    # Jika ada di SPECIAL_URLS, taruh di awal
-    urls = []
-    if name in SPECIAL_URLS:
-        urls.append(SPECIAL_URLS[name])
-    # Tambahkan varian umum
-    urls.extend([
-        f"https://{name}.vercel.app",
-        f"https://{name}.t.me",
-        f"https://t.me/{name}/app",
-        f"https://{name}.xyz",
-        f"https://{name}.web.app"
-    ])
-    # Hapus duplikat
-    seen = set()
-    unique = []
-    for url in urls:
-        if url not in seen:
-            seen.add(url)
-            unique.append(url)
-    return unique
+def parse_initdata(init_data):
+    """Parse tgWebAppData menjadi dictionary"""
+    parsed = urllib.parse.parse_qs(init_data)
+    result = {}
+    for k, v in parsed.items():
+        if k == 'user':
+            try:
+                result[k] = json.loads(v[0])
+            except:
+                result[k] = v[0]
+        else:
+            result[k] = v[0] if len(v) == 1 else v
+    return result
+
+def print_parsed(data):
+    print(f"\n{CYAN}{'═' * 60}{X}")
+    print(f"{GOLD}📊 PARSED tgWebAppData:{X}")
+    for k, v in data.items():
+        if k == 'user':
+            print(f"  {G}👤 user:{X} {json.dumps(v, indent=2, ensure_ascii=False)}")
+        else:
+            print(f"  {G}{k}:{X} {v}")
+    print(f"{CYAN}{'═' * 60}{X}")
+
+def save_initdata(init_data, filename="query_data.txt"):
+    with open(filename, 'w') as f:
+        f.write(init_data)
+    print(f"{G}💾 Data disimpan ke {filename}{X}")
+
+def send_to_api(init_data, api_url=None):
+    if not api_url:
+        return
+    headers = {"Content-Type": "application/json"}
+    payload = {"initData": init_data}
+    try:
+        resp = requests.post(api_url, json=payload, headers=headers, timeout=10)
+        print(f"{G}📦 Status API: {resp.status_code}{X}")
+        try:
+            print(f"{G}📨 Response:{X}\n{json.dumps(resp.json(), indent=2, ensure_ascii=False)}")
+        except:
+            print(f"{Y}⚠️ Response bukan JSON:{X}\n{resp.text[:300]}")
+    except Exception as e:
+        print(f"{R}❌ Gagal kirim API: {e}{X}")
 
 # ==================== AMBIL INITDATA ====================
-async def get_webview_initdata(client, bot_username, custom_url=None):
-    """Buka WebView bot dengan fallback otomatis"""
-    try:
-        bot = await client.get_input_entity(bot_username)
-    except Exception as e:
-        print(f"{R}❌ Gagal menemukan bot @{bot_username}: {e}{X}")
-        return None
-
-    target_url = custom_url
-
-    # Jika tidak ada custom_url, coba deteksi otomatis
-    if not target_url:
-        print(f"{C}🔍 Mendeteksi URL WebView otomatis...{X}")
-        
-        # 1. Coba ambil dari menu button resmi
-        try:
-            full_user = await client(functions.users.GetFullUserRequest(id=bot))
-            bot_info = full_user.full_user.bot_info
-            if bot_info and bot_info.menu_button and hasattr(bot_info.menu_button, 'url'):
-                target_url = bot_info.menu_button.url
-                print(f"{G}✅ Auto-detected menu URL: {target_url}{X}")
-        except Exception as e:
-            print(f"{Y}⚠️ Gagal ambil menu button: {e}{X}")
-
-        # 2. Jika gagal, coba fallback URL (dengan prioritas khusus)
-        if not target_url:
-            fallbacks = generate_fallback_urls(bot_username)
-            print(f"{C}🔄 Mencoba {len(fallbacks)} URL fallback...{X}")
-            for idx, url in enumerate(fallbacks, 1):
-                print(f"  Coba {idx}: {url}")
-                try:
-                    # Kita coba request WebView dengan URL ini
-                    result = await client(functions.messages.RequestWebViewRequest(
-                        peer=bot,
-                        bot=bot,
-                        platform='android',
-                        from_bot_menu=False,  # tidak harus dari menu
-                        url=url
-                    ))
-                    # Jika berhasil sampai sini, tandanya URL valid
-                    target_url = url
-                    print(f"  {G}✅ URL berhasil: {url}{X}")
-                    break
-                except Exception as e:
-                    err_msg = str(e)
-                    if "URL" in err_msg or "invalid" in err_msg or "Cannot parse" in err_msg:
-                        print(f"  {R}❌ Gagal: {err_msg[:80]}...{X}")
-                    else:
-                        print(f"  {Y}⚠️ Skip: {err_msg[:60]}...{X}")
-
-        # 3. Jika semua fallback gagal, minta manual
-        if not target_url:
-            print(f"{Y}⚠️ Semua URL otomatis gagal. Mohon input manual.{X}")
-            manual_url = input(f"{G}🔗 Masukkan URL WebView (misal: https://paidadz.xyz): {X}").strip()
-            if not manual_url:
-                print(f"{R}❌ URL tidak boleh kosong.{X}")
-                return None
-            target_url = manual_url
-
-    print(f"{C}📱 Meminta WebView ke URL: {target_url}{X}")
-    try:
-        result = await client(functions.messages.RequestWebViewRequest(
-            peer=bot,
-            bot=bot,
-            platform='android',
-            from_bot_menu=True,  # setelah tahu URL, gunakan mode menu agar dapat initData
-            url=target_url
-        ))
-    except Exception as e:
-        print(f"{R}❌ Gagal meminta WebView: {e}{X}")
-        return None
-
-    parsed = urllib.parse.urlparse(result.url)
-    init_data = None
-
-    if parsed.fragment:
-        params = urllib.parse.parse_qs(parsed.fragment)
-        init_data = params.get('tgWebAppData', [None])[0]
-    if not init_data and parsed.query:
-        params = urllib.parse.parse_qs(parsed.query)
-        init_data = params.get('tgWebAppData', [None])[0]
-
-    if init_data:
-        print(f"{G}✅ initData berhasil didapat.{X}")
-        return init_data
-    else:
-        print(f"{R}❌ Tidak ditemukan tgWebAppData di URL.{X}")
-        print(f"{DIM}URL: {result.url}{X}")
-        return None
-
-# ==================== LOGIN TELEGRAM ====================
-async def login_telegram():
-    clear_session_if_locked()
-    session_path = SESSION_FILE + ".session"
-
-    if os.path.exists(session_path):
-        try:
-            client = TelegramClient(SESSION_FILE, API_ID, API_HASH)
-            await client.connect()
-            if await client.is_user_authorized():
-                print(f"{G}✅ Session Telegram ditemukan! Login otomatis.{X}")
-                return client, await client.get_me()
-            else:
-                print(f"{Y}⚠️ Session tidak valid, login ulang.{X}")
-                os.remove(session_path)
-        except Exception as e:
-            print(f"{Y}⚠️ Session error: {e}{X}")
-            if os.path.exists(session_path):
-                try: os.remove(session_path)
-                except: pass
-
-    print(f"\n{C}📱 Login ke Telegram diperlukan.{X}")
-    saved_phone = load_phone()
-    if saved_phone:
-        print(f"{G}📞 Menggunakan nomor tersimpan: {saved_phone}{X}")
-        phone = saved_phone
-    else:
-        phone = input(f"{G}📞 Masukkan nomor HP (dengan kode negara, +628...): {X}").strip()
-        if not phone:
-            print(f"{R}❌ Nomor HP tidak boleh kosong.{X}")
-            return None, None
-
+async def get_initdata_from_bot(bot_username, custom_url=None):
+    force_clear_session()
     client = TelegramClient(SESSION_FILE, API_ID, API_HASH)
     await client.connect()
 
-    try:
-        await client.send_code_request(phone)
-        code = input(f"{G}🔑 Masukkan kode OTP yang dikirim ke Telegram: {X}").strip()
-        if not code:
-            print(f"{R}❌ Kode OTP tidak boleh kosong.{X}")
-            return None, None
-        await client.sign_in(phone, code)
-        save_phone(phone)
-        print(f"{G}✅ Login sukses! Session tersimpan.{X}")
-        return client, await client.get_me()
-    except Exception as e:
-        print(f"{R}❌ Login gagal: {e}{X}")
-        return None, None
-
-# ==================== KIRIM KE API ====================
-def send_init_to_api(init_data):
-    """Kirim initData ke endpoint target dan simpan response"""
-    headers = {
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 Chrome/150.0.7871.124 Mobile Safari/537.36 Telegram-Android/12.6.4",
-        "Origin": "https://paidadz.xyz",
-        "Referer": "https://paidadz.xyz/",
-        "Accept": "*/*",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Accept-Language": "id,id-ID;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Sec-Fetch-Site": "same-origin",
-        "Sec-Fetch-Mode": "cors"
-    }
-    payload = {"initData": init_data}
-
-    print(f"\n{C}🚀 Mengirim ke API {TARGET_API}...{X}")
-    try:
-        resp = requests.post(TARGET_API, json=payload, headers=headers, timeout=20)
-        print(f"{G}📦 Status Code: {resp.status_code}{X}")
-
+    if not await client.is_user_authorized():
+        print(f"{C}📱 Login Telegram diperlukan.{X}")
+        phone = input(f"{G}📞 Nomor HP (+628...): {X}").strip()
+        if not phone:
+            print(f"{R}❌ Nomor kosong.{X}")
+            await client.disconnect()
+            return None
         try:
-            json_resp = resp.json()
-            print(f"{G}📨 Response JSON:{X}")
-            print(json.dumps(json_resp, indent=2, ensure_ascii=False))
+            await client.send_code_request(phone)
+            code = input(f"{G}🔑 Kode OTP: {X}").strip()
+            await client.sign_in(phone, code)
+            print(f"{G}✅ Login sukses.{X}")
+        except Exception as e:
+            print(f"{R}❌ Login gagal: {e}{X}")
+            await client.disconnect()
+            return None
 
-            # Simpan response ke file
-            with open("api_response.json", "w") as f:
-                json.dump(json_resp, f, indent=2)
-            print(f"{G}💾 Response disimpan ke api_response.json{X}")
-
-            # Cek apakah ada session token/cookie
-            if 'token' in json_resp:
-                print(f"{G}🔑 Token ditemukan: {json_resp['token'][:30]}...{X}")
-            elif 'session' in json_resp:
-                print(f"{G}🔑 Session ditemukan: {json_resp['session'][:30]}...{X}")
-        except:
-            print(f"{Y}⚠️ Response bukan JSON valid:{X}\n{resp.text[:500]}")
-
-        return resp
-    except Exception as e:
-        print(f"{R}❌ Gagal kirim ke API: {e}{X}")
+    try:
+        bot = await client.get_input_entity(bot_username)
+    except:
+        print(f"{R}❌ Bot @{bot_username} tidak ditemukan.{X}")
+        await client.disconnect()
         return None
+
+    # Daftar URL yang dicoba
+    urls = []
+    if custom_url:
+        urls.append(custom_url)
+    name = bot_username.replace('@', '').strip()
+    urls += [
+        f"https://{name}.xyz",
+        f"https://{name}.vercel.app",
+        f"https://{name}.t.me",
+        f"https://t.me/{name}/app"
+    ]
+    # Hapus duplikat
+    seen = set()
+    unique = []
+    for u in urls:
+        if u not in seen:
+            seen.add(u)
+            unique.append(u)
+
+    init_data = None
+    for url in unique:
+        print(f"{C}🔗 Mencoba: {url}{X}")
+        try:
+            result = await client(functions.messages.RequestWebViewRequest(
+                peer=bot,
+                bot=bot,
+                platform='android',
+                from_bot_menu=True,
+                url=url
+            ))
+            parsed = urllib.parse.urlparse(result.url)
+            if parsed.fragment:
+                params = urllib.parse.parse_qs(parsed.fragment)
+                init_data = params.get('tgWebAppData', [None])[0]
+            if not init_data and parsed.query:
+                params = urllib.parse.parse_qs(parsed.query)
+                init_data = params.get('tgWebAppData', [None])[0]
+            if init_data:
+                print(f"{G}✅ Berhasil dari {url}{X}")
+                break
+        except Exception as e:
+            print(f"{Y}⚠️ Gagal: {str(e)[:60]}{X}")
+
+    await client.disconnect()
+    return init_data
 
 # ==================== MAIN ====================
 async def main():
     show_banner()
     print(f"{C}{'═' * 60}{X}")
 
-    client, me = await login_telegram()
-    if not client:
-        print(f"{R}❌ Gagal login. Keluar.{X}")
+    bot = input(f"{G}🤖 Masukkan username bot (tanpa @, contoh: MyBot): {X}").strip()
+    if not bot:
+        print(f"{R}❌ Bot username tidak boleh kosong.{X}")
         return
-    print(f"{G}👤 Login sebagai: @{me.username if me.username else me.first_name}{X}")
+    if not bot.startswith('@'):
+        bot = '@' + bot
 
-    bot_name = input(f"\n{C}🤖 Masukkan username bot (tanpa @, contoh: Paid_Adzbot): {X}").strip()
-    if not bot_name:
-        print(f"{R}❌ Nama bot tidak boleh kosong!{X}")
-        await client.disconnect()
-        return
-    if not bot_name.startswith('@'):
-        bot_name = '@' + bot_name
+    custom = input(f"{G}🔗 URL khusus (opsional, Enter untuk auto): {X}").strip()
+    custom = custom if custom else None
 
-    print(f"\n{C}🔍 Mengambil initData dari bot {bot_name}...{X}")
-    init_data = await get_webview_initdata(client, bot_name)
-
-    await client.disconnect()
+    print(f"\n{C}🔍 Mengambil tgWebAppData dari {bot}...{X}")
+    init_data = await get_initdata_from_bot(bot, custom)
 
     if not init_data:
-        print(f"\n{R}❌ Gagal mendapatkan initData.{X}")
-        return
+        print(f"{Y}⚠️ Gagal otomatis. Masukkan manual.{X}")
+        init_data = input(f"{G}📝 Paste tgWebAppData lengkap: {X}").strip()
+        if not init_data:
+            print(f"{R}❌ Data kosong. Keluar.{X}")
+            return
+
+    # Parse dan tampilkan
+    parsed = parse_initdata(init_data)
+    print_parsed(parsed)
+
+    # Simpan
+    save_initdata(init_data, "query_data.txt")
+
+    # Opsi kirim ke API (jika ada)
+    api_url = input(f"\n{G}🚀 Kirim ke API? (masukkan URL atau Enter skip): {X}").strip()
+    if api_url:
+        send_to_api(init_data, api_url)
 
     print(f"\n{GOLD}{'═' * 60}{X}")
-    print(f"{G}🎯 INIT_DATA (tgWebAppData):{X}\n{init_data}")
-    print(f"{GOLD}{'═' * 60}{X}")
-
-    parsed = urllib.parse.parse_qs(init_data)
-    query_id = parsed.get('query_id', [None])[0]
-    if query_id:
-        print(f"\n{C}📌 Query ID: {G}{query_id}{X}")
-
-    # Simpan ke file lokal (otomatis)
-    with open("init_data.txt", "w") as f:
-        f.write(init_data)
-    print(f"{G}💾 init_data disimpan ke init_data.txt{X}")
-
-    # Kirim langsung ke API
-    send_api = input(f"\n{G}🚀 Kirim langsung ke API {TARGET_API}? (y/n): {X}").strip().lower()
-    if send_api == 'y':
-        send_init_to_api(init_data)
-
-    print(f"\n{G}✅ Selesai! Ty From MoneyMaker_w & SouGPT{X}")
+    print(f"{G}✅ Selesai! Data tersimpan di query_data.txt{X}")
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print(f"\n{Y}⚠️ Dihentikan oleh user.{X}")
+        print(f"\n{Y}⚠️ Dibatalkan.{X}")
         sys.exit(0)
