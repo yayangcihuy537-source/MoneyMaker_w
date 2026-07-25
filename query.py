@@ -42,7 +42,7 @@ def show_banner():
     print(f"""
 {GOLD}╔══════════════════════════════════════════════════════════════════════╗
 ║  {CYAN}🔥 MAKER INITDATA GRABBER + AUTO POST TO API v2.0 (FIXED){GOLD}  ║
-║  {PINK}DEVELOPED BY MoneyMaker_w | FIXED BY SouGPT{GOLD}              ║
+║  {PINK}DEVELOPED BY MoneyMaker_w | FIXED BY MoneyMaker_w{GOLD}              ║
 ║  ✅ Prioritas URL khusus untuk bot populer                           ║
 ╚══════════════════════════════════════════════════════════════════════╝{X}
 """)
