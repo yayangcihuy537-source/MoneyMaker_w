@@ -20,7 +20,7 @@
         },
         "4": {
           "label": "Coming Soon",
-          "file": "ClaimCoin",
+          "file": "ClaimCoin.zip",
           "runner": "python3"
         }
       }
