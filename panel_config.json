@@ -19,9 +19,9 @@
           "runner": "php"
         },
         "4": {
-          "label": "",
-          "file": "",
-          "runner": ""
+          "label": "Coming Soon",
+          "file": "ClaimCoin",
+          "runner": "python3"
         }
       }
     },
