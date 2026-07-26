@@ -39,9 +39,9 @@ def print_banner():
     print(CYAN + "╚════════════════════════════════════════════════════════════╝" + RESET)
 
 # ============================================================
-# KONFIGURASI (Hardcode biar gak ribet)
+# KONFIGURASI DEFAULT (Hardcode)
 # ============================================================
-CONFIG = {
+DEFAULT_CONFIG = {
     "base_url": "https://claimcrypto.in",
     "coins": ["ltc", "doge", "trx", "sol", "usdt", "dash", "bch", "dgb", "eth", "fey", "zec", "bnb"],
     "default_coin": "ltc",
@@ -55,8 +55,24 @@ CONFIG = {
     ]
 }
 
-# Settings (bakal disimpan ke file settings.json biar inget)
+CONFIG_FILE = 'config.json'
 SETTINGS_FILE = 'settings.json'
+
+def load_config():
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, 'r') as f:
+                user_config = json.load(f)
+                merged = DEFAULT_CONFIG.copy()
+                merged.update(user_config)
+                return merged
+        except:
+            pass
+    return DEFAULT_CONFIG
+
+# ============================================================
+# SETTINGS (User data - saved to file)
+# ============================================================
 DEFAULT_SETTINGS = {
     "email": "",
     "coin": "ltc",
@@ -85,8 +101,9 @@ def clear_screen():
 # ============================================================
 class ClaimCryptoBot:
     def __init__(self):
+        self.config = load_config()
         self.settings = load_settings()
-        self.base_url = CONFIG['base_url']
+        self.base_url = self.config['base_url']
         self.session = requests.Session()
         self.logged_in = False
         self.csrf_token = None
@@ -114,7 +131,7 @@ class ClaimCryptoBot:
         self.session.headers.update(headers)
 
     def _apply_user_agent(self):
-        ua_list = CONFIG.get('user_agents', [])
+        ua_list = self.config.get('user_agents', [])
         idx = self.settings.get('user_agent_index', 0)
         ua = ua_list[idx] if 0 <= idx < len(ua_list) else ua_list[0]
         self.session.headers.update({'User-Agent': ua})
@@ -137,8 +154,8 @@ class ClaimCryptoBot:
         save_settings(self.settings)
 
     def _random_delay(self, min_sec=None, max_sec=None):
-        min_delay = min_sec or CONFIG.get('min_delay', 6)
-        max_delay = max_sec or CONFIG.get('max_delay', 11)
+        min_delay = min_sec or self.config.get('min_delay', 6)
+        max_delay = max_sec or self.config.get('max_delay', 11)
         jitter = random.uniform(0, 1.5)
         return random.uniform(min_delay, max_delay) + jitter
 
@@ -160,17 +177,38 @@ class ClaimCryptoBot:
         return self.session.cookies.get('csrf_cookie_name')
 
     def _extract_token(self, html):
+        """Extract token with many patterns - fixed version"""
         patterns = [
             r'name="token"\s*value="([^"]+)"',
             r'token\s*=\s*"([^"]+)"',
             r'<input[^>]*name="token"[^>]*value="([^"]+)"',
             r'var\s+token\s*=\s*"([^"]+)"',
+            r'token\s*=\s*\'([^\']+)\'',
             r'token=([a-zA-Z0-9]+)',
+            r'"token":"([^"]+)"',
+            r'token":"([^"]+)"',
+            r'["\']token["\']\s*:\s*["\']([^"\']+)["\']',
+            r'<script[^>]*>.*?token\s*=\s*["\']([^"\']+)["\']',
         ]
         for p in patterns:
-            m = re.search(p, html)
+            m = re.search(p, html, re.IGNORECASE | re.DOTALL)
             if m:
                 return m.group(1)
+        
+        # Cari di semua input hidden
+        hidden_inputs = re.findall(
+            r'<input[^>]*type="hidden"[^>]*name="([^"]+)"[^>]*value="([^"]+)"',
+            html,
+            re.IGNORECASE
+        )
+        for name, value in hidden_inputs:
+            if 'token' in name.lower():
+                return value
+        
+        # Fallback: ambil dari cookie csrf
+        if 'csrf_cookie_name' in self.session.cookies:
+            return self.session.cookies.get('csrf_cookie_name')
+        
         return None
 
     def login(self, email):
@@ -209,38 +247,95 @@ class ClaimCryptoBot:
             return False
 
     def get_faucet_page(self, coin):
+        """Get faucet page with retry and better token extraction"""
         coin = coin.lower()
         url = f'{self.base_url}/faucet/currency/{coin}'
-        try:
-            headers = {'Referer': f'{self.base_url}/', 'Sec-Fetch-Site': 'same-origin', 'Sec-Fetch-Mode': 'navigate', 'Sec-Fetch-Dest': 'document'}
-            self.session.headers.update(headers)
-            resp = self.session.get(url)
-            time.sleep(self._random_delay(2, 5))
-            if resp.status_code != 200:
-                self._log(f"Failed to get faucet page: {resp.status_code}", Fore.RED, '❌')
-                return None
-            csrf = self._extract_csrf(resp.text)
-            if csrf:
-                self.csrf_token = csrf
-            token = self._extract_token(resp.text)
-            return {'html': resp.text, 'csrf': self.csrf_token, 'token': token}
-        except Exception as e:
-            self._log(f"Error: {str(e)}", Fore.RED, '❌')
-            return None
+        
+        for attempt in range(3):
+            try:
+                headers = {
+                    'Referer': f'{self.base_url}/',
+                    'Sec-Fetch-Site': 'same-origin',
+                    'Sec-Fetch-Mode': 'navigate',
+                    'Sec-Fetch-Dest': 'document',
+                }
+                self.session.headers.update(headers)
+                resp = self.session.get(url)
+                
+                # Delay lebih panjang biar page fully loaded
+                time.sleep(self._random_delay(4, 7))
+                
+                if resp.status_code != 200:
+                    self._log(f"Failed to get faucet page: {resp.status_code}", Fore.RED, '❌')
+                    continue
+                
+                csrf = self._extract_csrf(resp.text)
+                if csrf:
+                    self.csrf_token = csrf
+                
+                token = self._extract_token(resp.text)
+                
+                # Kalau token gak ketemu, coba refresh session
+                if not token:
+                    self._log("Token not found, refreshing session...", Fore.YELLOW, '🔄')
+                    # Refresh session dengan GET ulang
+                    resp2 = self.session.get(f'{self.base_url}/')
+                    time.sleep(self._random_delay(2, 4))
+                    csrf2 = self._extract_csrf(resp2.text)
+                    if csrf2:
+                        self.csrf_token = csrf2
+                    token = self._extract_token(resp2.text)
+                
+                if token:
+                    return {
+                        'html': resp.text,
+                        'csrf': self.csrf_token,
+                        'token': token,
+                        'cookies': self.session.cookies.get_dict()
+                    }
+                
+                self._log(f"Attempt {attempt+1}/3 failed to get token", Fore.YELLOW, '⏳')
+                time.sleep(self._random_delay(3, 5))
+                
+            except Exception as e:
+                self._log(f"Error: {str(e)}", Fore.RED, '❌')
+                time.sleep(self._random_delay(3, 5))
+        
+        return None
 
     def claim_faucet(self, coin, wallet):
         coin = coin.lower()
         self._log(f"Claiming {coin.upper()}...", Fore.YELLOW, '💧')
-        page = self.get_faucet_page(coin)
-        if not page:
+        
+        # Coba ambil token dengan retry
+        for attempt in range(2):
+            page = self.get_faucet_page(coin)
+            if not page:
+                if attempt == 0:
+                    self._log("Retrying to get faucet page...", Fore.YELLOW, '🔄')
+                    time.sleep(self._random_delay(3, 5))
+                    continue
+                return False, None
+            
+            csrf = page.get('csrf') or self.csrf_token
+            token = page.get('token')
+            
+            if token:
+                break
+            else:
+                self._log(f"Token not found, attempt {attempt+1}/2", Fore.YELLOW, '⏳')
+                time.sleep(self._random_delay(3, 5))
+        else:
+            self._log("Token not found after retries", Fore.RED, '❌')
             return False, None
-        csrf = page.get('csrf') or self.csrf_token
-        token = page.get('token')
-        if not token:
-            self._log("Token not found", Fore.RED, '❌')
-            return False, None
-        data = {'csrf_token_name': csrf, 'token': token, 'wallet': wallet}
+        
+        data = {
+            'csrf_token_name': csrf,
+            'token': token,
+            'wallet': wallet
+        }
         url = f'{self.base_url}/faucet/verify/{coin}'
+        
         try:
             headers = {
                 'Origin': self.base_url,
@@ -255,10 +350,13 @@ class ClaimCryptoBot:
             self.session.headers.update(headers)
             if self.ci_session:
                 self.session.cookies.set('ci_session', self.ci_session)
+            
             resp = self.session.post(url, data=data)
             time.sleep(self._random_delay(4, 7))
+            
             self.stats['total'] += 1
             reward = None
+            
             if resp.status_code == 200:
                 if 'success' in resp.text.lower() or 'claim' in resp.text.lower():
                     self.stats['success'] += 1
@@ -271,7 +369,7 @@ class ClaimCryptoBot:
                     return False, None
                 else:
                     self.stats['failed'] += 1
-                    self._log("Claim failed", Fore.RED, '❌')
+                    self._log("Claim failed - unknown response", Fore.RED, '❌')
                     return False, None
             else:
                 self.stats['failed'] += 1
@@ -370,7 +468,7 @@ def menu_set_email(bot):
 def menu_set_coin(bot):
     clear_screen()
     print_banner()
-    coins = CONFIG.get('coins', [])
+    coins = bot.config.get('coins', [])
     current = bot.settings.get('coin', 'ltc')
     print(f"{CYAN}Current Coin: {YELLOW}{current.upper()}{RESET}\n")
     print(f"{CYAN}Available coins:{RESET}")
@@ -391,7 +489,7 @@ def menu_set_coin(bot):
 def menu_set_user_agent(bot):
     clear_screen()
     print_banner()
-    ua_list = CONFIG.get('user_agents', [])
+    ua_list = bot.config.get('user_agents', [])
     current_idx = bot.settings.get('user_agent_index', 0)
     print(f"{CYAN}Current User-Agent:{RESET}")
     if 0 <= current_idx < len(ua_list):
@@ -445,7 +543,7 @@ def menu_login_start(bot):
         print(f"{RED}Invalid, using default.{RESET}")
     clear_screen()
     print_banner()
-    print_claim_status(coin, target, 0, CONFIG.get('min_delay',6), CONFIG.get('max_delay',11), "Starting...")
+    print_claim_status(coin, target, 0, bot.config.get('min_delay',6), bot.config.get('max_delay',11), "Starting...")
     print("\n" + "━"*50)
     bot.run_auto_claim(email, coin, target)
     input(f"\n{CYAN}Press Enter to continue...{RESET}")
