@@ -252,6 +252,7 @@ class BabyDogeBot:
         self.log("🔄 Refresh tapToken...", "INFO")
         return self.init()
 
+    # ==================== TAP - FIXED ====================
     def tap(self, taps: int = 10) -> bool:
         if not self.ensure_token():
             return False
@@ -281,9 +282,15 @@ class BabyDogeBot:
             return True
         else:
             error = result.get('error') if result else 'No response'
-            if 'cooldown' in str(error).lower():
+            # === THROTTLE DETECTION ===
+            if 'throttle' in str(error).lower() or 'too many' in str(error).lower():
+                wait = random.randint(30, 60)
+                self.log(f"⏳ Rate limited! Tunggu {wait} detik...", "WARNING")
+                countdown_timer(wait, "⏳ Cooldown")
+                return False  # jangan re-init, coba lagi setelah jeda
+            elif 'cooldown' in str(error).lower():
                 self.log(f"⏳ Tap cooldown", "WARNING")
-                time.sleep(random_delay(5, 15))
+                time.sleep(random_delay(10, 20))
                 return False
             elif 'stale' in str(error).lower() or 'tapToken' in str(error).lower():
                 self.log(f"⚠️ Stale tap session, refresh tapToken...", "WARNING")
@@ -297,6 +304,36 @@ class BabyDogeBot:
             else:
                 self.log(f"❌ Tap failed: {error}", "ERROR")
                 return False
+
+    # ==================== TAP BATCH - FIXED ====================
+    def tap_batch(self):
+        """Lakukan tap dalam batch dengan jeda manusiawi"""
+        batch_size = self.batch_size
+        if batch_size <= 0:
+            batch_size = 50
+
+        taps_done_in_batch = 0
+        while taps_done_in_batch < batch_size:
+            if self.energy <= 0:
+                self.log(f"⏳ Energy habis ({self.energy}), tunggu 60 detik...", "WARNING")
+                time.sleep(60)
+                self.init()
+                continue
+
+            # Tap 3‑7 kali per request (manusiawi)
+            t = random.randint(3, 7)
+            if taps_done_in_batch + t > batch_size:
+                t = batch_size - taps_done_in_batch
+
+            self.tap(t)
+            taps_done_in_batch += t
+
+            # Jeda 1.5‑3.5 detik antar request (manusiawi)
+            if taps_done_in_batch < batch_size:
+                jeda = random.uniform(1.5, 3.5)
+                time.sleep(jeda)
+
+        self.log(f"✅ Batch {batch_size} taps selesai", "SUCCESS")
 
     def claim_streak(self) -> bool:
         if not self.ensure_token():
@@ -571,37 +608,6 @@ class BabyDogeBot:
 ╚══════════════════════════════════════════════════════════╝{RESET}
 """)
 
-    # ==================== TAP BATCH MODE ====================
-    def tap_batch(self):
-        """Lakukan tap dalam batch tanpa jeda antar request"""
-        batch_size = self.batch_size
-        if batch_size <= 0:
-            batch_size = 50
-
-        taps_done_in_batch = 0
-        while taps_done_in_batch < batch_size:
-            # Cek energy
-            if self.energy <= 0:
-                self.log(f"⏳ Energy habis ({self.energy}), tunggu 60 detik...", "WARNING")
-                time.sleep(60)
-                self.init()
-                continue
-
-            # Tentukan jumlah tap per request (5-15)
-            t = random.randint(5, 15)
-            if taps_done_in_batch + t > batch_size:
-                t = batch_size - taps_done_in_batch
-
-            self.tap(t)
-            taps_done_in_batch += t
-
-            # Jeda kecil 0.3-0.8 detik antar request dalam batch (agar tidak terlalu cepat)
-            if taps_done_in_batch < batch_size:
-                time.sleep(random.uniform(0.3, 0.8))
-
-        # Selesai batch, update status
-        self.log(f"✅ Batch {batch_size} taps selesai", "SUCCESS")
-
     def auto_tap_unlimited(self):
         tap_limit = self.tap_limit
         if tap_limit > 0:
@@ -617,28 +623,23 @@ class BabyDogeBot:
         total_taps_done = 0
         try:
             while True:
-                # Cek limit
                 if tap_limit > 0 and total_taps_done >= tap_limit:
                     self.log(f"✅ Tap limit ({tap_limit}) tercapai! Selesai.", "SUCCESS")
                     break
 
-                # Cek energy
                 if self.energy <= 0:
                     self.log(f"⏳ Energy habis ({self.energy}), tunggu 60 detik...", "WARNING")
                     time.sleep(60)
                     self.init()
                     continue
 
-                # Jalankan batch
                 self.tap_batch()
                 total_taps_done += self.batch_size
 
-                # Cek limit setelah batch
                 if tap_limit > 0 and total_taps_done >= tap_limit:
                     self.log(f"✅ Tap limit ({tap_limit}) tercapai! Selesai.", "SUCCESS")
                     break
 
-                # Jeda antar batch
                 delay = random.uniform(self.batch_delay_min, self.batch_delay_max)
                 self.log(f"⏳ Jeda batch {delay:.1f} detik... ({total_taps_done}/{tap_limit if tap_limit > 0 else '∞'})", "DIM")
                 time.sleep(delay)
