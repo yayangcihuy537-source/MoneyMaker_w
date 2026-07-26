@@ -667,62 +667,6 @@ class BabyDogeBot:
         self.show_status()
         self.log("✅ AUTO CLAIM DONE", "SUCCESS")
 
-    def auto_all(self):
-        self.log("🚀 ALL MODE START", "SUCCESS")
-        self.log("⏹️  Tekan Ctrl+C untuk berhenti", "WARNING")
-
-        if not self.init():
-            self.log("❌ Init failed", "ERROR")
-            return
-
-        try:
-            cycle = 0
-            while True:
-                cycle += 1
-                self.log(f"🔄 CYCLE #{cycle}", "INFO")
-
-                # Claim dulu
-                self.claim_streak()
-                time.sleep(random_delay(1, 3))
-
-                self.spin()
-                time.sleep(random_delay(1, 3))
-
-                self.claim_tasks()
-                time.sleep(random_delay(1, 3))
-
-                # Tap pakai batch
-                max_taps = self.tap_limit if self.tap_limit > 0 else 50
-                self.log(f"👆 Tap {max_taps}x (batch mode)...", "INFO")
-                total_done = 0
-                while total_done < max_taps:
-                    if self.energy <= 0:
-                        self.log(f"⏳ Energy habis ({self.energy}), tunggu 60 detik...", "WARNING")
-                        time.sleep(60)
-                        self.init()
-                        continue
-
-                    # Berapa batch size yang bisa dipakai
-                    batch_now = min(self.batch_size, max_taps - total_done)
-                    # Set batch size sementara
-                    original_batch = self.batch_size
-                    self.batch_size = batch_now
-                    self.tap_batch()
-                    self.batch_size = original_batch
-                    total_done += batch_now
-                    if total_done < max_taps:
-                        time.sleep(random.uniform(0.5, 2))
-
-                self.show_status()
-
-                wait = random.randint(5, 10)
-                self.log(f"⏳ Tunggu {wait} menit...", "INFO")
-                time.sleep(wait * 60)
-
-        except KeyboardInterrupt:
-            self.log("🛑 ALL MODE dihentikan", "WARNING")
-            self.show_status()
-
 # ==================== MENU ====================
 def menu():
     config = Config()
@@ -736,12 +680,11 @@ def menu():
 ╠════════════════════════════════════════════════════════════╣
 ║  {GREEN}[1]{RESET} 👆 Auto Tap (Batch Mode)                     ║
 ║  {YELLOW}[2]{RESET} 🎯 Auto Claim (Streak + Spin + Tasks)       ║
-║  {PURPLE}[3]{RESET} 🚀 ALL (Tap Batch + Claim)                   ║
-║  {CYAN}[4]{RESET} 📝 Set InitData                               ║
-║  {BLUE}[5]{RESET} 📊 Check Balance                              ║
-║  {LIME}[6]{RESET} 📊 Set Tap Limit                              ║
-║  {GOLD}[7]{RESET} 💸 Withdraw (Set Address + Nominal)           ║
-║  {PINK}[8]{RESET} ⚙️ Set Tap Batch (Size + Jeda)                ║
+║  {CYAN}[3]{RESET} 📝 Set InitData                               ║
+║  {BLUE}[4]{RESET} 📊 Check Balance                              ║
+║  {LIME}[5]{RESET} 📊 Set Tap Limit                              ║
+║  {GOLD}[6]{RESET} 💸 Withdraw (Set Address + Nominal)           ║
+║  {PINK}[7]{RESET} ⚙️ Set Tap Batch (Size + Jeda)                ║
 ║  {RED}[0]{RESET} ❌ Exit                                        ║
 ╚════════════════════════════════════════════════════════════╝{RESET}
 """)
@@ -771,7 +714,7 @@ def menu():
 
         elif choice == '1':
             if not config.init_data:
-                print(f"{RED}❌ InitData belum diset. Set dulu (menu 4).{RESET}")
+                print(f"{RED}❌ InitData belum diset. Set dulu (menu 3).{RESET}")
                 input("Tekan Enter untuk kembali...")
                 continue
             bot = BabyDogeBot(config.init_data, config.tap_limit, config.withdraw_address,
@@ -781,7 +724,7 @@ def menu():
 
         elif choice == '2':
             if not config.init_data:
-                print(f"{RED}❌ InitData belum diset. Set dulu (menu 4).{RESET}")
+                print(f"{RED}❌ InitData belum diset. Set dulu (menu 3).{RESET}")
                 input("Tekan Enter untuk kembali...")
                 continue
             bot = BabyDogeBot(config.init_data, config.tap_limit, config.withdraw_address,
@@ -790,16 +733,6 @@ def menu():
             input("Tekan Enter untuk kembali ke menu...")
 
         elif choice == '3':
-            if not config.init_data:
-                print(f"{RED}❌ InitData belum diset. Set dulu (menu 4).{RESET}")
-                input("Tekan Enter untuk kembali...")
-                continue
-            bot = BabyDogeBot(config.init_data, config.tap_limit, config.withdraw_address,
-                             config.tap_batch_size, config.tap_batch_delay_min, config.tap_batch_delay_max)
-            bot.auto_all()
-            input("Tekan Enter untuk kembali ke menu...")
-
-        elif choice == '4':
             print(f"{YELLOW}📝 Masukkan InitData dari Reqable:{RESET}")
             print(f"{DIM}Copy dari body request POST /v1/game/init{RESET}")
             qid = input("InitData: ").strip()
@@ -811,7 +744,7 @@ def menu():
                 print(f"{RED}❌ InitData tidak boleh kosong!{RESET}")
             input("Tekan Enter untuk kembali...")
 
-        elif choice == '5':
+        elif choice == '4':
             if not config.init_data:
                 print(f"{RED}❌ InitData belum diset.{RESET}")
             else:
@@ -820,7 +753,7 @@ def menu():
                 bot.check_balance()
             input("Tekan Enter untuk kembali...")
 
-        elif choice == '6':
+        elif choice == '5':
             print(f"{LIME}📊 Set Tap Limit:{RESET}")
             print(f"{DIM}0 = Unlimited, 50 = 50 taps per sesi, dst{RESET}")
             limit = input(f"Masukkan limit: ").strip()
@@ -832,7 +765,7 @@ def menu():
                 print(f"{RED}❌ Masukkan angka!{RESET}")
             input("Tekan Enter untuk kembali...")
 
-        elif choice == '7':
+        elif choice == '6':
             if not config.init_data:
                 print(f"{RED}❌ InitData belum diset.{RESET}")
             else:
@@ -841,7 +774,7 @@ def menu():
                 bot.withdraw_menu()
             input("Tekan Enter untuk kembali...")
 
-        elif choice == '8':
+        elif choice == '7':
             print(f"{PINK}⚙️ Set Tap Batch:{RESET}")
             print(f"{DIM}Contoh: batch 50, jeda 3-7 detik{RESET}")
 
