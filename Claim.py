@@ -35,7 +35,7 @@ def print_banner():
     print(CYAN + "╠════════════════════════════════════════════════════════════╣")
     print(GREEN + "  💰 AUTO CLAIM • AUTO FAUCET • AUTO LOGIN")
     print(YELLOW + "  ⚡ Fast • Faucet • Login")
-    print(RED + "  👨‍💻 Developer : @MoneyMaker_w")
+    print(RED + "  👨‍💻 Developer : @MoneyMaker_w   [ FIXED TOKEN ] ")
     print(CYAN + "╚════════════════════════════════════════════════════════════╝" + RESET)
 
 # ============================================================
