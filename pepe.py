@@ -2,11 +2,12 @@
 # -*- coding: utf-8 -*-
 """
 ╔══════════════════════════════════════════════════════════╗
-║  🐸 PEPEFLOW AUTO-BOT V3.5 (FIXED BALANCE & ERRORS)   ║
+║  🐸 PEPEFLOW AUTO-BOT V3.6 (NO FLIP)                 ║
 ║  DEVELOPED BY MoneyMaker_w                             ║
 ║  📱 @PepeFlowOfficialBot                               ║
 ║  🔄 Auto-reauth via /actions/tg_auth.php               ║
 ║  🛡️ Handle "2x bonus window expired" & balance comma  ║
+║  ❌ REMOVED: FLIP (tidak tersedia di PepeFlow)       ║
 ╚══════════════════════════════════════════════════════════╝
 """
 
@@ -49,10 +50,9 @@ LOOP_DELAY = 3
 GAME_MAP = {
     "lucky_wheel": {"display": "SPIN",    "icon": "🎡"},
     "slots":       {"display": "TAP",     "icon": "🎰"},
-    "card_flip":   {"display": "FLIP",    "icon": "🎴"},
     "mystery_box": {"display": "NEON",    "icon": "🎁"},
 }
-ALL_GAMES = ["lucky_wheel", "slots", "card_flip", "mystery_box"]
+ALL_GAMES = ["lucky_wheel", "slots", "mystery_box"]
 
 class Config:
     def __init__(self):
@@ -82,11 +82,9 @@ class Config:
         if os.path.exists(CONFIG_FILE): os.remove(CONFIG_FILE)
 
 def parse_balance(balance_str):
-    """Parse balance string yang mungkin pakai koma ribuan"""
     if isinstance(balance_str, (int, float)):
         return float(balance_str)
     if isinstance(balance_str, str):
-        # hilangkan koma ribuan (1,023.65 -> 1023.65)
         clean = balance_str.replace(',', '')
         try:
             return float(clean)
@@ -262,24 +260,18 @@ class PepeFlowBot:
         return None
 
     def play_lucky_wheel(self):
-        # Coba doubled, jika gagal karena "2x bonus window" maka kita skip
         doubled = random.choice([True, False])
         base_reward = random.randint(10, 30)
         result = self.play_game("lucky_wheel", doubled=doubled, base_reward=base_reward if doubled else None)
-        # Jika result error karena "2x bonus window", kita tandai game ini skip
         if result and result.get('status') == 'error' and '2x bonus window' in result.get('message', ''):
-            self.cooldowns["lucky_wheel"] = 120  # set cooldown 2 menit agar tidak langsung dicoba lagi
+            self.cooldowns["lucky_wheel"] = 120
             self.status["lucky_wheel"] = "Skip (2x expired)"
             return result
         return result
 
     def play_slots(self):
         return self.play_game("slots")
-    def play_card_flip(self):
-        doubled = random.choice([True, False])
-        pick = random.randint(0, 7)
-        base_reward = random.randint(10, 35)
-        return self.play_game("card_flip", doubled=doubled, base_reward=base_reward if doubled else None, pick=pick)
+
     def play_mystery_box(self):
         pick = random.randint(0, 7)
         return self.play_game("mystery_box", pick=pick)
@@ -300,9 +292,10 @@ class PepeFlowBot:
         os.system('clear')
         self.get_games_status()
         print(f"{GOLD}╔══════════════════════════════════════════════════════════╗{RESET}")
-        print(f"{GOLD}║{RESET}  {CYAN}PEPEFLOW AUTO-BOT V3.5 (FIXED){RESET}                     {GOLD}║{RESET}")
+        print(f"{GOLD}║{RESET}  {CYAN}PEPEFLOW AUTO-BOT V3.6 (NO FLIP){RESET}                    {GOLD}║{RESET}")
         print(f"{GOLD}║{RESET}  {PINK}DEVELOPED BY MoneyMaker_w{RESET}                             {GOLD}║{RESET}")
         print(f"{GOLD}║{RESET}  📱 @PepeFlowOfficialBot                                 {GOLD}║{RESET}")
+        print(f"{GOLD}║{RESET}  ❌ FLIP REMOVED (tidak tersedia)                        {GOLD}║{RESET}")
         print(f"{GOLD}╠══════════════════════════════════════════════════════════╣{RESET}")
         print(f"{GOLD}║{RESET}  {BOLD}ACCOUNT INFO{RESET}                                      {GOLD}║{RESET}")
         print(f"{GOLD}║{RESET}  Run / Loop : {CYAN}{self.loop_counter}{RESET}                                      {GOLD}║{RESET}")
@@ -343,7 +336,6 @@ class PepeFlowBot:
         game_methods = {
             "lucky_wheel": self.play_lucky_wheel,
             "slots": self.play_slots,
-            "card_flip": self.play_card_flip,
             "mystery_box": self.play_mystery_box,
         }
 
@@ -387,7 +379,6 @@ class PepeFlowBot:
                         self.get_games_status()
                         self.log(f"{YELLOW}⏳ {display} {err}{RESET}")
                     elif '2x bonus' in err.lower():
-                        # Skip game ini untuk sementara
                         self.cooldowns[game] = 120
                         self.status[game] = "Skip (2x expired)"
                         self.log(f"{YELLOW}⏳ {display} {err} — skipped 2m{RESET}")
@@ -407,10 +398,10 @@ class PepeFlowBot:
 def show_banner():
     print(f"""
 {CYAN}╔══════════════════════════════════════════════════════════╗
-║   {GOLD}🐸 PEPEFLOW AUTO-BOT V3.5 (FIXED){CYAN}                       ║
+║   {GOLD}🐸 PEPEFLOW AUTO-BOT V3.6 (NO FLIP){CYAN}                       ║
 ║   {PINK}DEVELOPED BY MoneyMaker_w                            {CYAN}║
 ║   📱 @PepeFlowOfficialBot                                   {CYAN}║
-║   🛡️ Handle "2x bonus window expired" & balance comma     {CYAN}║
+║   ❌ FLIP REMOVED (tidak tersedia)                         {CYAN}║
 ╚══════════════════════════════════════════════════════════╝{RESET}
 """)
 
