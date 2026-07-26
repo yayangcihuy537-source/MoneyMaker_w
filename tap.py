@@ -1,15 +1,9 @@
 #!/usr/bin/env python3
 """
 ╔═══════════════════════════════════════════════════════════════════╗
-║  🐶 BABYDOGE TAP BOT v2.9                                     ║
-║  🔐 Login via InitData                                         ║
-║  👆 Auto Tap (batch mode - tap banyak sekaligus)              ║
-║  🎯 Auto Claim (Streak + Spin + Tasks)                       ║
-║  ⏳ Task submit auto tunggu & retry sampai berhasil          ║
-║  🔄 Auto re-init jika token kosong/expired                   ║
-║  🔑 Auto update tapToken setiap tap                          ║
-║  📊 Set Tap Limit & Batch Size                              ║
-║  💸 Withdraw dengan input nominal & set address            ║
+║  🐶 BABYDOGE TAP BOT v3.0 — Dual Mode (InitData + Telethon)     ║
+║  🔐 InitData (60 menit) • 🔄 Telethon (∞)                     ║
+║  👆 Auto Tap • 🎯 Auto Claim • 💸 Withdraw                     ║
 ║  👑 Owner: @MoneyMaker_w                                      ║
 ╚═══════════════════════════════════════════════════════════════════╝
 """
@@ -69,35 +63,47 @@ BOT_NAME = "BabyDOGETapbot"
 
 class Config:
     def __init__(self):
+        self.login_mode = "initdata"  # "initdata" atau "telethon"
         self.init_data = None
         self.tap_limit = 0
         self.withdraw_address = ""
         self.tap_batch_size = 50
         self.tap_batch_delay_min = 3
         self.tap_batch_delay_max = 7
+        self.api_id = 0
+        self.api_hash = ""
+        self.phone = ""
 
     def load(self):
         if os.path.exists(CONFIG_FILE):
             with open(CONFIG_FILE, 'r') as f:
                 data = json.load(f)
+                self.login_mode = data.get('login_mode', 'initdata')
                 self.init_data = data.get('init_data')
                 self.tap_limit = data.get('tap_limit', 0)
                 self.withdraw_address = data.get('withdraw_address', "")
                 self.tap_batch_size = data.get('tap_batch_size', 50)
                 self.tap_batch_delay_min = data.get('tap_batch_delay_min', 3)
                 self.tap_batch_delay_max = data.get('tap_batch_delay_max', 7)
+                self.api_id = data.get('api_id', 0)
+                self.api_hash = data.get('api_hash', "")
+                self.phone = data.get('phone', "")
                 return True
         return False
 
     def save(self):
         with open(CONFIG_FILE, 'w') as f:
             json.dump({
+                'login_mode': self.login_mode,
                 'init_data': self.init_data,
                 'tap_limit': self.tap_limit,
                 'withdraw_address': self.withdraw_address,
                 'tap_batch_size': self.tap_batch_size,
                 'tap_batch_delay_min': self.tap_batch_delay_min,
-                'tap_batch_delay_max': self.tap_batch_delay_max
+                'tap_batch_delay_max': self.tap_batch_delay_max,
+                'api_id': self.api_id,
+                'api_hash': self.api_hash,
+                'phone': self.phone
             }, f, indent=2)
 
     def clear(self):
@@ -170,6 +176,7 @@ class BabyDogeBot:
         self.total_earned = 0
         self.completed_tasks = []
         self.withdraw_address_set = withdraw_address
+        self.init_timestamp = 0  # timestamp saat init terakhir berhasil
 
     def log(self, msg: str, level: str = "INFO"):
         t = datetime.now().strftime("%H:%M:%S")
@@ -230,6 +237,7 @@ class BabyDogeBot:
             self.token = result.get("token") or result.get("data", {}).get("token", "")
             self.tap_token = result.get("tapToken") or result.get("data", {}).get("tapToken", "")
             self._update_player(result)
+            self.init_timestamp = time.time()
             token_preview = self.token[:20] if self.token else "(empty)"
             tap_preview = self.tap_token[:20] if self.tap_token else "(empty)"
             self.log(f"✅ Init OK | Balance: {self.balance} | Energy: {self.energy} | Token: {token_preview}... | TapToken: {tap_preview}...", "SUCCESS")
@@ -240,12 +248,19 @@ class BabyDogeBot:
             return False
 
     def ensure_token(self) -> bool:
+        # Jika mode InitData dan sudah lebih dari 60 menit, kembalikan False agar bot kembali ke menu
+        if hasattr(self, 'login_mode') and self.login_mode == 'initdata':
+            if time.time() - self.init_timestamp > 3600:
+                self.log("⏰ InitData session expired (60 menit). Kembali ke menu...", "WARNING")
+                return False
         if not self.token:
             self.log("⚠️ Token kosong, re-init...", "WARNING")
-            return self.init()
+            if not self.init():
+                return False
         if not self.tap_token:
             self.log("⚠️ TapToken kosong, ambil dari init...", "WARNING")
-            return self.init()
+            if not self.init():
+                return False
         return True
 
     def refresh_tap_token(self):
@@ -282,12 +297,11 @@ class BabyDogeBot:
             return True
         else:
             error = result.get('error') if result else 'No response'
-            # === THROTTLE DETECTION ===
             if 'throttle' in str(error).lower() or 'too many' in str(error).lower():
                 wait = random.randint(30, 60)
                 self.log(f"⏳ Rate limited! Tunggu {wait} detik...", "WARNING")
                 countdown_timer(wait, "⏳ Cooldown")
-                return False  # jangan re-init, coba lagi setelah jeda
+                return False
             elif 'cooldown' in str(error).lower():
                 self.log(f"⏳ Tap cooldown", "WARNING")
                 time.sleep(random_delay(10, 20))
@@ -300,6 +314,8 @@ class BabyDogeBot:
                 self.log(f"⚠️ Token error, re-init...", "WARNING")
                 self.token = ""
                 self.tap_token = ""
+                if not self.init():
+                    return False
                 return self.tap(taps)
             else:
                 self.log(f"❌ Tap failed: {error}", "ERROR")
@@ -307,7 +323,6 @@ class BabyDogeBot:
 
     # ==================== TAP BATCH - FIXED ====================
     def tap_batch(self):
-        """Lakukan tap dalam batch dengan jeda manusiawi"""
         batch_size = self.batch_size
         if batch_size <= 0:
             batch_size = 50
@@ -320,7 +335,6 @@ class BabyDogeBot:
                 self.init()
                 continue
 
-            # Tap 3‑7 kali per request (manusiawi)
             t = random.randint(3, 7)
             if taps_done_in_batch + t > batch_size:
                 t = batch_size - taps_done_in_batch
@@ -328,7 +342,6 @@ class BabyDogeBot:
             self.tap(t)
             taps_done_in_batch += t
 
-            # Jeda 1.5‑3.5 detik antar request (manusiawi)
             if taps_done_in_batch < batch_size:
                 jeda = random.uniform(1.5, 3.5)
                 time.sleep(jeda)
@@ -617,8 +630,7 @@ class BabyDogeBot:
         self.log("⏹️  Tekan Ctrl+C untuk berhenti", "WARNING")
 
         if not self.init():
-            self.log("❌ Init failed", "ERROR")
-            return
+            return False
 
         total_taps_done = 0
         try:
@@ -630,7 +642,8 @@ class BabyDogeBot:
                 if self.energy <= 0:
                     self.log(f"⏳ Energy habis ({self.energy}), tunggu 60 detik...", "WARNING")
                     time.sleep(60)
-                    self.init()
+                    if not self.init():
+                        return False
                     continue
 
                 self.tap_batch()
@@ -648,13 +661,13 @@ class BabyDogeBot:
             self.log("🛑 Auto Tap dihentikan", "WARNING")
         finally:
             self.show_status()
+        return True
 
     def auto_claim(self):
         self.log("🎯 AUTO CLAIM START", "SUCCESS")
 
         if not self.init():
-            self.log("❌ Init failed", "ERROR")
-            return
+            return False
 
         self.claim_streak()
         time.sleep(random_delay(1, 3))
@@ -667,6 +680,49 @@ class BabyDogeBot:
 
         self.show_status()
         self.log("✅ AUTO CLAIM DONE", "SUCCESS")
+        return True
+
+# ==================== TE LETHON LOGIN ====================
+def telethon_get_init_data(api_id, api_hash, phone):
+    try:
+        from telethon import TelegramClient
+        from telethon.tl.functions.messages import GetBotCallbackAnswerRequest
+    except ImportError:
+        print(f"{RED}❌ Telethon belum terinstall. Install dengan: pip install telethon{RESET}")
+        return None
+
+    client = TelegramClient('babydoge_session', api_id, api_hash)
+    try:
+        client.start(phone=phone)
+    except Exception as e:
+        print(f"{RED}❌ Gagal login Telethon: {e}{RESET}")
+        return None
+
+    # Buka bot BabyDOGETapbot
+    bot_username = BOT_NAME
+    try:
+        bot = client.get_entity(bot_username)
+        # Ambil initData dari WebApp
+        result = client(functions.messages.RequestWebViewRequest(
+            peer=bot,
+            bot=bot,
+            platform='android',
+            from_bot_menu=False,
+            url='https://tapgame.bleon.net'
+        ))
+        # result.url berisi initData
+        url = result.url
+        match = re.search(r'tgWebAppData=([^&]+)', url)
+        if match:
+            from urllib.parse import unquote
+            init_data = unquote(match.group(1))
+            return init_data
+        else:
+            print(f"{RED}❌ Gagal mengekstrak initData dari WebApp{RESET}")
+            return None
+    except Exception as e:
+        print(f"{RED}❌ Error: {e}{RESET}")
+        return None
 
 # ==================== MENU ====================
 def menu():
@@ -675,6 +731,7 @@ def menu():
 
     while True:
         print(BANNER)
+        mode_str = f"{GREEN}InitData (60 menit){RESET}" if config.login_mode == 'initdata' else f"{CYAN}Telethon (∞){RESET}"
         print(f"""
 {CYAN}╔════════════════════════════════════════════════════════════╗
 ║                      MAIN MENU                               ║
@@ -686,6 +743,7 @@ def menu():
 ║  {LIME}[5]{RESET} 📊 Set Tap Limit                              ║
 ║  {GOLD}[6]{RESET} 💸 Withdraw (Set Address + Nominal)           ║
 ║  {PINK}[7]{RESET} ⚙️ Set Tap Batch (Size + Jeda)                ║
+║  {PURPLE}[8]{RESET} 🔄 Mode: {mode_str}                       ║
 ║  {RED}[0]{RESET} ❌ Exit                                        ║
 ╚════════════════════════════════════════════════════════════╝{RESET}
 """)
@@ -714,23 +772,62 @@ def menu():
             sys.exit(0)
 
         elif choice == '1':
-            if not config.init_data:
-                print(f"{RED}❌ InitData belum diset. Set dulu (menu 3).{RESET}")
-                input("Tekan Enter untuk kembali...")
-                continue
-            bot = BabyDogeBot(config.init_data, config.tap_limit, config.withdraw_address,
-                             config.tap_batch_size, config.tap_batch_delay_min, config.tap_batch_delay_max)
-            bot.auto_tap_unlimited()
+            if config.login_mode == 'initdata':
+                if not config.init_data:
+                    print(f"{RED}❌ InitData belum diset. Set dulu (menu 3).{RESET}")
+                    input("Tekan Enter untuk kembali...")
+                    continue
+                bot = BabyDogeBot(config.init_data, config.tap_limit, config.withdraw_address,
+                                 config.tap_batch_size, config.tap_batch_delay_min, config.tap_batch_delay_max)
+                bot.login_mode = 'initdata'
+                if not bot.auto_tap_unlimited():
+                    print(f"{YELLOW}⏰ Sesi berakhir, kembali ke menu...{RESET}")
+            else:
+                # Telethon mode: generate init data lalu jalankan
+                if not config.api_id or not config.api_hash or not config.phone:
+                    print(f"{RED}❌ API ID/Hash/Phone belum diset. Set di menu 8.{RESET}")
+                    input("Tekan Enter...")
+                    continue
+                init_data = telethon_get_init_data(config.api_id, config.api_hash, config.phone)
+                if not init_data:
+                    print(f"{RED}❌ Gagal mendapatkan initData dari Telethon{RESET}")
+                    input("Tekan Enter...")
+                    continue
+                config.init_data = init_data
+                config.save()
+                bot = BabyDogeBot(init_data, config.tap_limit, config.withdraw_address,
+                                 config.tap_batch_size, config.tap_batch_delay_min, config.tap_batch_delay_max)
+                bot.login_mode = 'telethon'
+                bot.auto_tap_unlimited()
             input("Tekan Enter untuk kembali ke menu...")
 
         elif choice == '2':
-            if not config.init_data:
-                print(f"{RED}❌ InitData belum diset. Set dulu (menu 3).{RESET}")
-                input("Tekan Enter untuk kembali...")
-                continue
-            bot = BabyDogeBot(config.init_data, config.tap_limit, config.withdraw_address,
-                             config.tap_batch_size, config.tap_batch_delay_min, config.tap_batch_delay_max)
-            bot.auto_claim()
+            if config.login_mode == 'initdata':
+                if not config.init_data:
+                    print(f"{RED}❌ InitData belum diset. Set dulu (menu 3).{RESET}")
+                    input("Tekan Enter...")
+                    continue
+                bot = BabyDogeBot(config.init_data, config.tap_limit, config.withdraw_address,
+                                 config.tap_batch_size, config.tap_batch_delay_min, config.tap_batch_delay_max)
+                bot.login_mode = 'initdata'
+                if not bot.auto_claim():
+                    print(f"{YELLOW}⏰ Sesi berakhir, kembali ke menu...{RESET}")
+            else:
+                if not config.api_id or not config.api_hash or not config.phone:
+                    print(f"{RED}❌ API ID/Hash/Phone belum diset. Set di menu 8.{RESET}")
+                    input("Tekan Enter...")
+                    continue
+                init_data = telethon_get_init_data(config.api_id, config.api_hash, config.phone)
+                if not init_data:
+                    print(f"{RED}❌ Gagal mendapatkan initData dari Telethon{RESET}")
+                    input("Tekan Enter...")
+                    continue
+                config.init_data = init_data
+                config.save()
+                bot = BabyDogeBot(init_data, config.tap_limit, config.withdraw_address,
+                                 config.tap_batch_size, config.tap_batch_delay_min, config.tap_batch_delay_max)
+                bot.login_mode = 'telethon'
+                bot.auto_claim()
             input("Tekan Enter untuk kembali ke menu...")
 
         elif choice == '3':
@@ -739,6 +836,7 @@ def menu():
             qid = input("InitData: ").strip()
             if qid:
                 config.init_data = qid
+                config.login_mode = 'initdata'
                 config.save()
                 print(f"{GREEN}✅ InitData disimpan!{RESET}")
             else:
@@ -746,12 +844,24 @@ def menu():
             input("Tekan Enter untuk kembali...")
 
         elif choice == '4':
-            if not config.init_data:
-                print(f"{RED}❌ InitData belum diset.{RESET}")
+            if config.login_mode == 'initdata':
+                if not config.init_data:
+                    print(f"{RED}❌ InitData belum diset.{RESET}")
+                else:
+                    bot = BabyDogeBot(config.init_data, config.tap_limit, config.withdraw_address,
+                                     config.tap_batch_size, config.tap_batch_delay_min, config.tap_batch_delay_max)
+                    bot.check_balance()
             else:
-                bot = BabyDogeBot(config.init_data, config.tap_limit, config.withdraw_address,
-                                 config.tap_batch_size, config.tap_batch_delay_min, config.tap_batch_delay_max)
-                bot.check_balance()
+                if not config.api_id or not config.api_hash or not config.phone:
+                    print(f"{RED}❌ API ID/Hash/Phone belum diset. Set di menu 8.{RESET}")
+                else:
+                    init_data = telethon_get_init_data(config.api_id, config.api_hash, config.phone)
+                    if init_data:
+                        config.init_data = init_data
+                        config.save()
+                        bot = BabyDogeBot(init_data, config.tap_limit, config.withdraw_address,
+                                         config.tap_batch_size, config.tap_batch_delay_min, config.tap_batch_delay_max)
+                        bot.check_balance()
             input("Tekan Enter untuk kembali...")
 
         elif choice == '5':
@@ -767,12 +877,24 @@ def menu():
             input("Tekan Enter untuk kembali...")
 
         elif choice == '6':
-            if not config.init_data:
-                print(f"{RED}❌ InitData belum diset.{RESET}")
+            if config.login_mode == 'initdata':
+                if not config.init_data:
+                    print(f"{RED}❌ InitData belum diset.{RESET}")
+                else:
+                    bot = BabyDogeBot(config.init_data, config.tap_limit, config.withdraw_address,
+                                     config.tap_batch_size, config.tap_batch_delay_min, config.tap_batch_delay_max)
+                    bot.withdraw_menu()
             else:
-                bot = BabyDogeBot(config.init_data, config.tap_limit, config.withdraw_address,
-                                 config.tap_batch_size, config.tap_batch_delay_min, config.tap_batch_delay_max)
-                bot.withdraw_menu()
+                if not config.api_id or not config.api_hash or not config.phone:
+                    print(f"{RED}❌ API ID/Hash/Phone belum diset. Set di menu 8.{RESET}")
+                else:
+                    init_data = telethon_get_init_data(config.api_id, config.api_hash, config.phone)
+                    if init_data:
+                        config.init_data = init_data
+                        config.save()
+                        bot = BabyDogeBot(init_data, config.tap_limit, config.withdraw_address,
+                                         config.tap_batch_size, config.tap_batch_delay_min, config.tap_batch_delay_max)
+                        bot.withdraw_menu()
             input("Tekan Enter untuk kembali...")
 
         elif choice == '7':
@@ -796,6 +918,35 @@ def menu():
 
             config.save()
             print(f"{GREEN}✅ Batch set: {config.tap_batch_size} taps, Jeda {config.tap_batch_delay_min}-{config.tap_batch_delay_max}s{RESET}")
+            input("Tekan Enter untuk kembali...")
+
+        elif choice == '8':
+            print(f"{PURPLE}🔄 Pilih Mode Login:{RESET}")
+            print(f"  [1] InitData (timer 60 menit)")
+            print(f"  [2] Telethon (otomatis, unlimited)")
+            mode_choice = input(f"{PINK}❯ Pilih mode: {RESET}").strip()
+            if mode_choice == '1':
+                config.login_mode = 'initdata'
+                config.save()
+                print(f"{GREEN}✅ Mode: InitData (60 menit){RESET}")
+            elif mode_choice == '2':
+                config.login_mode = 'telethon'
+                print(f"{YELLOW}📝 Masukkan API ID:{RESET}")
+                api_id = input().strip()
+                print(f"{YELLOW}📝 Masukkan API HASH:{RESET}")
+                api_hash = input().strip()
+                print(f"{YELLOW}📝 Masukkan Nomor Telepon (+628...):{RESET}")
+                phone = input().strip()
+                if api_id.isdigit() and api_hash and phone:
+                    config.api_id = int(api_id)
+                    config.api_hash = api_hash
+                    config.phone = phone
+                    config.save()
+                    print(f"{GREEN}✅ Mode: Telethon (∞){RESET}")
+                else:
+                    print(f"{RED}❌ Data tidak valid{RESET}")
+            else:
+                print(f"{RED}❌ Pilihan salah{RESET}")
             input("Tekan Enter untuk kembali...")
 
         else:
