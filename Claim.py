@@ -34,12 +34,12 @@ def print_banner():
     print(WHITE + f.renderText("CLAIMCRYPTO"))
     print(CYAN + "╠════════════════════════════════════════════════════════════╣")
     print(GREEN + "  💰 AUTO CLAIM • AUTO FAUCET • AUTO LOGIN")
-    print(YELLOW + "  ⚡ Fast • Faucet • Login")
-    print(RED + "  👨‍💻 Developer : @MoneyMaker_w   [ FIXED TOKEN ] ")
+    print(YELLOW + "  [Fix] ⚡ Fast • Faucet • Login")
+    print(RED + "  👨‍💻 Developer : @MoneyMaker_w")
     print(CYAN + "╚════════════════════════════════════════════════════════════╝" + RESET)
 
 # ============================================================
-# KONFIGURASI DEFAULT (Hardcode)
+# KONFIGURASI DEFAULT
 # ============================================================
 DEFAULT_CONFIG = {
     "base_url": "https://claimcrypto.in",
@@ -71,7 +71,7 @@ def load_config():
     return DEFAULT_CONFIG
 
 # ============================================================
-# SETTINGS (User data - saved to file)
+# SETTINGS
 # ============================================================
 DEFAULT_SETTINGS = {
     "email": "",
@@ -97,18 +97,29 @@ def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 # ============================================================
-# KELAS BOT
+# BOT
 # ============================================================
 class ClaimCryptoBot:
     def __init__(self):
         self.config = load_config()
         self.settings = load_settings()
         self.base_url = self.config['base_url']
+        self.all_coins = self.config.get('coins', [])
+        self.current_coin_index = 0
+        self.bad_coins = set()  # koin yang udah limit atau kena captcha
         self.session = requests.Session()
         self.logged_in = False
         self.csrf_token = None
         self.ci_session = None
-        self.stats = {'total': 0, 'success': 0, 'failed': 0, 'start_time': None}
+        self.stats = {
+            'total': 0,
+            'success': 0,
+            'failed': 0,
+            'limit_reached': False,
+            'captcha_detected': False,
+            'coins_used': [],
+            'start_time': None
+        }
         self._setup_session()
         self._apply_user_agent()
 
@@ -148,6 +159,9 @@ class ClaimCryptoBot:
     def set_coin(self, coin):
         self.settings['coin'] = coin
         save_settings(self.settings)
+        # Update index
+        if coin.lower() in [c.lower() for c in self.all_coins]:
+            self.current_coin_index = [c.lower() for c in self.all_coins].index(coin.lower())
 
     def set_target(self, target):
         self.settings['target'] = target
@@ -177,7 +191,6 @@ class ClaimCryptoBot:
         return self.session.cookies.get('csrf_cookie_name')
 
     def _extract_token(self, html):
-        """Extract token with many patterns - fixed version"""
         patterns = [
             r'name="token"\s*value="([^"]+)"',
             r'token\s*=\s*"([^"]+)"',
@@ -189,13 +202,13 @@ class ClaimCryptoBot:
             r'token":"([^"]+)"',
             r'["\']token["\']\s*:\s*["\']([^"\']+)["\']',
             r'<script[^>]*>.*?token\s*=\s*["\']([^"\']+)["\']',
+            r'token["\']?\s*[:=]\s*["\']([^"\']+)["\']',
         ]
         for p in patterns:
             m = re.search(p, html, re.IGNORECASE | re.DOTALL)
             if m:
                 return m.group(1)
         
-        # Cari di semua input hidden
         hidden_inputs = re.findall(
             r'<input[^>]*type="hidden"[^>]*name="([^"]+)"[^>]*value="([^"]+)"',
             html,
@@ -205,7 +218,6 @@ class ClaimCryptoBot:
             if 'token' in name.lower():
                 return value
         
-        # Fallback: ambil dari cookie csrf
         if 'csrf_cookie_name' in self.session.cookies:
             return self.session.cookies.get('csrf_cookie_name')
         
@@ -247,7 +259,6 @@ class ClaimCryptoBot:
             return False
 
     def get_faucet_page(self, coin):
-        """Get faucet page with retry and better token extraction"""
         coin = coin.lower()
         url = f'{self.base_url}/faucet/currency/{coin}'
         
@@ -262,23 +273,32 @@ class ClaimCryptoBot:
                 self.session.headers.update(headers)
                 resp = self.session.get(url)
                 
-                # Delay lebih panjang biar page fully loaded
                 time.sleep(self._random_delay(4, 7))
                 
                 if resp.status_code != 200:
                     self._log(f"Failed to get faucet page: {resp.status_code}", Fore.RED, '❌')
                     continue
                 
-                csrf = self._extract_csrf(resp.text)
+                html = resp.text
+                
+                # CEK CAPTCHA
+                captcha_patterns = [
+                    'captcha', 'shape captcha', 'robot', 'i\'m not a robot',
+                    'shapecaptcha', 'recaptcha', 'verify btn', 'captchaimg',
+                    'ccap-card', 'robot-checkbox', 'shapeCaptchaBox'
+                ]
+                if any(p in html.lower() for p in captcha_patterns):
+                    self._log(f"⚠️ CAPTCHA detected on {coin.upper()}!", Fore.RED, '🤖')
+                    return {'captcha': True, 'html': html}
+                
+                csrf = self._extract_csrf(html)
                 if csrf:
                     self.csrf_token = csrf
                 
-                token = self._extract_token(resp.text)
+                token = self._extract_token(html)
                 
-                # Kalau token gak ketemu, coba refresh session
                 if not token:
                     self._log("Token not found, refreshing session...", Fore.YELLOW, '🔄')
-                    # Refresh session dengan GET ulang
                     resp2 = self.session.get(f'{self.base_url}/')
                     time.sleep(self._random_delay(2, 4))
                     csrf2 = self._extract_csrf(resp2.text)
@@ -288,10 +308,11 @@ class ClaimCryptoBot:
                 
                 if token:
                     return {
-                        'html': resp.text,
+                        'html': html,
                         'csrf': self.csrf_token,
                         'token': token,
-                        'cookies': self.session.cookies.get_dict()
+                        'cookies': self.session.cookies.get_dict(),
+                        'captcha': False
                     }
                 
                 self._log(f"Attempt {attempt+1}/3 failed to get token", Fore.YELLOW, '⏳')
@@ -307,7 +328,6 @@ class ClaimCryptoBot:
         coin = coin.lower()
         self._log(f"Claiming {coin.upper()}...", Fore.YELLOW, '💧')
         
-        # Coba ambil token dengan retry
         for attempt in range(2):
             page = self.get_faucet_page(coin)
             if not page:
@@ -315,7 +335,12 @@ class ClaimCryptoBot:
                     self._log("Retrying to get faucet page...", Fore.YELLOW, '🔄')
                     time.sleep(self._random_delay(3, 5))
                     continue
-                return False, None
+                return False, None, False, False
+            
+            # CEK CAPTCHA
+            if page.get('captcha', False):
+                self._log(f"🚫 CAPTCHA on {coin.upper()} — switching coin!", Fore.RED, '🤖')
+                return False, None, True, False
             
             csrf = page.get('csrf') or self.csrf_token
             token = page.get('token')
@@ -327,7 +352,7 @@ class ClaimCryptoBot:
                 time.sleep(self._random_delay(3, 5))
         else:
             self._log("Token not found after retries", Fore.RED, '❌')
-            return False, None
+            return False, None, False, False
         
         data = {
             'csrf_token_name': csrf,
@@ -357,43 +382,120 @@ class ClaimCryptoBot:
             self.stats['total'] += 1
             reward = None
             
+            html = resp.text
+            
+            # CEK DAILY LIMIT
+            if 'daily claim limit' in html.lower() or 'comeback again tomorrow' in html.lower():
+                self._log(f"🚫 Daily limit reached for {coin.upper()}!", Fore.RED, '⛔')
+                return False, None, False, True
+            
+            # CEK CAPTCHA di response
+            captcha_patterns = ['captcha', 'shape captcha', 'robot', 'shapecaptcha', 'ccap-card']
+            if any(p in html.lower() for p in captcha_patterns):
+                self._log(f"🚫 CAPTCHA detected on {coin.upper()}!", Fore.RED, '🤖')
+                return False, None, True, False
+            
             if resp.status_code == 200:
-                if 'success' in resp.text.lower() or 'claim' in resp.text.lower():
+                success_patterns = [
+                    'success', 'claim', 'reward', 'received', 
+                    'added', 'credited', 'completed', 'berhasil',
+                    'diterima', '✔', '✅', 'you have claimed',
+                    'claim successful', 'reward claimed'
+                ]
+                
+                is_success = any(p in html.lower() for p in success_patterns)
+                has_reward = re.search(r'([\d.]+)\s*' + coin.upper(), html, re.IGNORECASE)
+                has_balance = 'balance' in html.lower() or 'wallet' in html.lower()
+                
+                if resp.url and 'success' in resp.url.lower():
+                    is_success = True
+                
+                if is_success or has_reward or has_balance:
                     self.stats['success'] += 1
-                    m = re.search(r'([\d.]+)\s*' + coin.upper(), resp.text, re.IGNORECASE)
-                    if m:
-                        reward = f"{m.group(1)} {coin.upper()}"
-                    return True, reward
-                elif 'already' in resp.text.lower() or 'wait' in resp.text.lower():
+                    if has_reward:
+                        reward = f"{has_reward.group(1)} {coin.upper()}"
+                    else:
+                        reward = f"0.00000000 {coin.upper()}"
+                    return True, reward, False, False
+                    
+                elif 'already' in html.lower() or 'wait' in html.lower():
                     self._log("Need to wait", Fore.YELLOW, '⏳')
-                    return False, None
+                    return False, None, False, False
                 else:
                     self.stats['failed'] += 1
                     self._log("Claim failed - unknown response", Fore.RED, '❌')
-                    return False, None
+                    return False, None, False, False
             else:
                 self.stats['failed'] += 1
                 self._log(f"HTTP {resp.status_code}", Fore.RED, '❌')
-                return False, None
+                return False, None, False, False
+                
         except Exception as e:
             self.stats['failed'] += 1
             self._log(f"Error: {str(e)}", Fore.RED, '❌')
-            return False, None
+            return False, None, False, False
 
-    def run_auto_claim(self, email, coin, target):
+    def get_next_coin(self):
+        """Get next available coin, skip bad ones"""
+        if len(self.bad_coins) >= len(self.all_coins):
+            return None
+        
+        start_index = self.current_coin_index
+        for i in range(len(self.all_coins)):
+            idx = (start_index + i) % len(self.all_coins)
+            coin = self.all_coins[idx]
+            if coin not in self.bad_coins:
+                self.current_coin_index = idx
+                return coin
+        
+        return None
+
+    def run_auto_claim(self, email, target):
         if not self.logged_in:
             if not self.login(email):
                 self._log("Cannot start", Fore.RED, '❌')
                 return
+        
         print("\n" + "━"*50)
         self._log("🚀 Memulai Auto Claim...", Fore.CYAN)
         print("━"*50 + "\n")
+        
         count = 0
         self.stats['start_time'] = datetime.now()
+        self.bad_coins = set()
+        
+        # Ambil coin pertama
+        current_coin = self.settings.get('coin', 'ltc').lower()
+        if current_coin in self.all_coins:
+            self.current_coin_index = self.all_coins.index(current_coin)
+        else:
+            self.current_coin_index = 0
+        
         while count < target:
+            coin = self.get_next_coin()
+            if not coin:
+                self._log("❌ All coins are blocked (limit/captcha). Stopping.", Fore.RED, '🛑')
+                break
+            
+            self._log(f"📌 Using coin: {coin.upper()}", Fore.CYAN, '🪙')
+            
             try:
-                success, reward = self.claim_faucet(coin, email)
+                success, reward, captcha, limit = self.claim_faucet(coin, email)
                 count += 1
+                
+                if captcha:
+                    self.bad_coins.add(coin)
+                    self._log(f"⚠️ {coin.upper()} blocked by CAPTCHA — switching...", Fore.RED, '🔄')
+                    # Jangan hitung sebagai attempt
+                    count -= 1
+                    continue
+                
+                if limit:
+                    self.bad_coins.add(coin)
+                    self._log(f"⛔ {coin.upper()} daily limit reached — switching...", Fore.RED, '🔄')
+                    count -= 1
+                    continue
+                
                 if success:
                     print(f"           {Fore.GREEN}✅ Success{Style.RESET_ALL}")
                     if reward:
@@ -402,17 +504,20 @@ class ClaimCryptoBot:
                 else:
                     print(f"           {Fore.RED}❌ Failed{Style.RESET_ALL}")
                     print(f"           {Fore.YELLOW}🔄 Retry {count}/{target}{Style.RESET_ALL}")
+                
                 if count < target:
                     delay = self._random_delay(6, 11)
                     print(f"\n{Fore.CYAN}⏳ Next claim : {delay:.2f}s{Style.RESET_ALL}")
                     print("━"*50 + "\n")
                     time.sleep(delay)
+                    
             except KeyboardInterrupt:
                 self._log("Stopped by user", Fore.YELLOW, '⏹️')
                 break
             except Exception as e:
                 self._log(f"Error: {str(e)}", Fore.RED, '❌')
                 time.sleep(self._random_delay(8, 12))
+        
         self._show_summary()
 
     def _show_summary(self):
@@ -424,6 +529,7 @@ class ClaimCryptoBot:
         print(f"   Total Claims : {self.stats['total']}")
         print(f"   Successful   : {Fore.GREEN}{self.stats['success']}{Style.RESET_ALL}")
         print(f"   Failed       : {Fore.RED}{self.stats['failed']}{Style.RESET_ALL}")
+        print(f"   Bad Coins    : {Fore.YELLOW}{', '.join(self.bad_coins) if self.bad_coins else 'None'}{Style.RESET_ALL}")
         print(f"   Duration     : {int(h)}h {int(m)}m {int(s)}s")
         print("━"*50 + "\n")
 
@@ -435,7 +541,7 @@ def print_menu():
 {CYAN}[ 1 ] Login & Start
 [ 2 ] Set Email FaucetPay
 [ 3 ] Ganti User-Agent
-[ 4 ] Pilih Koin
+[ 4 ] Pilih Koin Awal
 [ 5 ] Keluar{RESET}
     """)
 
@@ -475,7 +581,7 @@ def menu_set_coin(bot):
     for i, c in enumerate(coins, 1):
         print(f"  {i}. {c.upper()}")
     try:
-        choice = int(input(f"\n{YELLOW}Pilih coin (1-{len(coins)}): {RESET}"))
+        choice = int(input(f"\n{YELLOW}Pilih coin awal (1-{len(coins)}): {RESET}"))
         if 1 <= choice <= len(coins):
             selected = coins[choice-1]
             bot.set_coin(selected)
@@ -545,7 +651,7 @@ def menu_login_start(bot):
     print_banner()
     print_claim_status(coin, target, 0, bot.config.get('min_delay',6), bot.config.get('max_delay',11), "Starting...")
     print("\n" + "━"*50)
-    bot.run_auto_claim(email, coin, target)
+    bot.run_auto_claim(email, target)
     input(f"\n{CYAN}Press Enter to continue...{RESET}")
 
 # ============================================================
