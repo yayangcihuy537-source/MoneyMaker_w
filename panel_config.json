@@ -19,7 +19,7 @@
           "runner": "php"
         },
         "4": {
-          "label": "Coming Soon",
+          "label": "Claimcrypto",
           "file": "Claim.py",
           "runner": "python3"
         }
