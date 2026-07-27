@@ -34,7 +34,7 @@ def print_banner():
     print(WHITE + f.renderText("CLAIMCRYPTO"))
     print(CYAN + "╠════════════════════════════════════════════════════════════╣")
     print(GREEN + "  💰 AUTO CLAIM • AUTO FAUCET • AUTO LOGIN")
-    print(YELLOW + "  [Fix] ⚡ Fast • Faucet • Login")
+    print(YELLOW + "  ⚡ Fast • Faucet • Login")
     print(RED + "  👨‍💻 Developer : @MoneyMaker_w")
     print(CYAN + "╚════════════════════════════════════════════════════════════╝" + RESET)
 
@@ -159,7 +159,6 @@ class ClaimCryptoBot:
     def set_coin(self, coin):
         self.settings['coin'] = coin
         save_settings(self.settings)
-        # Update index
         if coin.lower() in [c.lower() for c in self.all_coins]:
             self.current_coin_index = [c.lower() for c in self.all_coins].index(coin.lower())
 
@@ -259,6 +258,7 @@ class ClaimCryptoBot:
             return False
 
     def get_faucet_page(self, coin):
+        """Get faucet page - NO CAPTCHA DETECTION here! Only extract token."""
         coin = coin.lower()
         url = f'{self.base_url}/faucet/currency/{coin}'
         
@@ -281,16 +281,6 @@ class ClaimCryptoBot:
                 
                 html = resp.text
                 
-                # CEK CAPTCHA
-                captcha_patterns = [
-                    'captcha', 'shape captcha', 'robot', 'i\'m not a robot',
-                    'shapecaptcha', 'recaptcha', 'verify btn', 'captchaimg',
-                    'ccap-card', 'robot-checkbox', 'shapeCaptchaBox'
-                ]
-                if any(p in html.lower() for p in captcha_patterns):
-                    self._log(f"⚠️ CAPTCHA detected on {coin.upper()}!", Fore.RED, '🤖')
-                    return {'captcha': True, 'html': html}
-                
                 csrf = self._extract_csrf(html)
                 if csrf:
                     self.csrf_token = csrf
@@ -311,8 +301,7 @@ class ClaimCryptoBot:
                         'html': html,
                         'csrf': self.csrf_token,
                         'token': token,
-                        'cookies': self.session.cookies.get_dict(),
-                        'captcha': False
+                        'cookies': self.session.cookies.get_dict()
                     }
                 
                 self._log(f"Attempt {attempt+1}/3 failed to get token", Fore.YELLOW, '⏳')
@@ -323,6 +312,23 @@ class ClaimCryptoBot:
                 time.sleep(self._random_delay(3, 5))
         
         return None
+
+    def _check_captcha_in_response(self, html):
+        """Check if response contains ACTIVE captcha (only from POST response)"""
+        captcha_patterns = [
+            'shape captcha', 'shapecaptcha', 'ccap-card', 'shapeCaptchaBox',
+            'captcha is required', 'please complete the captcha',
+            'verify your identity', 'click shapes by size'
+        ]
+        return any(p in html.lower() for p in captcha_patterns)
+
+    def _check_limit_in_response(self, html):
+        """Check if response contains daily limit message"""
+        limit_patterns = [
+            'daily claim limit', 'comeback again tomorrow',
+            'limit reached', 'max claims reached'
+        ]
+        return any(p in html.lower() for p in limit_patterns)
 
     def claim_faucet(self, coin, wallet):
         coin = coin.lower()
@@ -336,11 +342,6 @@ class ClaimCryptoBot:
                     time.sleep(self._random_delay(3, 5))
                     continue
                 return False, None, False, False
-            
-            # CEK CAPTCHA
-            if page.get('captcha', False):
-                self._log(f"🚫 CAPTCHA on {coin.upper()} — switching coin!", Fore.RED, '🤖')
-                return False, None, True, False
             
             csrf = page.get('csrf') or self.csrf_token
             token = page.get('token')
@@ -381,19 +382,17 @@ class ClaimCryptoBot:
             
             self.stats['total'] += 1
             reward = None
-            
             html = resp.text
             
+            # ✅ CEK CAPTCHA dari RESPONSE POST (bukan dari halaman GET)
+            if self._check_captcha_in_response(html):
+                self._log(f"🚫 CAPTCHA triggered on {coin.upper()}!", Fore.RED, '🤖')
+                return False, None, True, False
+            
             # CEK DAILY LIMIT
-            if 'daily claim limit' in html.lower() or 'comeback again tomorrow' in html.lower():
+            if self._check_limit_in_response(html):
                 self._log(f"🚫 Daily limit reached for {coin.upper()}!", Fore.RED, '⛔')
                 return False, None, False, True
-            
-            # CEK CAPTCHA di response
-            captcha_patterns = ['captcha', 'shape captcha', 'robot', 'shapecaptcha', 'ccap-card']
-            if any(p in html.lower() for p in captcha_patterns):
-                self._log(f"🚫 CAPTCHA detected on {coin.upper()}!", Fore.RED, '🤖')
-                return False, None, True, False
             
             if resp.status_code == 200:
                 success_patterns = [
