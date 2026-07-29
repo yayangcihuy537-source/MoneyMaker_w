@@ -48,6 +48,17 @@ class BaseConfig:
         with open(self.file, 'w') as f:
             json.dump({'phpsessid': self.phpsessid, 'init_data': self.init_data}, f, indent=2)
 
+def live_timer(seconds, msg="⏳ Menunggu"):
+    """Countdown dengan output di tempat yang sama."""
+    while seconds > 0:
+        m, s = divmod(seconds, 60)
+        sys.stdout.write(f"\r{Y}{msg} {m:02d}:{s:02d} {RESET}  ")
+        sys.stdout.flush()
+        time.sleep(1)
+        seconds -= 1
+    sys.stdout.write("\r" + " " * 60 + "\r")  # bersihkan baris
+    sys.stdout.flush()
+
 class MiniAppBot:
     def __init__(self, url, cfg, game_list, game_map, name):
         self.url = url
@@ -261,8 +272,22 @@ class MiniAppBot:
                 self.log(f"{G}✔ {self.game_map[g]['display']} +{rwd} (Bal: {self.balance})")
             elif result and result.get('status') == 'error':
                 err = result.get('message', '')
-                if '2x bonus window' in err.lower():
-                    print(f"{Y}⚠️ {self.game_map[g]['display']} 2x window expired, retrying immediately...{RESET}")
+                if 'not logged in' in err.lower():
+                    self.log(f"{Y}⚠️ Not logged in, reauth & retry...{RESET}")
+                    self.reauth()
+                    time.sleep(2)
+                    result2 = self.play_single(g)
+                    if result2 and result2.get('status') == 'success':
+                        rwd = result2.get('reward', 0)
+                        self.balance = float(result2.get('new_balance', self.balance))
+                        self.rewards[g] = rwd
+                        self.play_counts[g] += 1
+                        self.log(f"{G}✔ {self.game_map[g]['display']} +{rwd} (Bal: {self.balance}) [retry OK]")
+                    else:
+                        err2 = result2.get('message','No resp') if result2 else 'No resp'
+                        self.log(f"{R}✖ {self.game_map[g]['display']} FAIL: {err2} [retry failed]")
+                elif '2x bonus window' in err.lower():
+                    print(f"{Y}⚠️ {self.game_map[g]['display']} 2x window expired, retrying...{RESET}")
                     time.sleep(2)
                     result2 = self.play_single(g)
                     if result2 and result2.get('status') == 'success':
@@ -306,8 +331,7 @@ def smart_dual_loop(pbot, cbot):
         all_cds = [cd for cd in all_cds if cd > 0]
         if all_cds:
             min_cd = min(all_cds)
-            print(f"{DIM}⏳ Menunggu {pbot.fmt(min_cd)} sampai game berikutnya ready...{RESET}")
-            time.sleep(min_cd + 1)
+            live_timer(min_cd, f"⏳ Menunggu game berikutnya")
 
 # ─────────────────── MENU ───────────────────
 def set_phpsessid(file, label):
