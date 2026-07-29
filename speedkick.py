@@ -45,7 +45,7 @@ def banner():
 {PURPLE}╔══════════════════════════════════════════════════════════════╗
 ║   {GOLD}⚡  SPEEDKICK AUTO BOT v3.2 — MENU MODE                {PURPLE}║
 ║   {LIME}🌾 Auto Farming • 💸 Withdraw • 📊 Balance            {PURPLE}║
-║   {PINK}👑 Developer : @MoneyMaker_w                         {PURPLE}║
+║   {PINK}👑 Developer : ScriptyXSouu                         {PURPLE}║
 ║   {CYAN}🤖 BOT : SPEEDKICKBOT                                {PURPLE}║
 ╚══════════════════════════════════════════════════════════════╝{RESET}
 """)
