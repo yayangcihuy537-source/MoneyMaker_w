@@ -293,7 +293,7 @@ class PepeFlowBot:
         self.get_games_status()
         print(f"{GOLD}╔══════════════════════════════════════════════════════════╗{RESET}")
         print(f"{GOLD}║{RESET}  {CYAN}PEPEFLOW AUTO-BOT V3.6 (NO FLIP){RESET}                    {GOLD}║{RESET}")
-        print(f"{GOLD}║{RESET}  {PINK}DEVELOPED BY MoneyMaker_w{RESET}                             {GOLD}║{RESET}")
+        print(f"{GOLD}║{RESET}  {PINK}DEVELOPED BY ScriptyXSouu{RESET}                             {GOLD}║{RESET}")
         print(f"{GOLD}║{RESET}  📱 @PepeFlowOfficialBot                                 {GOLD}║{RESET}")
         print(f"{GOLD}║{RESET}  ❌ FLIP REMOVED (tidak tersedia)                        {GOLD}║{RESET}")
         print(f"{GOLD}╠══════════════════════════════════════════════════════════╣{RESET}")
