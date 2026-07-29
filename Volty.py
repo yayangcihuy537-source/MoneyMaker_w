@@ -79,7 +79,7 @@ def show_banner():
 ║   {GOLD}⚡ VOLTLY EARN BOT — ADS ONLY {PURPLE}                    ║
 ║   {LIME}📺 Adsgram (6x) • Monetag (6x)                     {PURPLE}║
 ║   {LIME}🛑 Stop otomatis jika semua iklan habis          {PURPLE}║
-║   {PINK}👑 Owner: @MoneyMaker_w                           {PURPLE}║
+║   {PINK}👑 Owner: ScriptyXSouu                           {PURPLE}║
 ╚══════════════════════════════════════════════════════════╝{RESET}
 """)
 
