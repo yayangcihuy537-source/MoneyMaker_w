@@ -48,7 +48,7 @@ def banner():
 {Fore.YELLOW}╔══════════════════════════════════════════════════════════════╗
 ║            COINPIN.TOP - FAUCET + PTC BOT                        ║
 ╠══════════════════════════════════════════════════════════════╣
-║  👨‍💻 Developer : {Fore.MAGENTA}Moneymaker_w{Fore.YELLOW}
+║  👨‍💻 Developer : {Fore.MAGENTA}ScriptyXSouu{Fore.YELLOW}
 ║  🌐 Website   : {Fore.CYAN}coinpin.top{Fore.YELLOW}
 ║  🤖 Language  : {Fore.GREEN}Python{Fore.YELLOW}
 ║  ⚡ Mode      : {Fore.GREEN}Auto Claim + Auto PTC{Fore.YELLOW}
