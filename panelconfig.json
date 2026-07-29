@@ -29,9 +29,9 @@
       "name": "Apikey",
       "items": {
         "1": {
-          "label": "Coming Soon",
-          "file": "",
-          "runner": ""
+          "label": "99Faucet",
+          "file": "99.py",
+          "runner": "python3"
         },
         "2": {
           "label": "Coming Soon",
