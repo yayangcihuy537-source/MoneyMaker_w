@@ -249,7 +249,7 @@ class SpeedKick:
                     time.sleep(5)
                     continue
 
-    # --- Mining ---
+    # --- Mining (still defined but NOT used in smart loop) ---
     def run_mining(self) -> Dict:
         status = self.get_mining_status()
         if not status.get("ok"):
@@ -334,39 +334,15 @@ class SpeedKick:
             print(f"{RED}❌ Withdraw failed: {result.get('error')}{RESET}")
         return result
 
-    # --- Smart Loop (MODIFIED: ads selesai dulu, baru mining) ---
+    # --- Smart Loop (MODIFIED: Hanya ads, setelah selesai langsung berhenti) ---
     def smart_loop(self):
-        print(f"\n{GREEN}🌾 Starting Smart Loop...{RESET}")
+        print(f"\n{GREEN}🌾 Starting Ads Farming...{RESET}")
         print(f"{YELLOW}Press Ctrl+C to return to menu{RESET}\n")
-
-        while True:
-            try:
-                # Step 1: Kerjain semua ads sampai 20
-                print(f"{CYAN}📢 Checking ads...{RESET}")
-                self.run_ads()  # ini akan looping sampai ads selesai
-
-                # Step 2: Setelah ads selesai, cek mining
-                print(f"{CYAN}⛏️ Checking mining...{RESET}")
-                mining_result = self.run_mining()
-
-                # Step 3: Tunggu sampai mining berikutnya
-                if mining_result.get("ok") and mining_result.get("nextClaimAt"):
-                    wait = max(0, (mining_result["nextClaimAt"] - int(time.time()*1000)) / 1000)
-                elif mining_result.get("nextClaimAt"):
-                    wait = max(0, (mining_result["nextClaimAt"] - int(time.time()*1000)) / 1000)
-                else:
-                    wait = 60
-
-                if wait > 0:
-                    print(f"{DIM}⏳ Next mining in {wait:.0f}s...{RESET}")
-                    time.sleep(wait)
-
-            except KeyboardInterrupt:
-                print(f"\n{YELLOW}⏹️ Farming paused. Back to menu.{RESET}")
-                break
-            except Exception as e:
-                print(f"{RED}❌ Error: {e}{RESET}")
-                time.sleep(60)
+        # Kerjain semua ads sampai 20
+        self.run_ads()  # ini akan looping sampai ads selesai
+        # Setelah selesai, kembali ke menu
+        print(f"\n{GREEN}🎉 All ads completed! Returning to menu...{RESET}")
+        return  # exit function, back to main menu
 
 # ==================== CONFIG FILE ====================
 def load_config():
@@ -426,7 +402,7 @@ def main():
 {CYAN}╔════════════════════════════════════════════════════╗
 ║                    MAIN MENU                         ║
 ╠════════════════════════════════════════════════════╣
-║  {GREEN}[1]{RESET} 🌾 Start Farming (Ads + Mining)              ║
+║  {GREEN}[1]{RESET} 🌾 Start Farming (Ads only)                 ║
 ║  {PINK}[2]{RESET} 💸 Withdraw                               ║
 ║  {BLUE}[3]{RESET} 📊 Check Balance                         ║
 ║  {YELLOW}[4]{RESET} 📝 Update InitData                      ║
