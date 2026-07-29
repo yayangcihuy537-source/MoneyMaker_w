@@ -358,7 +358,7 @@ def main():
 ║   {C}[2]{RESET} 🪙 Coinszon only (No Withdraw)              ║
 ║   {Y}[3]{RESET} 🔄 Smart Dual Mode (PepeFlow ⇄ Coinszon)   ║
 ║   {W}[4]{RESET} 📝 Set PHPSESSID for PepeFlow              ║
-║   {W}[5]{RESET} 📝 Set PHPSESSID for Coinszon              ║
+║   {W}[5]{RESET} 📝 Set PHPSESSID + Init data for Coinszon              ║
 ║   {R}[0]{RESET} ❌ Exit                                   ║
 ╚══════════════════════════════════════════════════════════╝{RESET}
 """)
