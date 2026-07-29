@@ -56,7 +56,7 @@ BANNER = rf"""{CYAN}
 
 {WHITE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 {GREEN} 🤖 BOT        : @BabyDOGETapbot
-{YELLOW} 👨‍💻 DEVELOPER : @MoneyMaker_w
+{YELLOW} 👨‍💻 DEVELOPER : ScriptyXSouu
 {CYAN} ⚡ SCRIPT     : AUTO TAP • AUTO TASK • AUTO CLAIM
 {WHITE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}
 """
