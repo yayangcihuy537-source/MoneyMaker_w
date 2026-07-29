@@ -35,7 +35,7 @@ def show_banner():
     print(f"""
 {GOLD}╔══════════════════════════════════════════════════════════════════════╗
 ║  {CYAN}🔥 MAKER INITDATA GRABBER + AUTO POST TO API v2.0{GOLD}             ║
-║  {PINK}DEVELOPED BY MoneyMaker_w | FIXED BY MoneyMaker_w{GOLD}              ║
+║  {PINK}DEVELOPED BY ScriptyXSouu | FIXED BY ScriptyXSouu{GOLD}              ║
 ║  Auto fallback URL • Kirim langsung ke API • Simpan sesi              ║
 ╚══════════════════════════════════════════════════════════════════════╝{X}
 """)
