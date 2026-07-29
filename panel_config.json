@@ -59,8 +59,8 @@
           "runner": "python3"
         },
         "3": {
-          "label": "BossDoge",
-          "file": "obf_Bossdoge.py",
+          "label": "Pepeflow X CoinsZon",
+          "file": "pepe.py",
           "runner": "python3"
         },
         "4": {
@@ -69,8 +69,8 @@
           "runner": "python3"
         },
         "5": {
-          "label": "Pepeflow X CoinsZon",
-          "file": "pepe.py",
+          "label": "Coming soon",
+          "file": "",
           "runner": "python3"
         },
         "6": {
