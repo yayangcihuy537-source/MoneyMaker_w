@@ -259,11 +259,34 @@ class MiniAppBot:
                 self.rewards[g] = rwd
                 self.play_counts[g] += 1
                 self.log(f"{G}✔ {self.game_map[g]['display']} +{rwd} (Bal: {self.balance})")
+            elif result and result.get('status') == 'error':
+                err = result.get('message', '')
+                if '2x bonus window' in err.lower():
+                    print(f"{Y}⚠️ {self.game_map[g]['display']} 2x window expired, retrying immediately...{RESET}")
+                    time.sleep(2)
+                    result2 = self.play_single(g)
+                    if result2 and result2.get('status') == 'success':
+                        rwd = result2.get('reward', 0)
+                        self.balance = float(result2.get('new_balance', self.balance))
+                        self.rewards[g] = rwd
+                        self.play_counts[g] += 1
+                        self.log(f"{G}✔ {self.game_map[g]['display']} +{rwd} (Bal: {self.balance}) [retry OK]")
+                    else:
+                        err2 = result2.get('message','No resp') if result2 else 'No resp'
+                        self.log(f"{R}✖ {self.game_map[g]['display']} FAIL: {err2} [retry failed]")
+                else:
+                    self.log(f"{R}✖ {self.game_map[g]['display']} FAIL: {err}")
             else:
                 err = result.get('message','No resp') if result else 'No resp'
                 self.log(f"{R}✖ {self.game_map[g]['display']} FAIL: {err}")
             time.sleep(3)
+
         self.get_dashboard()
+        if self.balance == 0.0:
+            self.log(f"{Y}⚠️ Balance 0, reinitializing session...{RESET}")
+            self.reauth()
+            time.sleep(2)
+            self.get_dashboard()
         self.display_dashboard()
         return True
 
@@ -305,7 +328,7 @@ def main():
         print(f"""
 {PURPLE}╔══════════════════════════════════════════════════════════╗
 ║   {GOLD}🤖 MULTI-BOT (PepeFlow + Coinszon)                 {PURPLE}║
-║   {PINK}Developer: ScriptyXSouu                             {PURPLE}║
+║   {PINK}Developer: @MoneyMaker_w                         {PURPLE}║
 ╠══════════════════════════════════════════════════════════╣
 ║   {G}[1]{RESET} 🐸 PepeFlow only                            ║
 ║   {C}[2]{RESET} 🪙 Coinszon only (No Withdraw)              ║
