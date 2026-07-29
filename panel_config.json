@@ -69,8 +69,8 @@
           "runner": "python3"
         },
         "5": {
-          "label": "Coming soon",
-          "file": "",
+          "label": "SpeedKick",
+          "file": "speedkick.py",
           "runner": "python3"
         },
         "6": {
