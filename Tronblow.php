@@ -72,6 +72,8 @@ function load_config(): ?array {
         $json = file_get_contents($CONFIG_FILE);
         $config = json_decode($json, true);
         if (is_array($config) && !empty($config['email'])) {
+            // Jika cookie tidak ada, set default kosong
+            if (!isset($config['cookie'])) $config['cookie'] = '';
             return $config;
         }
     }
@@ -363,13 +365,13 @@ function interactive_setup(): array {
         $config['email'] = read_line("Email: ");
     }
 
-    echo "\n" . $cyan . "[2/2] Enter your browser cookie:" . $reset . "\n";
-    echo $yellow . "(DevTools > Network > claim request > Request Headers > Cookie)" . $reset . "\n";
-    $config['cookie'] = read_line("Cookie: ");
+    // ==================== COOKIE PROMPT DIHAPUS ====================
+    // Cookie akan diset kosong; user bisa menambahkan sendiri di file config jika diperlukan.
+    $config['cookie'] = '';
 
     $config['base_url'] = "https://tronblow.site";
     $config['delay'] = 65;
 
-    echo "\n" . $green . "Config saved!" . $reset . "\n";
+    echo "\n" . $green . "Config saved! (Cookie left empty)" . $reset . "\n";
     return $config;
 }
