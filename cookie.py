@@ -39,7 +39,7 @@ def show_banner():
     print(f"""
 {GOLD}╔══════════════════════════════════════════════════════════════╗
 ║  {CYAN}🔑 AUTO GET PHPSESSID FROM BOT TELEGRAM v1.3{GOLD}           ║
-║  {PINK}DEVELOPED BY MoneyMaker_w{GOLD}                              ║
+║  {PINK}DEVELOPED BY ScriptyXSouu{GOLD}                              ║
 ║  Ambil PHPSESSID dari bot Telegram via WebView            ║
 ║  📞 Nomor HP tersimpan • Session otomatis (skip OTP)     ║
 ║  🔓 Auto-clear session jika database terkunci             ║
