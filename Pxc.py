@@ -17,7 +17,7 @@ def show_banner():
 ║   {YELLOW}ARCADEPXC — AUTO CLAIM + 3 ADS (SKIP 429)         {CYAN}║
 ║   {GREEN}⚡ Daily • Claim • Interstitial • Gigapub • Monetag {CYAN}║
 ║   {YELLOW}⏭️  429 = Skip lanjut iklan lain                 {CYAN}║
-║   {CYAN}👑 Owner: @MoneyMaker_w                             ║
+║   {CYAN}👑 Owner: ScriptyXSouu                             ║
 ╚══════════════════════════════════════════════════════════╝{RESET}
 """)
 
