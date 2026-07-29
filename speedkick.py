@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 SpeedKick 24/7 Automation — Ads + Mining + Withdraw + Menu
+Developer: ScriptyXSouu
 """
 
 import os
@@ -196,32 +197,28 @@ class SpeedKick:
         status = self.get_mining_status()
         return status.get("balance", 0) if status.get("ok") else 0
 
-    # --- Ads ---
+    # --- Ads (MODIFIED: Selesaikan semua ads dulu) ---
     def run_ads(self) -> bool:
-        views = self.get_ad_views()
-        cooldown_until = self.get_ad_cooldown()
         total = 20
+        while True:
+            views = self.get_ad_views()
+            if views >= total:
+                print(f"{GREEN}✅ All 20 ads done today{RESET}")
+                return True
 
-        if cooldown_until and cooldown_until > 0:
-            now = int(time.time() * 1000)
-            if cooldown_until > now:
-                wait_hours = (cooldown_until - now) / 3600000
-                print(f"{YELLOW}⏳ Ads cooldown – {wait_hours:.1f}h left, skip to mining...{RESET}")
-                return False
+            cooldown_until = self.get_ad_cooldown()
+            if cooldown_until and cooldown_until > 0:
+                now = int(time.time() * 1000)
+                if cooldown_until > now:
+                    wait_seconds = (cooldown_until - now) / 1000
+                    if wait_seconds > 0:
+                        print(f"{YELLOW}⏳ Ads cooldown, waiting {wait_seconds:.0f}s...{RESET}")
+                        time.sleep(wait_seconds)
+                        continue  # cek lagi setelah cooldown
 
-        if views >= total:
-            print(f"{GREEN}✅ All 20 ads done today{RESET}")
-            return True
-
-        remaining = total - views
-        start_ad = views + 1
-
-        print(f"{WHITE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}")
-        print(f"{CYAN}📺 ADS {views}/{total} • {int(views/total*100)}%{RESET}")
-        print(f"{WHITE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}")
-
-        for i in range(start_ad, total + 1):
-            task_id = f"ad_zone_{i}"
+            # Coba claim ad berikutnya (views+1)
+            next_ad = views + 1
+            task_id = f"ad_zone_{next_ad}"
             print(f"\n{WHITE}🎯 {task_id}{RESET}")
             result = self.verify_task(task_id)
 
@@ -229,37 +226,28 @@ class SpeedKick:
                 reward = result.get("reward", 0)
                 print(f"{GOLD}💰 Reward : +{reward}{RESET}")
                 print(f"{GREEN}✅ Claimed Successfully{RESET}")
-                views += 1
-
-                if views >= total:
-                    print(f"\n{GREEN}🎉 All 20 ads done!{RESET}")
-                    return True
-
-                if i < total:
-                    wait = 30.0
-                    next_ad_at = self._parse_timestamp(result.get("nextAdAt"))
-                    if next_ad_at:
-                        wait = max(0, (next_ad_at - int(time.time()*1000)) / 1000)
-
-                    if wait > 60:
-                        print(f"{YELLOW}⏳ Ads cooldown, lanjut mining...{RESET}")
-                        return True
-                    else:
-                        print(f"{YELLOW}⏳ Next ad: {wait:.1f}s{RESET}")
-                        time.sleep(wait)
+                # views akan bertambah di next loop
+                continue
             else:
                 error = result.get("error", "").lower()
                 if "cooldown" in error or "throttle" in error or "too many" in error:
-                    print(f"{YELLOW}⏳ Ads paused, lanjut mining...{RESET}")
-                    return False
+                    # Ambil waktu cooldown dari response atau default 60s
+                    next_ad_at = self._parse_timestamp(result.get("nextAdAt"))
+                    if next_ad_at:
+                        wait_seconds = max(0, (next_ad_at - int(time.time()*1000)) / 1000)
+                    else:
+                        wait_seconds = 30
+                    print(f"{YELLOW}⏳ Cooldown, waiting {wait_seconds:.0f}s...{RESET}")
+                    time.sleep(wait_seconds)
+                    continue
                 elif "already" in error:
-                    print(f"{GREEN}✅ Already done{RESET}")
-                    views += 1
+                    print(f"{GREEN}✅ Already done (maybe claimed earlier){RESET}")
+                    # Refresh status, lanjut loop
+                    continue
                 else:
-                    print(f"{RED}❌ {error[:30]}{RESET}")
-                    time.sleep(2)
-
-        return True
+                    print(f"{RED}❌ Error: {error[:50]}{RESET}")
+                    time.sleep(5)
+                    continue
 
     # --- Mining ---
     def run_mining(self) -> Dict:
@@ -346,25 +334,33 @@ class SpeedKick:
             print(f"{RED}❌ Withdraw failed: {result.get('error')}{RESET}")
         return result
 
-    # --- Smart Loop ---
+    # --- Smart Loop (MODIFIED: ads selesai dulu, baru mining) ---
     def smart_loop(self):
         print(f"\n{GREEN}🌾 Starting Smart Loop...{RESET}")
         print(f"{YELLOW}Press Ctrl+C to return to menu{RESET}\n")
+
         while True:
             try:
-                ads_done = self.run_ads()
+                # Step 1: Kerjain semua ads sampai 20
+                print(f"{CYAN}📢 Checking ads...{RESET}")
+                self.run_ads()  # ini akan looping sampai ads selesai
+
+                # Step 2: Setelah ads selesai, cek mining
+                print(f"{CYAN}⛏️ Checking mining...{RESET}")
                 mining_result = self.run_mining()
+
+                # Step 3: Tunggu sampai mining berikutnya
                 if mining_result.get("ok") and mining_result.get("nextClaimAt"):
                     wait = max(0, (mining_result["nextClaimAt"] - int(time.time()*1000)) / 1000)
                 elif mining_result.get("nextClaimAt"):
                     wait = max(0, (mining_result["nextClaimAt"] - int(time.time()*1000)) / 1000)
                 else:
                     wait = 60
-                if wait > 0 and wait < 3600:
-                    print(f"{DIM}⏳ Next check in {wait:.0f}s...{RESET}")
+
+                if wait > 0:
+                    print(f"{DIM}⏳ Next mining in {wait:.0f}s...{RESET}")
                     time.sleep(wait)
-                else:
-                    time.sleep(60)
+
             except KeyboardInterrupt:
                 print(f"\n{YELLOW}⏹️ Farming paused. Back to menu.{RESET}")
                 break
@@ -387,7 +383,6 @@ def save_config(init_data):
 def main():
     init_data = load_config()
     
-    # Loop sampai dapat init_data
     while not init_data:
         banner()
         print(f"{RED}❌ No InitData found!{RESET}")
@@ -397,18 +392,16 @@ def main():
             save_config(init_data)
             print(f"{GREEN}✅ InitData saved!{RESET}\n")
             input("Tekan Enter untuk lanjut...")
-            clear()  # ← bersihkan sebelum menu utama
+            clear()
             break
         else:
             print(f"{RED}❌ InitData cannot be empty!{RESET}")
             time.sleep(1)
-            clear()  # ← bersihkan sebelum ulang
+            clear()
 
-    # Menu utama
     while True:
         banner()
         
-        # Validasi InitData
         bot = SpeedKick(init_data)
         auth = bot.auth_telegram()
         if not auth.get("ok"):
@@ -417,7 +410,7 @@ def main():
             init_data = input("New initData: ").strip()
             if init_data:
                 save_config(init_data)
-                clear()  # ← bersihkan setelah update
+                clear()
                 continue
             else:
                 print(f"{RED}❌ InitData required!{RESET}")
@@ -447,7 +440,7 @@ def main():
             sys.exit(0)
         elif choice == '1':
             bot.smart_loop()
-            clear()  # ← bersihkan setelah farming selesai
+            clear()
         elif choice == '2':
             try:
                 amount = int(input("Amount (min 500): ").strip())
