@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MULTI-BOT: PepeFlow + Coinszon (Smart Dual Mode) - FIXED
+MULTI-BOT: PepeFlow + Coinszon (Smart Dual Mode) - FIXED v2
 """
 
 import os, sys, time, json, random, re, requests
@@ -30,7 +30,6 @@ COIN_GAME_MAP = {
     "mystery_box": {"display": "NEON", "icon": "🎁"},
 }
 
-# ─────────────────── BASE CONFIG / BOT ───────────────────
 class BaseConfig:
     def __init__(self, file):
         self.file = file
@@ -70,10 +69,14 @@ def safe_float(val, default=0.0):
         return float(val)
     if isinstance(val, str):
         try:
-            return float(val.replace(',', '').strip())
+            cleaned = val.replace(',', '').strip()
+            return float(cleaned)
         except:
             return default
     return default
+
+def safe_int(val, default=0):
+    return int(safe_float(val, default))
 
 class MiniAppBot:
     def __init__(self, url, cfg, game_list, game_map, name):
@@ -106,8 +109,9 @@ class MiniAppBot:
         self.doubled_available = {g: False for g in game_list}
         self.status = {g: "Ready" for g in game_list}
         self.rewards = {g: 0 for g in game_list}
-        self.logs = deque(maxlen=8)
+        self.logs = deque(maxlen=10)
         self.running = True
+        self.retry_doubled = {g: True for g in game_list}  # track retry for doubled
 
     def fmt(self, sec):
         if sec <= 0: return "Ready"
@@ -197,10 +201,25 @@ class MiniAppBot:
                     return data
                 except: pass
             else:
-                match = re.search(r'id="dash-balance-pepe">\s*([\d.]+)\s*<', resp.text)
+                # Coinszon: balance di HTML
+                html = resp.text
+                patterns = [
+                    r'id="dash-balance-pepe">\s*([\d.,]+)\s*<',
+                    r'balance-pepe["\']?\s*[:>]\s*([\d.,]+)',
+                    r'Balance:\s*([\d.,]+)',
+                    r'class="balance"[^>]*>([\d.,]+)<',
+                    r'(\d+\.\d+)\s*<span',  # fallback
+                ]
+                for p in patterns:
+                    match = re.search(p, html, re.IGNORECASE)
+                    if match:
+                        self.balance = safe_float(match.group(1))
+                        return html
+                # fallback: cari angka di elemen dengan id dash-balance-pepe
+                match = re.search(r'dash-balance-pepe[^>]*>([^<]+)</', html)
                 if match:
                     self.balance = safe_float(match.group(1))
-                return resp.text
+                return html
         return None
 
     def get_games_status(self):
@@ -220,6 +239,13 @@ class MiniAppBot:
                             self.doubled_available[g] = bool(info.get('doubled', False))
                     return data
                 except: pass
+            # fallback: cari cooldown dari HTML
+            for g in self.game_list:
+                pattern = rf'{g}.*?cooldown.*?(\d+)'
+                match = re.search(pattern, html, re.IGNORECASE | re.DOTALL)
+                if match:
+                    self.cooldowns[g] = int(match.group(1))
+                    self.status[g] = self.fmt(self.cooldowns[g]) if self.cooldowns[g] > 0 else "Ready"
         return None
 
     def play_game(self, game, doubled=False, base_reward=None, pick=None):
@@ -236,10 +262,31 @@ class MiniAppBot:
         return None
 
     def play_single(self, game):
+        # Jika 2x tersedia dan belum pernah retry, coba doubled
+        if self.doubled_available.get(game, False) and self.retry_doubled.get(game, True):
+            # Coba dengan doubled
+            doubled = True
+            base = random.randint(10, 30)
+            result = self.play_game(game, doubled=True, base_reward=base)
+            if result and result.get('status') == 'success':
+                # sukses
+                return result
+            elif result and result.get('status') == 'error':
+                err = result.get('message', '')
+                if '2x bonus window has expired' in err:
+                    # Gagal karena 2x expired, tandai agar tidak coba doubled lagi
+                    self.retry_doubled[game] = False
+                    self.log(f"{Y}⚠️ 2x expired untuk {game}, fallback ke normal{RESET}")
+                    # Lanjut ke normal claim
+                else:
+                    # error lain, return
+                    return result
+            else:
+                # gagal total
+                return result
+        # Normal claim (tanpa doubled)
         if game == "lucky_wheel":
-            doubled = random.choice([True, False])
-            base = random.randint(10,30) if doubled else None
-            return self.play_game(game, doubled=doubled, base_reward=base)
+            return self.play_game(game, doubled=False)
         elif game == "slots":
             return self.play_game("slots")
         elif game == "mystery_box":
@@ -253,18 +300,19 @@ class MiniAppBot:
         print(f"{GOLD}╔══════════════════════════════════════════════════════════╗{RESET}")
         print(f"{GOLD}║{RESET}  {C}{self.name.upper()} AUTO-BOT{RESET}                              {GOLD}║{RESET}")
         print(f"{GOLD}╠══════════════════════════════════════════════════════════╣{RESET}")
-        print(f"{GOLD}║{RESET}  Run/Loop : {C}{self.loop_counter}{RESET}      Balance : {G}{self.balance:.2f}{RESET}   {GOLD}║{RESET}")
+        print(f"{GOLD}║{RESET}  Run/Loop : {C}{self.loop_counter}{RESET}      Balance : {G}{self.balance:.8f}{RESET}   {GOLD}║{RESET}")
         print(f"{GOLD}╠══════════════════════════════════════════════════════════╣{RESET}")
         for g in self.game_list:
             d = self.game_map[g]
             icon = d['icon']; disp = d['display']
             st = self.status[g]
-            twox = "2X" if self.doubled_available[g] else "-"
+            twox = "2X" if self.doubled_available[g] and self.retry_doubled.get(g, True) else "-"
             ply = self.play_counts[g]
             rwd = self.rewards[g]
             cd = self.fmt(self.cooldowns[g])
             sc = G if st == "Ready" else Y
-            print(f"{GOLD}║{RESET}  {icon} {disp:<6} {sc}{st:<8}{RESET}  {twox:<5} {ply:<5} {rwd:<7} {cd:<6}{GOLD}║{RESET}")
+            reward_str = f"{rwd:.8f}" if rwd < 0.001 else f"{rwd:.2f}"
+            print(f"{GOLD}║{RESET}  {icon} {disp:<6} {sc}{st:<8}{RESET}  {twox:<5} {ply:<5} {reward_str:<12} {cd:<6}{GOLD}║{RESET}")
         print(f"{GOLD}╠══════════════════════════════════════════════════════════╣{RESET}")
         for log in list(self.logs)[-6:]:
             log_clean = log[:48] if len(log) > 48 else log
@@ -287,7 +335,7 @@ class MiniAppBot:
                     self.balance = safe_float(result.get('new_balance', self.balance))
                     self.rewards[g] = rwd
                     self.play_counts[g] += 1
-                    self.log(f"{G}✔ {self.game_map[g]['display']} +{rwd:.2f} (Bal: {self.balance:.2f})")
+                    self.log(f"{G}✔ {self.game_map[g]['display']} +{rwd:.8f} (Bal: {self.balance:.8f})")
                 elif result and result.get('status') == 'error':
                     err = result.get('message', '')
                     if 'not logged in' in err.lower():
@@ -300,7 +348,7 @@ class MiniAppBot:
                             self.balance = safe_float(result2.get('new_balance', self.balance))
                             self.rewards[g] = rwd
                             self.play_counts[g] += 1
-                            self.log(f"{G}✔ {self.game_map[g]['display']} +{rwd:.2f} (Bal: {self.balance:.2f}) [retry OK]")
+                            self.log(f"{G}✔ {self.game_map[g]['display']} +{rwd:.8f} (Bal: {self.balance:.8f}) [retry OK]")
                         else:
                             err2 = result2.get('message','No resp') if result2 else 'No resp'
                             self.log(f"{R}✖ {self.game_map[g]['display']} FAIL: {err2} [retry failed]")
@@ -309,21 +357,15 @@ class MiniAppBot:
                 else:
                     err = result.get('message','No resp') if result else 'No resp'
                     self.log(f"{R}✖ {self.game_map[g]['display']} FAIL: {err}")
-                time.sleep(3)
+                time.sleep(random.uniform(2, 5))
 
             self.get_dashboard()
-            if self.balance == 0.0:
-                self.log(f"{Y}⚠️ Balance 0, reinitializing session...{RESET}")
-                self.reauth()
-                time.sleep(2)
-                self.get_dashboard()
             self.display_dashboard()
             return True
         except Exception as e:
             self.log(f"{R}✖ Process error: {e}{RESET}")
             return False
 
-# ─────────────────── SMART DUAL LOOP ───────────────────
 def smart_dual_loop(pbot, cbot):
     while pbot.running and cbot.running:
         try:
@@ -348,7 +390,6 @@ def smart_dual_loop(pbot, cbot):
             print(f"{R}❌ Dual loop error: {e}{RESET}")
             time.sleep(5)
 
-# ─────────────────── MENU ───────────────────
 def set_phpsessid(file, label):
     print(f"{Y}📝 Masukkan PHPSESSID untuk {label}:{RESET}")
     sid = input("PHPSESSID: ").strip()
