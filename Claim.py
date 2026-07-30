@@ -172,13 +172,32 @@ class ClaimBot:
             log(f"Login error: {str(e)}", Fore.RED, "❌")
             return False
 
+    def is_captcha_page(self, html):
+        """Check if the page contains an active captcha challenge."""
+        lower = html.lower()
+        # Check for actual captcha elements
+        if 'data-sitekey="' in lower:
+            return True
+        if 'h-captcha' in lower or 'hcaptcha' in lower:
+            return True
+        if 'shape captcha' in lower:
+            return True
+        if 'i\'m not a robot' in lower or 'im not a robot' in lower:
+            return True
+        if 'robot-checkbox' in lower or 'ccap-card' in lower:
+            return True
+        if 'captcha' in lower and ('verify' in lower or 'solve' in lower or 'challenge' in lower):
+            # Only if captcha and action words, to avoid false positives
+            return True
+        return False
+
     def get_faucet_page(self, coin):
         """Get faucet page and extract token. Returns dict with status and token."""
         coin = coin.lower()
         url = f"{BASE_URL}/faucet/currency/{coin}"
         headers = {"Referer": f"{BASE_URL}/"}
 
-        for attempt in range(3):  # retry 3 times
+        for attempt in range(3):
             try:
                 resp = self.session.get(url, headers=headers, timeout=30)
                 if resp.status_code != 200:
@@ -187,13 +206,15 @@ class ClaimBot:
 
                 html = resp.text
 
-                # Check for captcha or limit on page
-                if "captcha" in html.lower() or "i'm not a robot" in html.lower():
-                    return {"status": "captcha"}
+                # Check for daily limit on page
                 if "daily claim limit" in html.lower() or "comeback again tomorrow" in html.lower():
                     return {"status": "limit"}
 
-                # Extract token with multiple patterns
+                # Check for captcha
+                if self.is_captcha_page(html):
+                    return {"status": "captcha"}
+
+                # Extract token
                 token = None
                 patterns = [
                     r'<input type="hidden" name="token" value="([^"]+)"',
@@ -210,7 +231,6 @@ class ClaimBot:
                         break
 
                 if token:
-                    # Get CSRF
                     csrf = self.session.cookies.get('csrf_cookie_name')
                     if not csrf:
                         match = re.search(r'name="csrf_token_name"\s*value="([^"]+)"', html)
@@ -220,13 +240,10 @@ class ClaimBot:
                         return {"status": "error", "msg": "CSRF not found"}
                     return {"status": "success", "token": token, "csrf": csrf}
 
-                # If no token, maybe page is loading or showing something else
                 if "please wait" in html.lower():
                     return {"status": "wait"}
                 if "invalid" in html.lower():
                     return {"status": "invalid"}
-
-                # If nothing matched, treat as unknown
                 return {"status": "error", "msg": "Token not found"}
 
             except Exception as e:
@@ -244,8 +261,7 @@ class ClaimBot:
         status = page_result.get("status")
 
         if status == "captcha":
-            log("Captcha detected, marking as bad", Fore.RED, "🤖")
-            self.bad_coins.add(coin)
+            log("Captcha detected, waiting 30s and retry...", Fore.YELLOW, "🤖")
             return "captcha"
         elif status == "limit":
             log("Daily limit detected, marking as bad", Fore.YELLOW, "⛔")
@@ -259,8 +275,6 @@ class ClaimBot:
             return "error"
         elif status == "error":
             log(f"Failed to get token: {page_result.get('msg', 'Unknown')}", Fore.RED, "❌")
-            # If token not found after retries, maybe the coin is blocked temporarily
-            # We'll mark it as bad after 3 consecutive errors? We'll handle in auto_farm
             return "error"
         elif status != "success":
             log(f"Unknown status: {status}", Fore.RED, "❌")
@@ -296,8 +310,7 @@ class ClaimBot:
                     self.bad_coins.add(coin)
                     return "limit"
                 elif "captcha" in html or "verify" in html or "robot" in html:
-                    log("Captcha detected on this coin", Fore.RED, "🤖")
-                    self.bad_coins.add(coin)
+                    log("Captcha detected on claim response", Fore.RED, "🤖")
                     return "captcha"
                 elif "sufficient funds" in html or "balance" in html:
                     log("Faucet out of funds", Fore.RED, "💰")
@@ -326,7 +339,6 @@ class ClaimBot:
             return "error"
 
     def auto_farm(self):
-        """Infinite auto claim loop until all coins blocked."""
         if not self.logged_in:
             if not self.login(self.email):
                 log("Login failed. Please check email.", Fore.RED, "❌")
@@ -338,20 +350,20 @@ class ClaimBot:
         self.total_claims = 0
         self.success_claims = 0
         self.failed_claims = 0
-        error_count = 0  # consecutive errors for current coin
+        error_count = 0
+        captcha_count = 0
 
         log(f"🚀 Starting infinite farming...", Fore.CYAN)
         log(f"📌 Starting coin: {coin.upper()}", Fore.CYAN, "🪙")
         print("\n" + "━"*50 + "\n")
 
         while True:
-            # Check if all coins blocked
             if len(self.bad_coins) >= len(coins):
-                log("❌ All coins are blocked (limit/captcha/empty). Stopping.", Fore.RED, "🛑")
+                log("❌ All coins are blocked. Stopping.", Fore.RED, "🛑")
                 break
 
-            # Skip bad coins
             if coin in self.bad_coins:
+                # find next good coin
                 start_idx = coins.index(coin) if coin in coins else 0
                 found = False
                 for i in range(len(coins)):
@@ -366,11 +378,38 @@ class ClaimBot:
 
             result = self.claim_faucet(coin)
 
-            if result in ["limit", "captcha", "empty", "invalid"]:
+            if result == "captcha":
+                captcha_count += 1
+                if captcha_count >= 3:
+                    log(f"⚠️ Captcha persistent on {coin.upper()}, switching...", Fore.RED, "🔄")
+                    self.bad_coins.add(coin)
+                    captcha_count = 0
+                    error_count = 0
+                    # switch coin
+                    try:
+                        idx = coins.index(coin)
+                        for i in range(1, len(coins)):
+                            next_idx = (idx + i) % len(coins)
+                            if coins[next_idx] not in self.bad_coins:
+                                coin = coins[next_idx]
+                                break
+                        else:
+                            log("❌ All coins blocked!", Fore.RED, "🛑")
+                            break
+                        log(f"Switching to {coin.upper()}", Fore.CYAN, "🔄")
+                    except ValueError:
+                        coin = "ltc"
+                else:
+                    log(f"Captcha detected, waiting 30s before retry...", Fore.YELLOW, "⏳")
+                    timer(30, "⏳ Retry after")
+                continue
+
+            elif result in ["limit", "empty", "invalid"]:
                 log(f"⚠️ {coin.upper()} blocked — switching...", Fore.RED, "🔄")
                 self.bad_coins.add(coin)
+                captcha_count = 0
                 error_count = 0
-                # Switch to next good coin
+                # switch coin
                 try:
                     idx = coins.index(coin)
                     for i in range(1, len(coins)):
@@ -385,18 +424,19 @@ class ClaimBot:
                 except ValueError:
                     coin = "ltc"
                 continue
+
             elif result == "wait":
                 delay = random_delay(10, 15)
                 timer(int(delay), "⏳ Wait before retry")
                 continue
+
             elif result == "error":
                 error_count += 1
-                # If too many errors on same coin, mark it as bad and switch
                 if error_count >= 3:
                     log(f"❌ Too many errors on {coin.upper()}, switching...", Fore.RED, "🔄")
                     self.bad_coins.add(coin)
+                    captcha_count = 0
                     error_count = 0
-                    # switch coin
                     try:
                         idx = coins.index(coin)
                         for i in range(1, len(coins)):
@@ -415,16 +455,17 @@ class ClaimBot:
                     delay = random_delay(5, 8)
                     timer(int(delay), "⏳ Retry after")
                     continue
+
             elif result is True:
-                error_count = 0  # reset error count on success
+                error_count = 0
+                captcha_count = 0
             else:
-                # failed but not blocked, increment error count
                 error_count += 1
                 if error_count >= 3:
                     log(f"❌ Too many failures on {coin.upper()}, switching...", Fore.RED, "🔄")
                     self.bad_coins.add(coin)
+                    captcha_count = 0
                     error_count = 0
-                    # switch coin
                     try:
                         idx = coins.index(coin)
                         for i in range(1, len(coins)):
@@ -440,14 +481,12 @@ class ClaimBot:
                         coin = "ltc"
                     continue
 
-            # Print status every 5 successful claims or total claims
             if self.total_claims % 5 == 0 and self.total_claims > 0:
                 print_status(coin, self.total_claims, self.success_claims, self.failed_claims, self.bad_coins)
 
             delay = random_delay(6, 11)
             timer(int(delay), "⏳ Next claim in")
 
-        # Final summary
         print("\n" + "━"*50)
         log("📊 FARMING COMPLETE", Fore.CYAN)
         print(f"   Total Claims : {self.total_claims}")
