@@ -2,18 +2,25 @@
 # -*- coding: utf-8 -*-
 
 import requests
+import json
 import time
 import random
 import re
 import os
 import sys
-import json
 from datetime import datetime
 from colorama import init, Fore, Style
 from pyfiglet import Figlet
 
-# Init colorama
 init(autoreset=True)
+
+# ============================================================
+# KONSTANTA
+# ============================================================
+VERSION = "1.0"
+SCRIPT_NAME = "CLAIMCRYPTO AUTO CLAIM"
+BASE_URL = "https://claimcrypto.in"
+CONFIG_FILE = "config.json"
 
 # ============================================================
 # WARNA
@@ -33,645 +40,492 @@ def print_banner():
     print(CYAN + "╔════════════════════════════════════════════════════════════╗")
     print(WHITE + f.renderText("CLAIMCRYPTO"))
     print(CYAN + "╠════════════════════════════════════════════════════════════╣")
-    print(GREEN + "  💰 AUTO CLAIM • AUTO FAUCET • AUTO LOGIN")
-    print(YELLOW + "  ⚡ Fast • Faucet • Login")
-    print(RED + "  👨‍💻 Developer : ScriptyXSouu")
+    print(GREEN + "  💰 AUTO CLAIM • AUTO LOGIN • SMART DETECT")
+    print(YELLOW + "  ⚡ Infinite Farm • Auto Switch Coin")
+    print(RED + "  👨‍💻 Developer : @MoneyMaker_w")
     print(CYAN + "╚════════════════════════════════════════════════════════════╝" + RESET)
 
 # ============================================================
-# KONFIGURASI DEFAULT
+# FUNGSI BANTUAN
 # ============================================================
-DEFAULT_CONFIG = {
-    "base_url": "https://claimcrypto.in",
-    "coins": ["ltc", "doge", "trx", "sol", "usdt", "dash", "bch", "dgb", "eth", "fey", "zec", "bnb"],
-    "default_coin": "ltc",
-    "min_delay": 6,
-    "max_delay": 11,
-    "max_claims_per_session": 10,
-    "user_agents": [
-        "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36",
-        "Mozilla/5.0 (Linux; Android 11; SM-G998B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36",
-        "Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
-    ]
-}
-
-CONFIG_FILE = 'config.json'
-SETTINGS_FILE = 'settings.json'
-
-def load_config():
-    if os.path.exists(CONFIG_FILE):
-        try:
-            with open(CONFIG_FILE, 'r') as f:
-                user_config = json.load(f)
-                merged = DEFAULT_CONFIG.copy()
-                merged.update(user_config)
-                return merged
-        except:
-            pass
-    return DEFAULT_CONFIG
-
-# ============================================================
-# SETTINGS
-# ============================================================
-DEFAULT_SETTINGS = {
-    "email": "",
-    "coin": "ltc",
-    "target": 10,
-    "user_agent_index": 0
-}
-
-def load_settings():
-    if os.path.exists(SETTINGS_FILE):
-        with open(SETTINGS_FILE, 'r') as f:
-            return json.load(f)
-    else:
-        with open(SETTINGS_FILE, 'w') as f:
-            json.dump(DEFAULT_SETTINGS, f, indent=4)
-        return DEFAULT_SETTINGS
-
-def save_settings(settings):
-    with open(SETTINGS_FILE, 'w') as f:
-        json.dump(settings, f, indent=4)
-
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
+def load_config():
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, 'r') as f:
+            return json.load(f)
+    else:
+        default = {
+            "email": "",
+            "coin": "ltc",
+            "user_agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"
+        }
+        save_config(default)
+        return default
+
+def save_config(data):
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(data, f, indent=4)
+
+def random_delay(min_sec=6, max_sec=11):
+    return random.uniform(min_sec, max_sec) + random.uniform(0, 1.5)
+
+def log(message, color=Fore.WHITE, emoji=''):
+    timestamp = datetime.now().strftime('%H:%M:%S')
+    print(f"{color}[{timestamp}] {emoji} {message}{Style.RESET_ALL}")
+
+def timer(seconds, prefix="⏳ Please wait"):
+    for i in range(seconds, 0, -1):
+        sys.stdout.write(f"\r{prefix} {i}s  ")
+        sys.stdout.flush()
+        time.sleep(1)
+    sys.stdout.write("\r" + " " * 30 + "\r")
+
+def print_status(coin, total_claims, success, failed, bad_coins):
+    print(f"\n{CYAN}📊 Status:{RESET}")
+    print(f"   Coin: {YELLOW}{coin.upper()}{RESET}")
+    print(f"   Total: {WHITE}{total_claims}{RESET}")
+    print(f"   Success: {GREEN}{success}{RESET}")
+    print(f"   Failed: {RED}{failed}{RESET}")
+    print(f"   Bad Coins: {YELLOW}{', '.join(bad_coins) if bad_coins else 'None'}{RESET}")
+    print("━"*50)
+
 # ============================================================
-# BOT
+# KELAS BOT
 # ============================================================
-class ClaimCryptoBot:
-    def __init__(self):
-        self.config = load_config()
-        self.settings = load_settings()
-        self.base_url = self.config['base_url']
-        self.all_coins = self.config.get('coins', [])
-        self.current_coin_index = 0
-        self.bad_coins = set()  # koin yang udah limit atau kena captcha
+class ClaimBot:
+    def __init__(self, config):
+        self.config = config
         self.session = requests.Session()
+        self.session.headers.update({
+            "User-Agent": config.get("user_agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36"),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Site": "same-origin",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-User": "?1",
+            "Sec-Fetch-Dest": "document",
+            "Cache-Control": "max-age=0",
+        })
         self.logged_in = False
         self.csrf_token = None
-        self.ci_session = None
-        self.stats = {
-            'total': 0,
-            'success': 0,
-            'failed': 0,
-            'limit_reached': False,
-            'captcha_detected': False,
-            'coins_used': [],
-            'start_time': None
-        }
-        self._setup_session()
-        self._apply_user_agent()
+        self.email = config.get("email", "")
+        self.bad_coins = set()
+        self.total_claims = 0
+        self.success_claims = 0
+        self.failed_claims = 0
 
-    def _setup_session(self):
-        headers = {
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-            'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Site': 'same-origin',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-User': '?1',
-            'Sec-Fetch-Dest': 'document',
-            'Cache-Control': 'max-age=0',
-            'Sec-Ch-Ua': '"Chromium";v="127", "Not)A;Brand";v="99", "Microsoft Edge Simulate";v="127", "Lemur";v="127"',
-            'Sec-Ch-Ua-Mobile': '?1',
-            'Sec-Ch-Ua-Platform': '"Android"',
-        }
-        self.session.headers.update(headers)
-
-    def _apply_user_agent(self):
-        ua_list = self.config.get('user_agents', [])
-        idx = self.settings.get('user_agent_index', 0)
-        ua = ua_list[idx] if 0 <= idx < len(ua_list) else ua_list[0]
-        self.session.headers.update({'User-Agent': ua})
-
-    def set_user_agent_by_index(self, idx):
-        self.settings['user_agent_index'] = idx
-        save_settings(self.settings)
-        self._apply_user_agent()
-
-    def set_email(self, email):
-        self.settings['email'] = email
-        save_settings(self.settings)
-
-    def set_coin(self, coin):
-        self.settings['coin'] = coin
-        save_settings(self.settings)
-        if coin.lower() in [c.lower() for c in self.all_coins]:
-            self.current_coin_index = [c.lower() for c in self.all_coins].index(coin.lower())
-
-    def set_target(self, target):
-        self.settings['target'] = target
-        save_settings(self.settings)
-
-    def _random_delay(self, min_sec=None, max_sec=None):
-        min_delay = min_sec or self.config.get('min_delay', 6)
-        max_delay = max_sec or self.config.get('max_delay', 11)
-        jitter = random.uniform(0, 1.5)
-        return random.uniform(min_delay, max_delay) + jitter
-
-    def _log(self, message, color=Fore.WHITE, emoji='', end='\n'):
-        timestamp = datetime.now().strftime('%H:%M:%S')
-        print(f"{color}[{timestamp}] {emoji} {message}{Style.RESET_ALL}", end=end)
-
-    def _extract_csrf(self, html):
-        patterns = [
-            r'csrf_token_name\s*=\s*"([^"]+)"',
-            r'name="csrf_token_name"\s*value="([^"]+)"',
-            r'csrf_cookie_name\s*=\s*"([^"]+)"',
-            r'<input[^>]*name="csrf_token_name"[^>]*value="([^"]+)"',
-        ]
-        for p in patterns:
-            m = re.search(p, html)
-            if m:
-                return m.group(1)
-        return self.session.cookies.get('csrf_cookie_name')
-
-    def _extract_token(self, html):
-        patterns = [
-            r'name="token"\s*value="([^"]+)"',
-            r'token\s*=\s*"([^"]+)"',
-            r'<input[^>]*name="token"[^>]*value="([^"]+)"',
-            r'var\s+token\s*=\s*"([^"]+)"',
-            r'token\s*=\s*\'([^\']+)\'',
-            r'token=([a-zA-Z0-9]+)',
-            r'"token":"([^"]+)"',
-            r'token":"([^"]+)"',
-            r'["\']token["\']\s*:\s*["\']([^"\']+)["\']',
-            r'<script[^>]*>.*?token\s*=\s*["\']([^"\']+)["\']',
-            r'token["\']?\s*[:=]\s*["\']([^"\']+)["\']',
-        ]
-        for p in patterns:
-            m = re.search(p, html, re.IGNORECASE | re.DOTALL)
-            if m:
-                return m.group(1)
-        
-        hidden_inputs = re.findall(
-            r'<input[^>]*type="hidden"[^>]*name="([^"]+)"[^>]*value="([^"]+)"',
-            html,
-            re.IGNORECASE
-        )
-        for name, value in hidden_inputs:
-            if 'token' in name.lower():
-                return value
-        
-        if 'csrf_cookie_name' in self.session.cookies:
-            return self.session.cookies.get('csrf_cookie_name')
-        
-        return None
+    def get_csrf_from_home(self):
+        try:
+            resp = self.session.get(BASE_URL, timeout=30)
+            if resp.status_code != 200:
+                log("Failed to get homepage", Fore.RED, "❌")
+                return None
+            csrf = self.session.cookies.get('csrf_cookie_name')
+            if csrf:
+                return csrf
+            match = re.search(r'name="csrf_token_name"\s*value="([^"]+)"', resp.text)
+            if match:
+                return match.group(1)
+            match = re.search(r'csrf_cookie_name\s*=\s*"([^"]+)"', resp.text)
+            if match:
+                return match.group(1)
+            return None
+        except Exception as e:
+            log(f"Error: {str(e)}", Fore.RED, "❌")
+            return None
 
     def login(self, email):
-        self._log(f"Logging in with email: {email}", Fore.CYAN, '🔑')
+        log(f"Logging in with email: {email}", Fore.CYAN, "🔑")
+        csrf = self.get_csrf_from_home()
+        if not csrf:
+            log("Failed to get CSRF token", Fore.RED, "❌")
+            return False
+        self.csrf_token = csrf
+
+        data = {
+            "wallet": email,
+            "csrf_token_name": csrf
+        }
+        headers = {
+            "Origin": BASE_URL,
+            "Referer": BASE_URL + "/",
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
         try:
-            resp = self.session.get(f'{self.base_url}/')
-            time.sleep(self._random_delay(2, 4))
-            csrf = self._extract_csrf(resp.text)
-            if not csrf:
-                self._log("Failed to get CSRF token", Fore.RED, '❌')
-                return False
-            self.csrf_token = csrf
-            data = {
-                'fingerprint': '13abf0b009dd510c96d7b75d8f3a8dd0',
-                'wallet': email,
-                'csrf_token_name': csrf
-            }
-            login_resp = self.session.post(
-                f'{self.base_url}/auth/login',
-                data=data,
-                headers={'Origin': self.base_url, 'Referer': f'{self.base_url}/', 'Content-Type': 'application/x-www-form-urlencoded'}
-            )
-            time.sleep(self._random_delay(3, 6))
-            if 'dashboard' in login_resp.url or '/dashboard' in login_resp.text:
+            resp = self.session.post(f"{BASE_URL}/auth/login", data=data, headers=headers, timeout=30)
+            if resp.status_code == 200 and ("Dashboard" in resp.text or "Earn Free" in resp.text):
                 self.logged_in = True
-                self._log("Login successful!", Fore.GREEN, '✅')
-                new_csrf = self._extract_csrf(login_resp.text)
-                if new_csrf:
-                    self.csrf_token = new_csrf
+                self.email = email
+                self.config["email"] = email
+                save_config(self.config)
+                log("Login successful!", Fore.GREEN, "✅")
                 return True
             else:
-                self._log("Login failed", Fore.RED, '❌')
+                log("Login failed - check email", Fore.RED, "❌")
                 return False
         except Exception as e:
-            self._log(f"Login error: {str(e)}", Fore.RED, '❌')
+            log(f"Login error: {str(e)}", Fore.RED, "❌")
             return False
 
     def get_faucet_page(self, coin):
-        """Get faucet page - NO CAPTCHA DETECTION here! Only extract token."""
+        """Get faucet page and extract token. Returns dict with status and token."""
         coin = coin.lower()
-        url = f'{self.base_url}/faucet/currency/{coin}'
-        
-        for attempt in range(3):
+        url = f"{BASE_URL}/faucet/currency/{coin}"
+        headers = {"Referer": f"{BASE_URL}/"}
+
+        for attempt in range(3):  # retry 3 times
             try:
-                headers = {
-                    'Referer': f'{self.base_url}/',
-                    'Sec-Fetch-Site': 'same-origin',
-                    'Sec-Fetch-Mode': 'navigate',
-                    'Sec-Fetch-Dest': 'document',
-                }
-                self.session.headers.update(headers)
-                resp = self.session.get(url)
-                
-                time.sleep(self._random_delay(4, 7))
-                
+                resp = self.session.get(url, headers=headers, timeout=30)
                 if resp.status_code != 200:
-                    self._log(f"Failed to get faucet page: {resp.status_code}", Fore.RED, '❌')
+                    log(f"Failed to get faucet page: {resp.status_code}", Fore.RED, "❌")
                     continue
-                
+
                 html = resp.text
-                
-                csrf = self._extract_csrf(html)
-                if csrf:
-                    self.csrf_token = csrf
-                
-                token = self._extract_token(html)
-                
-                if not token:
-                    self._log("Token not found, refreshing session...", Fore.YELLOW, '🔄')
-                    resp2 = self.session.get(f'{self.base_url}/')
-                    time.sleep(self._random_delay(2, 4))
-                    csrf2 = self._extract_csrf(resp2.text)
-                    if csrf2:
-                        self.csrf_token = csrf2
-                    token = self._extract_token(resp2.text)
-                
-                if token:
-                    return {
-                        'html': html,
-                        'csrf': self.csrf_token,
-                        'token': token,
-                        'cookies': self.session.cookies.get_dict()
-                    }
-                
-                self._log(f"Attempt {attempt+1}/3 failed to get token", Fore.YELLOW, '⏳')
-                time.sleep(self._random_delay(3, 5))
-                
-            except Exception as e:
-                self._log(f"Error: {str(e)}", Fore.RED, '❌')
-                time.sleep(self._random_delay(3, 5))
-        
-        return None
 
-    def _check_captcha_in_response(self, html):
-        """Check if response contains ACTIVE captcha (only from POST response)"""
-        captcha_patterns = [
-            'shape captcha', 'shapecaptcha', 'ccap-card', 'shapeCaptchaBox',
-            'captcha is required', 'please complete the captcha',
-            'verify your identity', 'click shapes by size'
-        ]
-        return any(p in html.lower() for p in captcha_patterns)
+                # Check for captcha or limit on page
+                if "captcha" in html.lower() or "i'm not a robot" in html.lower():
+                    return {"status": "captcha"}
+                if "daily claim limit" in html.lower() or "comeback again tomorrow" in html.lower():
+                    return {"status": "limit"}
 
-    def _check_limit_in_response(self, html):
-        """Check if response contains daily limit message"""
-        limit_patterns = [
-            'daily claim limit', 'comeback again tomorrow',
-            'limit reached', 'max claims reached'
-        ]
-        return any(p in html.lower() for p in limit_patterns)
-
-    def claim_faucet(self, coin, wallet):
-        coin = coin.lower()
-        self._log(f"Claiming {coin.upper()}...", Fore.YELLOW, '💧')
-        
-        for attempt in range(2):
-            page = self.get_faucet_page(coin)
-            if not page:
-                if attempt == 0:
-                    self._log("Retrying to get faucet page...", Fore.YELLOW, '🔄')
-                    time.sleep(self._random_delay(3, 5))
-                    continue
-                return False, None, False, False
-            
-            csrf = page.get('csrf') or self.csrf_token
-            token = page.get('token')
-            
-            if token:
-                break
-            else:
-                self._log(f"Token not found, attempt {attempt+1}/2", Fore.YELLOW, '⏳')
-                time.sleep(self._random_delay(3, 5))
-        else:
-            self._log("Token not found after retries", Fore.RED, '❌')
-            return False, None, False, False
-        
-        data = {
-            'csrf_token_name': csrf,
-            'token': token,
-            'wallet': wallet
-        }
-        url = f'{self.base_url}/faucet/verify/{coin}'
-        
-        try:
-            headers = {
-                'Origin': self.base_url,
-                'Referer': f'{self.base_url}/faucet/currency/{coin.upper()}',
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'Sec-Fetch-Site': 'same-origin',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Dest': 'document',
-                'Cache-Control': 'max-age=0',
-                'Upgrade-Insecure-Requests': '1',
-            }
-            self.session.headers.update(headers)
-            if self.ci_session:
-                self.session.cookies.set('ci_session', self.ci_session)
-            
-            resp = self.session.post(url, data=data)
-            time.sleep(self._random_delay(4, 7))
-            
-            self.stats['total'] += 1
-            reward = None
-            html = resp.text
-            
-            # ✅ CEK CAPTCHA dari RESPONSE POST (bukan dari halaman GET)
-            if self._check_captcha_in_response(html):
-                self._log(f"🚫 CAPTCHA triggered on {coin.upper()}!", Fore.RED, '🤖')
-                return False, None, True, False
-            
-            # CEK DAILY LIMIT
-            if self._check_limit_in_response(html):
-                self._log(f"🚫 Daily limit reached for {coin.upper()}!", Fore.RED, '⛔')
-                return False, None, False, True
-            
-            if resp.status_code == 200:
-                success_patterns = [
-                    'success', 'claim', 'reward', 'received', 
-                    'added', 'credited', 'completed', 'berhasil',
-                    'diterima', '✔', '✅', 'you have claimed',
-                    'claim successful', 'reward claimed'
+                # Extract token with multiple patterns
+                token = None
+                patterns = [
+                    r'<input type="hidden" name="token" value="([^"]+)"',
+                    r'token\s*=\s*"([^"]+)"',
+                    r"token\s*=\s*'([^']+)'",
+                    r'data-token="([^"]+)"',
+                    r'name="token"\s*value="([^"]+)"',
+                    r'var token\s*=\s*"([^"]+)"',
                 ]
-                
-                is_success = any(p in html.lower() for p in success_patterns)
-                has_reward = re.search(r'([\d.]+)\s*' + coin.upper(), html, re.IGNORECASE)
-                has_balance = 'balance' in html.lower() or 'wallet' in html.lower()
-                
-                if resp.url and 'success' in resp.url.lower():
-                    is_success = True
-                
-                if is_success or has_reward or has_balance:
-                    self.stats['success'] += 1
-                    if has_reward:
-                        reward = f"{has_reward.group(1)} {coin.upper()}"
-                    else:
-                        reward = f"0.00000000 {coin.upper()}"
-                    return True, reward, False, False
-                    
-                elif 'already' in html.lower() or 'wait' in html.lower():
-                    self._log("Need to wait", Fore.YELLOW, '⏳')
-                    return False, None, False, False
-                else:
-                    self.stats['failed'] += 1
-                    self._log("Claim failed - unknown response", Fore.RED, '❌')
-                    return False, None, False, False
-            else:
-                self.stats['failed'] += 1
-                self._log(f"HTTP {resp.status_code}", Fore.RED, '❌')
-                return False, None, False, False
-                
-        except Exception as e:
-            self.stats['failed'] += 1
-            self._log(f"Error: {str(e)}", Fore.RED, '❌')
-            return False, None, False, False
+                for pat in patterns:
+                    match = re.search(pat, html, re.IGNORECASE)
+                    if match:
+                        token = match.group(1)
+                        break
 
-    def get_next_coin(self):
-        """Get next available coin, skip bad ones"""
-        if len(self.bad_coins) >= len(self.all_coins):
-            return None
-        
-        start_index = self.current_coin_index
-        for i in range(len(self.all_coins)):
-            idx = (start_index + i) % len(self.all_coins)
-            coin = self.all_coins[idx]
-            if coin not in self.bad_coins:
-                self.current_coin_index = idx
-                return coin
-        
-        return None
+                if token:
+                    # Get CSRF
+                    csrf = self.session.cookies.get('csrf_cookie_name')
+                    if not csrf:
+                        match = re.search(r'name="csrf_token_name"\s*value="([^"]+)"', html)
+                        if match:
+                            csrf = match.group(1)
+                    if not csrf:
+                        return {"status": "error", "msg": "CSRF not found"}
+                    return {"status": "success", "token": token, "csrf": csrf}
 
-    def run_auto_claim(self, email, target):
-        if not self.logged_in:
-            if not self.login(email):
-                self._log("Cannot start", Fore.RED, '❌')
-                return
-        
-        print("\n" + "━"*50)
-        self._log("🚀 Memulai Auto Claim...", Fore.CYAN)
-        print("━"*50 + "\n")
-        
-        count = 0
-        self.stats['start_time'] = datetime.now()
-        self.bad_coins = set()
-        
-        # Ambil coin pertama
-        current_coin = self.settings.get('coin', 'ltc').lower()
-        if current_coin in self.all_coins:
-            self.current_coin_index = self.all_coins.index(current_coin)
-        else:
-            self.current_coin_index = 0
-        
-        while count < target:
-            coin = self.get_next_coin()
-            if not coin:
-                self._log("❌ All coins are blocked (limit/captcha). Stopping.", Fore.RED, '🛑')
-                break
-            
-            self._log(f"📌 Using coin: {coin.upper()}", Fore.CYAN, '🪙')
-            
-            try:
-                success, reward, captcha, limit = self.claim_faucet(coin, email)
-                count += 1
-                
-                if captcha:
-                    self.bad_coins.add(coin)
-                    self._log(f"⚠️ {coin.upper()} blocked by CAPTCHA — switching...", Fore.RED, '🔄')
-                    # Jangan hitung sebagai attempt
-                    count -= 1
-                    continue
-                
-                if limit:
-                    self.bad_coins.add(coin)
-                    self._log(f"⛔ {coin.upper()} daily limit reached — switching...", Fore.RED, '🔄')
-                    count -= 1
-                    continue
-                
-                if success:
-                    print(f"           {Fore.GREEN}✅ Success{Style.RESET_ALL}")
-                    if reward:
-                        print(f"           {Fore.GREEN}💰 Reward : {reward}{Style.RESET_ALL}")
-                    print(f"           {Fore.CYAN}📈 Progress : {count}/{target}{Style.RESET_ALL}")
-                else:
-                    print(f"           {Fore.RED}❌ Failed{Style.RESET_ALL}")
-                    print(f"           {Fore.YELLOW}🔄 Retry {count}/{target}{Style.RESET_ALL}")
-                
-                if count < target:
-                    delay = self._random_delay(6, 11)
-                    print(f"\n{Fore.CYAN}⏳ Next claim : {delay:.2f}s{Style.RESET_ALL}")
-                    print("━"*50 + "\n")
-                    time.sleep(delay)
-                    
-            except KeyboardInterrupt:
-                self._log("Stopped by user", Fore.YELLOW, '⏹️')
-                break
+                # If no token, maybe page is loading or showing something else
+                if "please wait" in html.lower():
+                    return {"status": "wait"}
+                if "invalid" in html.lower():
+                    return {"status": "invalid"}
+
+                # If nothing matched, treat as unknown
+                return {"status": "error", "msg": "Token not found"}
+
             except Exception as e:
-                self._log(f"Error: {str(e)}", Fore.RED, '❌')
-                time.sleep(self._random_delay(8, 12))
-        
-        self._show_summary()
+                log(f"Error fetching page: {str(e)}", Fore.RED, "❌")
+                time.sleep(2)
+                continue
 
-    def _show_summary(self):
-        dur = datetime.now() - self.stats['start_time']
-        h, rem = divmod(dur.total_seconds(), 3600)
-        m, s = divmod(rem, 60)
+        return {"status": "error", "msg": "Max retries exceeded"}
+
+    def claim_faucet(self, coin):
+        coin = coin.lower()
+        log(f"Claiming {coin.upper()}...", Fore.YELLOW, "💧")
+
+        page_result = self.get_faucet_page(coin)
+        status = page_result.get("status")
+
+        if status == "captcha":
+            log("Captcha detected, marking as bad", Fore.RED, "🤖")
+            self.bad_coins.add(coin)
+            return "captcha"
+        elif status == "limit":
+            log("Daily limit detected, marking as bad", Fore.YELLOW, "⛔")
+            self.bad_coins.add(coin)
+            return "limit"
+        elif status == "wait":
+            log("Page says 'please wait', retrying later", Fore.YELLOW, "⏳")
+            return "wait"
+        elif status == "invalid":
+            log("Invalid page state, retrying", Fore.YELLOW, "⚠️")
+            return "error"
+        elif status == "error":
+            log(f"Failed to get token: {page_result.get('msg', 'Unknown')}", Fore.RED, "❌")
+            # If token not found after retries, maybe the coin is blocked temporarily
+            # We'll mark it as bad after 3 consecutive errors? We'll handle in auto_farm
+            return "error"
+        elif status != "success":
+            log(f"Unknown status: {status}", Fore.RED, "❌")
+            return "error"
+
+        token = page_result["token"]
+        csrf = page_result["csrf"]
+
+        data = {
+            "csrf_token_name": csrf,
+            "token": token,
+            "wallet": self.email
+        }
+        url = f"{BASE_URL}/faucet/verify/{coin}"
+        headers = {
+            "Origin": BASE_URL,
+            "Referer": f"{BASE_URL}/faucet/currency/{coin.upper()}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
+        try:
+            resp = self.session.post(url, data=data, headers=headers, timeout=30)
+            if resp.status_code == 200:
+                html = resp.text.lower()
+                if "has been sent" in html or "good job" in html or "success" in html:
+                    self.success_claims += 1
+                    self.total_claims += 1
+                    reward_match = re.search(r'([\d.]+)\s*' + coin.upper(), resp.text, re.IGNORECASE)
+                    reward = reward_match.group(1) + " " + coin.upper() if reward_match else "unknown"
+                    log(f"Claim successful! Reward: {reward}", Fore.GREEN, "🎉")
+                    return True
+                elif "daily claim limit" in html or "comeback again tomorrow" in html:
+                    log("Daily limit reached for this coin", Fore.YELLOW, "⛔")
+                    self.bad_coins.add(coin)
+                    return "limit"
+                elif "captcha" in html or "verify" in html or "robot" in html:
+                    log("Captcha detected on this coin", Fore.RED, "🤖")
+                    self.bad_coins.add(coin)
+                    return "captcha"
+                elif "sufficient funds" in html or "balance" in html:
+                    log("Faucet out of funds", Fore.RED, "💰")
+                    self.bad_coins.add(coin)
+                    return "empty"
+                elif "invalid" in html:
+                    log("Invalid token or CSRF", Fore.RED, "❌")
+                    return "invalid"
+                elif "already" in html or "wait" in html:
+                    log("Need to wait before next claim", Fore.YELLOW, "⏳")
+                    return "wait"
+                else:
+                    self.failed_claims += 1
+                    self.total_claims += 1
+                    log("Claim failed - unknown response", Fore.RED, "❌")
+                    return False
+            else:
+                self.failed_claims += 1
+                self.total_claims += 1
+                log(f"HTTP {resp.status_code}", Fore.RED, "❌")
+                return False
+        except Exception as e:
+            self.failed_claims += 1
+            self.total_claims += 1
+            log(f"Error: {str(e)}", Fore.RED, "❌")
+            return "error"
+
+    def auto_farm(self):
+        """Infinite auto claim loop until all coins blocked."""
+        if not self.logged_in:
+            if not self.login(self.email):
+                log("Login failed. Please check email.", Fore.RED, "❌")
+                return
+
+        coin = self.config.get("coin", "ltc")
+        coins = ["ltc", "doge", "dgb", "sol", "trx", "bnb", "bch", "dash", "eth", "fey", "zec", "usdt"]
+        self.bad_coins = set()
+        self.total_claims = 0
+        self.success_claims = 0
+        self.failed_claims = 0
+        error_count = 0  # consecutive errors for current coin
+
+        log(f"🚀 Starting infinite farming...", Fore.CYAN)
+        log(f"📌 Starting coin: {coin.upper()}", Fore.CYAN, "🪙")
+        print("\n" + "━"*50 + "\n")
+
+        while True:
+            # Check if all coins blocked
+            if len(self.bad_coins) >= len(coins):
+                log("❌ All coins are blocked (limit/captcha/empty). Stopping.", Fore.RED, "🛑")
+                break
+
+            # Skip bad coins
+            if coin in self.bad_coins:
+                start_idx = coins.index(coin) if coin in coins else 0
+                found = False
+                for i in range(len(coins)):
+                    idx = (start_idx + i) % len(coins)
+                    if coins[idx] not in self.bad_coins:
+                        coin = coins[idx]
+                        found = True
+                        break
+                if not found:
+                    log("❌ No good coins left!", Fore.RED, "🛑")
+                    break
+
+            result = self.claim_faucet(coin)
+
+            if result in ["limit", "captcha", "empty", "invalid"]:
+                log(f"⚠️ {coin.upper()} blocked — switching...", Fore.RED, "🔄")
+                self.bad_coins.add(coin)
+                error_count = 0
+                # Switch to next good coin
+                try:
+                    idx = coins.index(coin)
+                    for i in range(1, len(coins)):
+                        next_idx = (idx + i) % len(coins)
+                        if coins[next_idx] not in self.bad_coins:
+                            coin = coins[next_idx]
+                            break
+                    else:
+                        log("❌ All coins blocked!", Fore.RED, "🛑")
+                        break
+                    log(f"Switching to {coin.upper()}", Fore.CYAN, "🔄")
+                except ValueError:
+                    coin = "ltc"
+                continue
+            elif result == "wait":
+                delay = random_delay(10, 15)
+                timer(int(delay), "⏳ Wait before retry")
+                continue
+            elif result == "error":
+                error_count += 1
+                # If too many errors on same coin, mark it as bad and switch
+                if error_count >= 3:
+                    log(f"❌ Too many errors on {coin.upper()}, switching...", Fore.RED, "🔄")
+                    self.bad_coins.add(coin)
+                    error_count = 0
+                    # switch coin
+                    try:
+                        idx = coins.index(coin)
+                        for i in range(1, len(coins)):
+                            next_idx = (idx + i) % len(coins)
+                            if coins[next_idx] not in self.bad_coins:
+                                coin = coins[next_idx]
+                                break
+                        else:
+                            log("❌ All coins blocked!", Fore.RED, "🛑")
+                            break
+                        log(f"Switching to {coin.upper()}", Fore.CYAN, "🔄")
+                    except ValueError:
+                        coin = "ltc"
+                    continue
+                else:
+                    delay = random_delay(5, 8)
+                    timer(int(delay), "⏳ Retry after")
+                    continue
+            elif result is True:
+                error_count = 0  # reset error count on success
+            else:
+                # failed but not blocked, increment error count
+                error_count += 1
+                if error_count >= 3:
+                    log(f"❌ Too many failures on {coin.upper()}, switching...", Fore.RED, "🔄")
+                    self.bad_coins.add(coin)
+                    error_count = 0
+                    # switch coin
+                    try:
+                        idx = coins.index(coin)
+                        for i in range(1, len(coins)):
+                            next_idx = (idx + i) % len(coins)
+                            if coins[next_idx] not in self.bad_coins:
+                                coin = coins[next_idx]
+                                break
+                        else:
+                            log("❌ All coins blocked!", Fore.RED, "🛑")
+                            break
+                        log(f"Switching to {coin.upper()}", Fore.CYAN, "🔄")
+                    except ValueError:
+                        coin = "ltc"
+                    continue
+
+            # Print status every 5 successful claims or total claims
+            if self.total_claims % 5 == 0 and self.total_claims > 0:
+                print_status(coin, self.total_claims, self.success_claims, self.failed_claims, self.bad_coins)
+
+            delay = random_delay(6, 11)
+            timer(int(delay), "⏳ Next claim in")
+
+        # Final summary
         print("\n" + "━"*50)
-        self._log("📊 Summary", Fore.CYAN)
-        print(f"   Total Claims : {self.stats['total']}")
-        print(f"   Successful   : {Fore.GREEN}{self.stats['success']}{Style.RESET_ALL}")
-        print(f"   Failed       : {Fore.RED}{self.stats['failed']}{Style.RESET_ALL}")
-        print(f"   Bad Coins    : {Fore.YELLOW}{', '.join(self.bad_coins) if self.bad_coins else 'None'}{Style.RESET_ALL}")
-        print(f"   Duration     : {int(h)}h {int(m)}m {int(s)}s")
+        log("📊 FARMING COMPLETE", Fore.CYAN)
+        print(f"   Total Claims : {self.total_claims}")
+        print(f"   Successful   : {Fore.GREEN}{self.success_claims}{RESET}")
+        print(f"   Failed       : {Fore.RED}{self.failed_claims}{RESET}")
+        print(f"   Bad Coins    : {Fore.YELLOW}{', '.join(self.bad_coins) if self.bad_coins else 'None'}{RESET}")
         print("━"*50 + "\n")
 
 # ============================================================
 # MENU
 # ============================================================
-def print_menu():
-    print(f"""
-{CYAN}[ 1 ] Login & Start
-[ 2 ] Set Email FaucetPay
-[ 3 ] Ganti User-Agent
-[ 4 ] Pilih Koin Awal
-[ 5 ] Keluar{RESET}
-    """)
-
-def print_claim_status(coin, target, current, delay_min, delay_max, status):
-    status_color = Fore.GREEN if status == "Running" else Fore.YELLOW
-    print(f"""
-{CYAN}╔════════════════════════════════════════════╗
-║              💰 CLAIM MODE 💰              ║
-╠════════════════════════════════════════════╣
-║ Coin     : {coin.upper():<30} ║
-║ Target   : {current}/{target:<27} ║
-║ Delay    : {delay_min} - {delay_max} Detik{ ' ' * (24 - len(str(delay_min)+str(delay_max))) }║
-║ Status   : {status_color}{status:<30}{Style.RESET_ALL}{Fore.CYAN}║
-╚════════════════════════════════════════════╝{RESET}
-    """)
-
-def menu_set_email(bot):
+def menu_set_email(config):
     clear_screen()
     print_banner()
-    current = bot.settings.get('email', 'Not Set')
+    current = config.get("email", "Not Set")
     print(f"{CYAN}Current Email: {YELLOW}{current}{RESET}\n")
     email = input(f"{YELLOW}Masukkan email FaucetPay: {RESET}").strip()
     if email:
-        bot.set_email(email)
+        config["email"] = email
+        save_config(config)
         print(f"{GREEN}✅ Email saved!{RESET}")
     else:
-        print(f"{RED}Email cannot be empty.{RESET}")
+        print(f"{RED}Email tidak boleh kosong.{RESET}")
     input(f"\n{CYAN}Press Enter to continue...{RESET}")
 
-def menu_set_coin(bot):
+def menu_select_coin(config):
     clear_screen()
     print_banner()
-    coins = bot.config.get('coins', [])
-    current = bot.settings.get('coin', 'ltc')
+    coins = ["ltc", "doge", "dgb", "sol", "trx", "bnb", "bch", "dash", "eth", "fey", "zec", "usdt"]
+    current = config.get("coin", "ltc")
     print(f"{CYAN}Current Coin: {YELLOW}{current.upper()}{RESET}\n")
     print(f"{CYAN}Available coins:{RESET}")
     for i, c in enumerate(coins, 1):
         print(f"  {i}. {c.upper()}")
     try:
-        choice = int(input(f"\n{YELLOW}Pilih coin awal (1-{len(coins)}): {RESET}"))
+        choice = int(input(f"\n{YELLOW}Pilih coin (1-{len(coins)}): {RESET}"))
         if 1 <= choice <= len(coins):
             selected = coins[choice-1]
-            bot.set_coin(selected)
+            config["coin"] = selected
+            save_config(config)
             print(f"{GREEN}✅ Coin set to {selected.upper()}{RESET}")
         else:
-            print(f"{RED}Invalid.{RESET}")
+            print(f"{RED}Pilihan tidak valid.{RESET}")
     except ValueError:
         print(f"{RED}Masukkan angka.{RESET}")
     input(f"\n{CYAN}Press Enter to continue...{RESET}")
 
-def menu_set_user_agent(bot):
+def menu_start_farming(config):
     clear_screen()
     print_banner()
-    ua_list = bot.config.get('user_agents', [])
-    current_idx = bot.settings.get('user_agent_index', 0)
-    print(f"{CYAN}Current User-Agent:{RESET}")
-    if 0 <= current_idx < len(ua_list):
-        print(f"{YELLOW}{ua_list[current_idx]}{RESET}\n")
-    else:
-        print(f"{YELLOW}Default{RESET}\n")
-    print(f"{CYAN}Available:{RESET}")
-    for i, ua in enumerate(ua_list, 1):
-        short = ua[:60] + "..." if len(ua) > 60 else ua
-        print(f"  {i}. {short}")
-    print(f"  0. Custom")
-    try:
-        choice = input(f"\n{YELLOW}Pilih (0-{len(ua_list)}): {RESET}")
-        if choice == "0":
-            custom = input(f"{YELLOW}Masukkan User-Agent: {RESET}").strip()
-            if custom:
-                ua_list.append(custom)
-                bot.settings['user_agent_index'] = len(ua_list)-1
-                save_settings(bot.settings)
-                bot._apply_user_agent()
-                print(f"{GREEN}✅ Custom applied!{RESET}")
-            else:
-                print(f"{RED}Invalid.{RESET}")
-        else:
-            idx = int(choice) - 1
-            if 0 <= idx < len(ua_list):
-                bot.set_user_agent_by_index(idx)
-                print(f"{GREEN}✅ User-Agent changed.{RESET}")
-            else:
-                print(f"{RED}Invalid.{RESET}")
-    except ValueError:
-        print(f"{RED}Masukkan angka.{RESET}")
-    input(f"\n{CYAN}Press Enter to continue...{RESET}")
-
-def menu_login_start(bot):
-    clear_screen()
-    print_banner()
-    email = bot.settings.get('email', '')
-    if not email:
-        print(f"{RED}❌ Email not set. Please set email first (Menu 2).{RESET}")
+    if not config.get("email"):
+        print(f"{RED}❌ Email belum di set. Menu 2 dulu.{RESET}")
         input(f"\n{CYAN}Press Enter to continue...{RESET}")
         return
-    coin = bot.settings.get('coin', 'ltc')
-    target = bot.settings.get('target', 10)
-    try:
-        new_target = input(f"{YELLOW}Target claims (default {target}): {RESET}").strip()
-        if new_target:
-            target = int(new_target)
-            bot.set_target(target)
-    except ValueError:
-        print(f"{RED}Invalid, using default.{RESET}")
-    clear_screen()
-    print_banner()
-    print_claim_status(coin, target, 0, bot.config.get('min_delay',6), bot.config.get('max_delay',11), "Starting...")
-    print("\n" + "━"*50)
-    bot.run_auto_claim(email, target)
+
+    bot = ClaimBot(config)
+    bot.auto_farm()
     input(f"\n{CYAN}Press Enter to continue...{RESET}")
 
-# ============================================================
-# MAIN
-# ============================================================
 def main():
-    bot = ClaimCryptoBot()
+    config = load_config()
     while True:
         clear_screen()
         print_banner()
-        print_menu()
+        print(f"""
+{CYAN}[ 1 ] Start Farming (Infinite)
+[ 2 ] Set Email (FaucetPay)
+[ 3 ] Select Coin
+[ 0 ] Exit{RESET}
+        """)
         choice = input(f"{YELLOW}➤ Pilih Menu : {RESET}").strip()
-        if choice == '1':
-            menu_login_start(bot)
-        elif choice == '2':
-            menu_set_email(bot)
-        elif choice == '3':
-            menu_set_user_agent(bot)
-        elif choice == '4':
-            menu_set_coin(bot)
-        elif choice == '5':
+        if choice == "1":
+            menu_start_farming(config)
+        elif choice == "2":
+            menu_set_email(config)
+        elif choice == "3":
+            menu_select_coin(config)
+        elif choice == "0":
             print(f"{GREEN}Keluar... Sampai jumpa sayang!{RESET}")
             break
         else:
