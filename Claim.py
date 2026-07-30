@@ -173,26 +173,22 @@ class ClaimBot:
             return False
 
     def is_captcha_page(self, html):
-        """Check if the page contains an active captcha challenge."""
-        lower = html.lower()
-        # Check for actual captcha elements
-        if 'data-sitekey="' in lower:
+        """Check if page contains an actual captcha widget."""
+        # Search for common captcha widget elements
+        if re.search(r'<div[^>]*data-sitekey="[^"]+"', html, re.IGNORECASE):
             return True
-        if 'h-captcha' in lower or 'hcaptcha' in lower:
+        if re.search(r'<div[^>]*class="[^"]*h-captcha[^"]*"', html, re.IGNORECASE):
             return True
-        if 'shape captcha' in lower:
+        if re.search(r'<div[^>]*class="[^"]*g-recaptcha[^"]*"', html, re.IGNORECASE):
             return True
-        if 'i\'m not a robot' in lower or 'im not a robot' in lower:
+        if 'shape captcha' in html.lower() or 'ccap-card' in html.lower():
             return True
-        if 'robot-checkbox' in lower or 'ccap-card' in lower:
+        if 'i\'m not a robot' in html.lower() or 'im not a robot' in html.lower():
             return True
-        if 'captcha' in lower and ('verify' in lower or 'solve' in lower or 'challenge' in lower):
-            # Only if captcha and action words, to avoid false positives
-            return True
+        # If none of the above, not a captcha page
         return False
 
     def get_faucet_page(self, coin):
-        """Get faucet page and extract token. Returns dict with status and token."""
         coin = coin.lower()
         url = f"{BASE_URL}/faucet/currency/{coin}"
         headers = {"Referer": f"{BASE_URL}/"}
@@ -206,15 +202,12 @@ class ClaimBot:
 
                 html = resp.text
 
-                # Check for daily limit on page
                 if "daily claim limit" in html.lower() or "comeback again tomorrow" in html.lower():
                     return {"status": "limit"}
 
-                # Check for captcha
                 if self.is_captcha_page(html):
                     return {"status": "captcha"}
 
-                # Extract token
                 token = None
                 patterns = [
                     r'<input type="hidden" name="token" value="([^"]+)"',
@@ -363,7 +356,6 @@ class ClaimBot:
                 break
 
             if coin in self.bad_coins:
-                # find next good coin
                 start_idx = coins.index(coin) if coin in coins else 0
                 found = False
                 for i in range(len(coins)):
@@ -385,7 +377,6 @@ class ClaimBot:
                     self.bad_coins.add(coin)
                     captcha_count = 0
                     error_count = 0
-                    # switch coin
                     try:
                         idx = coins.index(coin)
                         for i in range(1, len(coins)):
@@ -409,7 +400,6 @@ class ClaimBot:
                 self.bad_coins.add(coin)
                 captcha_count = 0
                 error_count = 0
-                # switch coin
                 try:
                     idx = coins.index(coin)
                     for i in range(1, len(coins)):
