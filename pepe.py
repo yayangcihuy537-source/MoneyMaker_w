@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MULTI-BOT: PepeFlow + Coinszon (Smart Dual Mode)
+MULTI-BOT: PepeFlow + Coinszon (Smart Dual Mode) - FIXED
 """
 
 import os, sys, time, json, random, re, requests
@@ -38,26 +38,42 @@ class BaseConfig:
         self.init_data = None
     def load(self):
         if os.path.exists(self.file):
-            with open(self.file) as f:
-                d = json.load(f)
-                self.phpsessid = d.get('phpsessid')
-                self.init_data = d.get('init_data')
-                return True
+            try:
+                with open(self.file) as f:
+                    d = json.load(f)
+                    self.phpsessid = d.get('phpsessid')
+                    self.init_data = d.get('init_data')
+                    return True
+            except:
+                return False
         return False
     def save(self):
         with open(self.file, 'w') as f:
             json.dump({'phpsessid': self.phpsessid, 'init_data': self.init_data}, f, indent=2)
 
 def live_timer(seconds, msg="⏳ Menunggu"):
-    """Countdown dengan output di tempat yang sama."""
+    if seconds < 1:
+        return
     while seconds > 0:
         m, s = divmod(seconds, 60)
         sys.stdout.write(f"\r{Y}{msg} {m:02d}:{s:02d} {RESET}  ")
         sys.stdout.flush()
         time.sleep(1)
         seconds -= 1
-    sys.stdout.write("\r" + " " * 60 + "\r")  # bersihkan baris
+    sys.stdout.write("\r" + " " * 60 + "\r")
     sys.stdout.flush()
+
+def safe_float(val, default=0.0):
+    if val is None:
+        return default
+    if isinstance(val, (int, float)):
+        return float(val)
+    if isinstance(val, str):
+        try:
+            return float(val.replace(',', '').strip())
+        except:
+            return default
+    return default
 
 class MiniAppBot:
     def __init__(self, url, cfg, game_list, game_map, name):
@@ -177,13 +193,13 @@ class MiniAppBot:
             if "pepeflow" in self.url:
                 try:
                     data = resp.json()
-                    self.balance = float(data.get('balance', 0))
+                    self.balance = safe_float(data.get('balance', 0))
                     return data
                 except: pass
             else:
                 match = re.search(r'id="dash-balance-pepe">\s*([\d.]+)\s*<', resp.text)
                 if match:
-                    self.balance = float(match.group(1))
+                    self.balance = safe_float(match.group(1))
                 return resp.text
         return None
 
@@ -237,7 +253,7 @@ class MiniAppBot:
         print(f"{GOLD}╔══════════════════════════════════════════════════════════╗{RESET}")
         print(f"{GOLD}║{RESET}  {C}{self.name.upper()} AUTO-BOT{RESET}                              {GOLD}║{RESET}")
         print(f"{GOLD}╠══════════════════════════════════════════════════════════╣{RESET}")
-        print(f"{GOLD}║{RESET}  Run/Loop : {C}{self.loop_counter}{RESET}      Balance : {G}{self.balance}{RESET}   {GOLD}║{RESET}")
+        print(f"{GOLD}║{RESET}  Run/Loop : {C}{self.loop_counter}{RESET}      Balance : {G}{self.balance:.2f}{RESET}   {GOLD}║{RESET}")
         print(f"{GOLD}╠══════════════════════════════════════════════════════════╣{RESET}")
         for g in self.game_list:
             d = self.game_map[g]
@@ -251,87 +267,86 @@ class MiniAppBot:
             print(f"{GOLD}║{RESET}  {icon} {disp:<6} {sc}{st:<8}{RESET}  {twox:<5} {ply:<5} {rwd:<7} {cd:<6}{GOLD}║{RESET}")
         print(f"{GOLD}╠══════════════════════════════════════════════════════════╣{RESET}")
         for log in list(self.logs)[-6:]:
-            print(f"{GOLD}║{RESET}  {log}{' '*(50-len(log))} {GOLD}║{RESET}")
+            log_clean = log[:48] if len(log) > 48 else log
+            print(f"{GOLD}║{RESET}  {log_clean}{' '*(50-len(log_clean))} {GOLD}║{RESET}")
         print(f"{GOLD}╚══════════════════════════════════════════════════════════╝{RESET}")
 
     def process_ready_games(self):
-        self.get_games_status()
-        ready = [g for g in self.game_list if self.cooldowns.get(g, 0) <= 0]
-        if not ready:
-            return False
-        for g in ready:
-            if not self.running: break
-            self.display_dashboard()
-            print(f"{C}🎮 {self.name} {self.game_map[g]['display']}...{RESET}")
-            result = self.play_single(g)
-            if result and result.get('status') == 'success':
-                rwd = result.get('reward', 0)
-                self.balance = float(result.get('new_balance', self.balance))
-                self.rewards[g] = rwd
-                self.play_counts[g] += 1
-                self.log(f"{G}✔ {self.game_map[g]['display']} +{rwd} (Bal: {self.balance})")
-            elif result and result.get('status') == 'error':
-                err = result.get('message', '')
-                if 'not logged in' in err.lower():
-                    self.log(f"{Y}⚠️ Not logged in, reauth & retry...{RESET}")
-                    self.reauth()
-                    time.sleep(2)
-                    result2 = self.play_single(g)
-                    if result2 and result2.get('status') == 'success':
-                        rwd = result2.get('reward', 0)
-                        self.balance = float(result2.get('new_balance', self.balance))
-                        self.rewards[g] = rwd
-                        self.play_counts[g] += 1
-                        self.log(f"{G}✔ {self.game_map[g]['display']} +{rwd} (Bal: {self.balance}) [retry OK]")
+        try:
+            self.get_games_status()
+            ready = [g for g in self.game_list if self.cooldowns.get(g, 0) <= 0]
+            if not ready:
+                return False
+            for g in ready:
+                if not self.running: break
+                self.display_dashboard()
+                print(f"{C}🎮 {self.name} {self.game_map[g]['display']}...{RESET}")
+                result = self.play_single(g)
+                if result and result.get('status') == 'success':
+                    rwd = safe_float(result.get('reward', 0))
+                    self.balance = safe_float(result.get('new_balance', self.balance))
+                    self.rewards[g] = rwd
+                    self.play_counts[g] += 1
+                    self.log(f"{G}✔ {self.game_map[g]['display']} +{rwd:.2f} (Bal: {self.balance:.2f})")
+                elif result and result.get('status') == 'error':
+                    err = result.get('message', '')
+                    if 'not logged in' in err.lower():
+                        self.log(f"{Y}⚠️ Not logged in, reauth...{RESET}")
+                        self.reauth()
+                        time.sleep(2)
+                        result2 = self.play_single(g)
+                        if result2 and result2.get('status') == 'success':
+                            rwd = safe_float(result2.get('reward', 0))
+                            self.balance = safe_float(result2.get('new_balance', self.balance))
+                            self.rewards[g] = rwd
+                            self.play_counts[g] += 1
+                            self.log(f"{G}✔ {self.game_map[g]['display']} +{rwd:.2f} (Bal: {self.balance:.2f}) [retry OK]")
+                        else:
+                            err2 = result2.get('message','No resp') if result2 else 'No resp'
+                            self.log(f"{R}✖ {self.game_map[g]['display']} FAIL: {err2} [retry failed]")
                     else:
-                        err2 = result2.get('message','No resp') if result2 else 'No resp'
-                        self.log(f"{R}✖ {self.game_map[g]['display']} FAIL: {err2} [retry failed]")
-                elif '2x bonus window' in err.lower():
-                    print(f"{Y}⚠️ {self.game_map[g]['display']} 2x window expired, retrying...{RESET}")
-                    time.sleep(2)
-                    result2 = self.play_single(g)
-                    if result2 and result2.get('status') == 'success':
-                        rwd = result2.get('reward', 0)
-                        self.balance = float(result2.get('new_balance', self.balance))
-                        self.rewards[g] = rwd
-                        self.play_counts[g] += 1
-                        self.log(f"{G}✔ {self.game_map[g]['display']} +{rwd} (Bal: {self.balance}) [retry OK]")
-                    else:
-                        err2 = result2.get('message','No resp') if result2 else 'No resp'
-                        self.log(f"{R}✖ {self.game_map[g]['display']} FAIL: {err2} [retry failed]")
+                        self.log(f"{R}✖ {self.game_map[g]['display']} FAIL: {err}")
                 else:
+                    err = result.get('message','No resp') if result else 'No resp'
                     self.log(f"{R}✖ {self.game_map[g]['display']} FAIL: {err}")
-            else:
-                err = result.get('message','No resp') if result else 'No resp'
-                self.log(f"{R}✖ {self.game_map[g]['display']} FAIL: {err}")
-            time.sleep(3)
+                time.sleep(3)
 
-        self.get_dashboard()
-        if self.balance == 0.0:
-            self.log(f"{Y}⚠️ Balance 0, reinitializing session...{RESET}")
-            self.reauth()
-            time.sleep(2)
             self.get_dashboard()
-        self.display_dashboard()
-        return True
+            if self.balance == 0.0:
+                self.log(f"{Y}⚠️ Balance 0, reinitializing session...{RESET}")
+                self.reauth()
+                time.sleep(2)
+                self.get_dashboard()
+            self.display_dashboard()
+            return True
+        except Exception as e:
+            self.log(f"{R}✖ Process error: {e}{RESET}")
+            return False
 
 # ─────────────────── SMART DUAL LOOP ───────────────────
 def smart_dual_loop(pbot, cbot):
     while pbot.running and cbot.running:
-        played_p = pbot.process_ready_games()
-        if not played_p:
-            print(f"{Y}⏩ PepeFlow semua cooldown, switch ke Coinszon{RESET}")
-        time.sleep(1)
+        try:
+            played_p = pbot.process_ready_games()
+            if not played_p:
+                print(f"{Y}⏩ PepeFlow semua cooldown, switch ke Coinszon{RESET}")
+            time.sleep(1)
 
-        played_c = cbot.process_ready_games()
-        if not played_c:
-            print(f"{Y}⏩ Coinszon semua cooldown{RESET}")
+            played_c = cbot.process_ready_games()
+            if not played_c:
+                print(f"{Y}⏩ Coinszon semua cooldown{RESET}")
 
-        all_cds = list(pbot.cooldowns.values()) + list(cbot.cooldowns.values())
-        all_cds = [cd for cd in all_cds if cd > 0]
-        if all_cds:
-            min_cd = min(all_cds)
-            live_timer(min_cd, f"⏳ Menunggu game berikutnya")
+            all_cds = list(pbot.cooldowns.values()) + list(cbot.cooldowns.values())
+            all_cds = [cd for cd in all_cds if cd > 0]
+            if all_cds:
+                min_cd = min(all_cds)
+                live_timer(min_cd, f"⏳ Menunggu game berikutnya")
+        except KeyboardInterrupt:
+            pbot.running = cbot.running = False
+            break
+        except Exception as e:
+            print(f"{R}❌ Dual loop error: {e}{RESET}")
+            time.sleep(5)
 
 # ─────────────────── MENU ───────────────────
 def set_phpsessid(file, label):
@@ -358,7 +373,7 @@ def main():
 ║   {C}[2]{RESET} 🪙 Coinszon only (No Withdraw)              ║
 ║   {Y}[3]{RESET} 🔄 Smart Dual Mode (PepeFlow ⇄ Coinszon)   ║
 ║   {W}[4]{RESET} 📝 Set PHPSESSID for PepeFlow              ║
-║   {W}[5]{RESET} 📝 Set PHPSESSID + Init data for Coinszon              ║
+║   {W}[5]{RESET} 📝 Set PHPSESSID + Init data for Coinszon  ║
 ║   {R}[0]{RESET} ❌ Exit                                   ║
 ╚══════════════════════════════════════════════════════════╝{RESET}
 """)
@@ -375,6 +390,7 @@ def main():
             try:
                 while bot.running:
                     bot.process_ready_games()
+                    time.sleep(1)
             except KeyboardInterrupt:
                 bot.running = False
             input("Enter...")
@@ -387,6 +403,7 @@ def main():
             try:
                 while bot.running:
                     bot.process_ready_games()
+                    time.sleep(1)
             except KeyboardInterrupt:
                 bot.running = False
             input("Enter...")
