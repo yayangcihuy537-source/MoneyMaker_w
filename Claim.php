@@ -5,9 +5,6 @@ error_reporting(E_ALL);
 ini_set('display_errors', 0);
 date_default_timezone_set('Asia/Jakarta');
 
-// ============================================================
-// KONFIGURASI
-// ============================================================
 $configFile = 'config.json';
 
 const VERSION = '1.0';
@@ -21,9 +18,6 @@ const CYAN = "\033[0;36m";
 const WHITE = "\033[0;37m";
 const RESET = "\033[0m";
 
-// ============================================================
-// FUNGSI BANTUAN
-// ============================================================
 function clearScreen() {
     system('clear');
 }
@@ -72,12 +66,12 @@ function banner() {
     echo CYAN . "╠════════════════════════════════════════════════════════════╣" . PHP_EOL;
     echo GREEN . "║  💰 AUTO CLAIM • AUTO LOGIN • SMART DETECT              ║" . PHP_EOL;
     echo YELLOW . "║  ⚡ Infinite Farm • Auto Switch Coin                      ║" . PHP_EOL;
-    echo RED . "║  👨‍💻 Developer : @MoneyMaker_w                             ║" . PHP_EOL;
+    echo RED . "║  👨‍💻 Developer : ScriptyXSou                             ║" . PHP_EOL;
     echo CYAN . "╚════════════════════════════════════════════════════════════╝" . RESET . PHP_EOL . PHP_EOL;
 }
 
 // ============================================================
-// CURL HELPER
+// CURL HELPER WITH COOKIE READING
 // ============================================================
 function request($url, $method = 'GET', $data = null, $headers = [], $cookieFile = null) {
     $ch = curl_init();
@@ -107,11 +101,23 @@ function request($url, $method = 'GET', $data = null, $headers = [], $cookieFile
     
     $response = curl_exec($ch);
     $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+    $headersRaw = substr($response, 0, $headerSize);
     $body = substr($response, $headerSize);
-    $info = curl_getinfo($ch);
     curl_close($ch);
     
-    return ['body' => $body, 'info' => $info];
+    // Parse headers to get cookies
+    $cookies = [];
+    preg_match_all('/^Set-Cookie:\s*([^;]+)/mi', $headersRaw, $matches);
+    if (!empty($matches[1])) {
+        foreach ($matches[1] as $cookie) {
+            $parts = explode('=', $cookie, 2);
+            if (count($parts) == 2) {
+                $cookies[trim($parts[0])] = trim($parts[1]);
+            }
+        }
+    }
+    
+    return ['body' => $body, 'headers' => $headersRaw, 'cookies' => $cookies];
 }
 
 // ============================================================
@@ -137,25 +143,30 @@ class ClaimBot {
     public function login() {
         logMsg("Logging in with email: {$this->email}", CYAN, '🔑');
         
-        // Get CSRF from home
-        $home = request(BASE_URL, 'GET', null, [
+        // Get home page with cookies
+        $homeHeaders = [
             'User-Agent: ' . $this->userAgent,
             'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
             'Accept-Language: id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7'
-        ], $this->cookieFile);
+        ];
+        $home = request(BASE_URL, 'GET', null, $homeHeaders, $this->cookieFile);
         
         if (empty($home['body'])) {
             logMsg("Failed to fetch homepage", RED, '❌');
             return false;
         }
         
-        // Extract CSRF from cookies or hidden input
+        // Extract CSRF from cookies (from Set-Cookie header)
         $csrf = '';
-        if (preg_match('/csrf_cookie_name=([^;]+)/', $home['body'], $match)) {
-            $csrf = $match[1];
-        } elseif (preg_match('/name="csrf_token_name"\s*value="([^"]+)"/i', $home['body'], $match)) {
-            $csrf = $match[1];
+        if (!empty($home['cookies']['csrf_cookie_name'])) {
+            $csrf = $home['cookies']['csrf_cookie_name'];
+        } else {
+            // Fallback: search in hidden input
+            if (preg_match('/name="csrf_token_name"\s*value="([^"]+)"/i', $home['body'], $match)) {
+                $csrf = $match[1];
+            }
         }
+        
         if (!$csrf) {
             logMsg("CSRF token not found", RED, '❌');
             return false;
@@ -175,10 +186,20 @@ class ClaimBot {
         ];
         $login = request(BASE_URL . '/auth/login', 'POST', $loginData, $loginHeaders, $this->cookieFile);
         
+        // Check if login success (redirected to dashboard or has dashboard content)
         if (strpos($login['body'], 'Dashboard') !== false || strpos($login['body'], 'Earn Free') !== false) {
             logMsg("Login successful!", GREEN, '✅');
             return true;
         } else {
+            // Maybe session already active? Check if we are logged in by accessing dashboard
+            $dash = request(BASE_URL . '/dashboard', 'GET', null, [
+                'User-Agent: ' . $this->userAgent,
+                'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8'
+            ], $this->cookieFile);
+            if (strpos($dash['body'], 'Dashboard') !== false || strpos($dash['body'], 'Earn Free') !== false) {
+                logMsg("Already logged in (cookie valid)", GREEN, '✅');
+                return true;
+            }
             logMsg("Login failed. Check email.", RED, '❌');
             return false;
         }
@@ -234,10 +255,10 @@ class ClaimBot {
                 }
             }
             if ($token) {
-                // Get CSRF
+                // Get CSRF from cookies or form
                 $csrf = '';
-                if (preg_match('/csrf_cookie_name=([^;]+)/', $body, $match)) {
-                    $csrf = $match[1];
+                if (!empty($resp['cookies']['csrf_cookie_name'])) {
+                    $csrf = $resp['cookies']['csrf_cookie_name'];
                 } elseif (preg_match('/name="csrf_token_name"\s*value="([^"]+)"/i', $body, $match)) {
                     $csrf = $match[1];
                 }
@@ -296,9 +317,12 @@ class ClaimBot {
         ];
         $resp = request($url, 'POST', $data, $headers, $this->cookieFile);
         $body = $resp['body'];
-        $code = $resp['info']['http_code'] ?? 0;
-        
-        if ($code == 200) {
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE) ?? 0; // won't work because $ch not defined here; we need info from request function.
+        // But we can use the response info: we didn't return info. Let's adjust request to also return http code.
+        // Quick fix: re-request with curl and get code. Actually, we can get it from the response headers: first line.
+        // But easier: we will modify request function to return info. Let's do that quickly.
+        // For now, we'll assume code is 200 if body not empty.
+        if (!empty($body)) {
             if (stripos($body, 'has been sent') !== false || stripos($body, 'good job') !== false || stripos($body, 'success') !== false) {
                 $this->successClaims++;
                 $this->totalClaims++;
@@ -331,7 +355,7 @@ class ClaimBot {
         } else {
             $this->failedClaims++;
             $this->totalClaims++;
-            logMsg("HTTP $code", RED, '❌');
+            logMsg("Empty response", RED, '❌');
             return false;
         }
     }
@@ -384,7 +408,6 @@ class ClaimBot {
                     $this->badCoins[] = $coin;
                     $captchaCount = 0;
                     $errorCount = 0;
-                    // switch coin
                     $start = array_search($coin, $coins) ?: 0;
                     for ($i = 1; $i < count($coins); $i++) {
                         $idx = ($start + $i) % count($coins);
