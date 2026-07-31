@@ -20,8 +20,8 @@
         },
         "4": {
           "label": "Claimcrypto",
-          "file": "Claim.py",
-          "runner": "python3"
+          "file": "Claim.php",
+          "runner": "php"
         }
       }
     },
