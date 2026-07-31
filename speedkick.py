@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 SpeedKick 24/7 Automation — Ads + Mining + Withdraw + Menu
-Developer: ScriptyXSouu
+Developer: ScriptyXSouu (Fixed by Kyriel)
 """
 
 import os
@@ -46,7 +46,7 @@ def banner():
 {PURPLE}╔══════════════════════════════════════════════════════════════╗
 ║   {GOLD}⚡  SPEEDKICK AUTO BOT v3.2 — MENU MODE                {PURPLE}║
 ║   {LIME}🌾 Auto Farming • 💸 Withdraw • 📊 Balance            {PURPLE}║
-║   {PINK}👑 Developer : ScriptyXSouu                         {PURPLE}║
+║   {PINK}👑 Developer : ScriptyXSouu                          {PURPLE}║
 ║   {CYAN}🤖 BOT : SPEEDKICKBOT                                {PURPLE}║
 ╚══════════════════════════════════════════════════════════════╝{RESET}
 """)
@@ -178,16 +178,13 @@ class SpeedKick:
         return self._request("POST", "/api/user/mining/claim", {"token": token})
 
     def get_ad_views(self) -> int:
-        if self.user_data:
-            return self.user_data.get("adZone", {}).get("views", 0)
+        # Selalu refresh dari server
         status = self.get_mining_status()
         if status.get("ok"):
             return status.get("adZone", {}).get("views", 0)
         return 0
 
     def get_ad_cooldown(self) -> int:
-        if self.user_data:
-            return self.user_data.get("adZone", {}).get("cooldownUntil", 0)
         status = self.get_mining_status()
         if status.get("ok"):
             return status.get("adZone", {}).get("cooldownUntil", 0)
@@ -197,13 +194,14 @@ class SpeedKick:
         status = self.get_mining_status()
         return status.get("balance", 0) if status.get("ok") else 0
 
-    # --- Ads (MODIFIED: Selesaikan semua ads dulu) ---
+    # --- FIXED: Ads loop with proper refresh ---
     def run_ads(self) -> bool:
         total = 20
         while True:
+            # Ambil fresh views setiap iterasi
             views = self.get_ad_views()
             if views >= total:
-                print(f"{GREEN}✅ All 20 ads done today{RESET}")
+                print(f"{GREEN}✅ All {total} ads done today{RESET}")
                 return True
 
             cooldown_until = self.get_ad_cooldown()
@@ -214,9 +212,8 @@ class SpeedKick:
                     if wait_seconds > 0:
                         print(f"{YELLOW}⏳ Ads cooldown, waiting {wait_seconds:.0f}s...{RESET}")
                         time.sleep(wait_seconds)
-                        continue  # cek lagi setelah cooldown
+                        continue
 
-            # Coba claim ad berikutnya (views+1)
             next_ad = views + 1
             task_id = f"ad_zone_{next_ad}"
             print(f"\n{WHITE}🎯 {task_id}{RESET}")
@@ -226,12 +223,11 @@ class SpeedKick:
                 reward = result.get("reward", 0)
                 print(f"{GOLD}💰 Reward : +{reward}{RESET}")
                 print(f"{GREEN}✅ Claimed Successfully{RESET}")
-                # views akan bertambah di next loop
+                # Loop lagi, ambil views terbaru di awal loop
                 continue
             else:
                 error = result.get("error", "").lower()
                 if "cooldown" in error or "throttle" in error or "too many" in error:
-                    # Ambil waktu cooldown dari response atau default 60s
                     next_ad_at = self._parse_timestamp(result.get("nextAdAt"))
                     if next_ad_at:
                         wait_seconds = max(0, (next_ad_at - int(time.time()*1000)) / 1000)
@@ -240,16 +236,16 @@ class SpeedKick:
                     print(f"{YELLOW}⏳ Cooldown, waiting {wait_seconds:.0f}s...{RESET}")
                     time.sleep(wait_seconds)
                     continue
-                elif "already" in error:
-                    print(f"{GREEN}✅ Already done (maybe claimed earlier){RESET}")
-                    # Refresh status, lanjut loop
+                elif "already" in error or "done" in error:
+                    print(f"{GREEN}✅ Already done, refreshing views...{RESET}")
+                    # Refresh views dan lanjut
                     continue
                 else:
                     print(f"{RED}❌ Error: {error[:50]}{RESET}")
                     time.sleep(5)
                     continue
 
-    # --- Mining (still defined but NOT used in smart loop) ---
+    # --- Mining (same) ---
     def run_mining(self) -> Dict:
         status = self.get_mining_status()
         if not status.get("ok"):
@@ -286,7 +282,7 @@ class SpeedKick:
                 print(f"{YELLOW}⏳ Mining not ready{RESET}")
                 return {"ok": False}
 
-    # --- Withdraw ---
+    # --- Withdraw (same) ---
     def withdraw_check(self) -> Dict:
         return self._request("GET", "/api/withdraw/check")
 
@@ -334,15 +330,12 @@ class SpeedKick:
             print(f"{RED}❌ Withdraw failed: {result.get('error')}{RESET}")
         return result
 
-    # --- Smart Loop (MODIFIED: Hanya ads, setelah selesai langsung berhenti) ---
+    # --- Smart Loop (FIXED: uses run_ads that now works) ---
     def smart_loop(self):
         print(f"\n{GREEN}🌾 Starting Ads Farming...{RESET}")
         print(f"{YELLOW}Press Ctrl+C to return to menu{RESET}\n")
-        # Kerjain semua ads sampai 20
-        self.run_ads()  # ini akan looping sampai ads selesai
-        # Setelah selesai, kembali ke menu
+        self.run_ads()  # runs until 20 ads done
         print(f"\n{GREEN}🎉 All ads completed! Returning to menu...{RESET}")
-        return  # exit function, back to main menu
 
 # ==================== CONFIG FILE ====================
 def load_config():
