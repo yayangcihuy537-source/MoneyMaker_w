@@ -26,7 +26,7 @@ function loadConfig() {
         return json_decode(file_get_contents($configFile), true);
     }
     $default = [
-        'email' => '',
+        'cookie' => '',
         'user_agent' => 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36',
         'coin' => 'ltc'
     ];
@@ -44,17 +44,28 @@ function logMsg($message, $color = WHITE, $emoji = '') {
     echo $color . "[$timestamp] $emoji $message" . RESET . PHP_EOL;
 }
 
-function timer($seconds, $prefix = '⏳ Please wait') {
-    for ($i = $seconds; $i > 0; $i--) {
-        echo "\r$prefix $i s   ";
-        flush();
-        sleep(1);
+function timer($seconds, $prefix = "⏳ Please wait") {
+    $wait_time = (int)$seconds;
+    $frames = ['⣾', '⣽', '⣻', '⢿', '⡿', '⣟', '⣯', '⣷'];
+    $frame_count = count($frames);
+    $current_frame = 0;
+    $frame_delay = 0.1;
+    while ($wait_time > 0) {
+        $start_time = microtime(true);
+        while ((microtime(true) - $start_time) < 1) {
+            $hours = floor($wait_time / 3600);
+            $minutes = floor(($wait_time % 3600) / 60);
+            $seconds_left = $wait_time % 60;
+            $time_formatted = sprintf('%02d:%02d:%02d', $hours, $minutes, $seconds_left);
+            $spinner = $frames[$current_frame];
+            echo WHITE . $prefix . GREEN . " $time_formatted " . WHITE . $spinner . "\r";
+            usleep($frame_delay * 1000000);
+            $current_frame = ($current_frame + 1) % $frame_count;
+            if ((microtime(true) - $start_time) >= 1) break;
+        }
+        $wait_time--;
     }
-    echo "\r" . str_repeat(' ', 30) . "\r";
-}
-
-function randomDelay($min = 6, $max = 11) {
-    usleep(rand($min * 1000000, $max * 1000000));
+    echo "\r" . str_repeat(' ', 50) . "\r";
 }
 
 function banner() {
@@ -62,16 +73,16 @@ function banner() {
     echo CYAN . "╔════════════════════════════════════════════════════════════╗" . PHP_EOL;
     echo WHITE . "║          CLAIMCRYPTO AUTO CLAIM v" . VERSION . "          ║" . PHP_EOL;
     echo CYAN . "╠════════════════════════════════════════════════════════════╣" . PHP_EOL;
-    echo GREEN . "║  💰 AUTO CLAIM • AUTO LOGIN • SMART DETECT              ║" . PHP_EOL;
+    echo GREEN . "║  💰 AUTO CLAIM • COOKIE LOGIN • SMART DETECT            ║" . PHP_EOL;
     echo YELLOW . "║  ⚡ Infinite Farm • Auto Switch Coin                      ║" . PHP_EOL;
     echo RED . "║  👨‍💻 Developer : @MoneyMaker_w                             ║" . PHP_EOL;
     echo CYAN . "╚════════════════════════════════════════════════════════════╝" . RESET . PHP_EOL . PHP_EOL;
 }
 
 // ============================================================
-// CURL REQUEST — returns array with body, headers, cookies, http_code
+// CURL REQUEST WITH COOKIE
 // ============================================================
-function request($url, $method = 'GET', $data = null, $headers = [], $cookieFile = null) {
+function request($url, $method = 'GET', $data = null, $headers = [], $cookieString = null) {
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -81,9 +92,8 @@ function request($url, $method = 'GET', $data = null, $headers = [], $cookieFile
     curl_setopt($ch, CURLOPT_HEADER, true);
     curl_setopt($ch, CURLOPT_TIMEOUT, 30);
     
-    if ($cookieFile) {
-        curl_setopt($ch, CURLOPT_COOKIEJAR, $cookieFile);
-        curl_setopt($ch, CURLOPT_COOKIEFILE, $cookieFile);
+    if ($cookieString) {
+        curl_setopt($ch, CURLOPT_COOKIE, $cookieString);
     }
     
     if ($headers) {
@@ -99,96 +109,31 @@ function request($url, $method = 'GET', $data = null, $headers = [], $cookieFile
     
     $response = curl_exec($ch);
     $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-    $headersRaw = substr($response, 0, $headerSize);
     $body = substr($response, $headerSize);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
     
-    // Parse cookies from headers
-    $cookies = [];
-    preg_match_all('/^Set-Cookie:\s*([^;]+)/mi', $headersRaw, $matches);
-    if (!empty($matches[1])) {
-        foreach ($matches[1] as $cookie) {
-            $parts = explode('=', $cookie, 2);
-            if (count($parts) == 2) {
-                $cookies[trim($parts[0])] = trim($parts[1]);
-            }
-        }
-    }
-    
-    return ['body' => $body, 'headers' => $headersRaw, 'cookies' => $cookies, 'http_code' => $httpCode];
+    return ['body' => $body, 'http_code' => $httpCode];
 }
 
 // ============================================================
-// BOT
+// KELAS BOT
 // ============================================================
 class ClaimBot {
     private $config;
-    private $cookieFile;
-    private $email;
+    private $cookie;
     private $userAgent;
     private $badCoins = [];
     private $totalClaims = 0;
     private $successClaims = 0;
     private $failedClaims = 0;
+    private $errorCount = 0;
+    private $captchaCount = 0;
     
     public function __construct($config) {
         $this->config = $config;
-        $this->email = $config['email'] ?? '';
+        $this->cookie = $config['cookie'] ?? '';
         $this->userAgent = $config['user_agent'] ?? 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36';
-        $this->cookieFile = tempnam(sys_get_temp_dir(), 'cookie_');
-    }
-    
-    public function login() {
-        logMsg("Logging in with email: {$this->email}", CYAN, '🔑');
-        
-        $homeHeaders = [
-            'User-Agent: ' . $this->userAgent,
-            'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-            'Accept-Language: id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7'
-        ];
-        $home = request(BASE_URL, 'GET', null, $homeHeaders, $this->cookieFile);
-        if (empty($home['body'])) {
-            logMsg("Failed to fetch homepage", RED, '❌');
-            return false;
-        }
-        
-        $csrf = '';
-        if (!empty($home['cookies']['csrf_cookie_name'])) {
-            $csrf = $home['cookies']['csrf_cookie_name'];
-        } else {
-            if (preg_match('/name="csrf_token_name"\s*value="([^"]+)"/i', $home['body'], $match)) {
-                $csrf = $match[1];
-            }
-        }
-        if (!$csrf) {
-            logMsg("CSRF token not found", RED, '❌');
-            return false;
-        }
-        
-        $loginData = ['wallet' => $this->email, 'csrf_token_name' => $csrf];
-        $loginHeaders = [
-            'User-Agent: ' . $this->userAgent,
-            'Origin: ' . BASE_URL,
-            'Referer: ' . BASE_URL . '/',
-            'Content-Type: application/x-www-form-urlencoded',
-            'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8'
-        ];
-        $login = request(BASE_URL . '/auth/login', 'POST', $loginData, $loginHeaders, $this->cookieFile);
-        
-        if (strpos($login['body'], 'Dashboard') !== false || strpos($login['body'], 'Earn Free') !== false) {
-            logMsg("Login successful!", GREEN, '✅');
-            return true;
-        } else {
-            // Coba cek dashboard langsung
-            $dash = request(BASE_URL . '/dashboard', 'GET', null, ['User-Agent: ' . $this->userAgent], $this->cookieFile);
-            if (strpos($dash['body'], 'Dashboard') !== false || strpos($dash['body'], 'Earn Free') !== false) {
-                logMsg("Already logged in (cookie valid)", GREEN, '✅');
-                return true;
-            }
-            logMsg("Login failed. Check email.", RED, '❌');
-            return false;
-        }
     }
     
     private function isCaptchaPage($html) {
@@ -205,12 +150,13 @@ class ClaimBot {
         $url = BASE_URL . "/faucet/currency/$coin";
         $headers = [
             'User-Agent: ' . $this->userAgent,
+            'Cookie: ' . $this->cookie,
             'Referer: ' . BASE_URL . '/',
             'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8'
         ];
         
         for ($attempt = 0; $attempt < 3; $attempt++) {
-            $resp = request($url, 'GET', null, $headers, $this->cookieFile);
+            $resp = request($url, 'GET', null, $headers);
             $body = $resp['body'];
             if (empty($body)) continue;
             
@@ -238,8 +184,8 @@ class ClaimBot {
             }
             if ($token) {
                 $csrf = '';
-                if (!empty($resp['cookies']['csrf_cookie_name'])) {
-                    $csrf = $resp['cookies']['csrf_cookie_name'];
+                if (preg_match('/csrf_cookie_name=([^;]+)/', $this->cookie, $match)) {
+                    $csrf = $match[1];
                 } elseif (preg_match('/name="csrf_token_name"\s*value="([^"]+)"/i', $body, $match)) {
                     $csrf = $match[1];
                 }
@@ -263,10 +209,10 @@ class ClaimBot {
         $status = $page['status'] ?? 'error';
         
         if ($status === 'captcha') {
-            logMsg("Captcha detected, waiting 30s...", YELLOW, '🤖');
+            logMsg("Captcha detected", YELLOW, '🤖');
             return 'captcha';
         } elseif ($status === 'limit') {
-            logMsg("Daily limit detected, marking as bad", YELLOW, '⛔');
+            logMsg("Daily limit detected", YELLOW, '⛔');
             $this->badCoins[] = $coin;
             return 'limit';
         } elseif ($status === 'wait') {
@@ -281,16 +227,17 @@ class ClaimBot {
         
         $token = $page['token'];
         $csrf = $page['csrf'];
-        $data = ['csrf_token_name' => $csrf, 'token' => $token, 'wallet' => $this->email];
+        $data = ['csrf_token_name' => $csrf, 'token' => $token];
         $url = BASE_URL . "/faucet/verify/$coin";
         $headers = [
             'User-Agent: ' . $this->userAgent,
+            'Cookie: ' . $this->cookie,
             'Origin: ' . BASE_URL,
             'Referer: ' . BASE_URL . "/faucet/currency/" . strtoupper($coin),
             'Content-Type: application/x-www-form-urlencoded',
             'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8'
         ];
-        $resp = request($url, 'POST', $data, $headers, $this->cookieFile);
+        $resp = request($url, 'POST', $data, $headers);
         $body = $resp['body'];
         $code = $resp['http_code'];
         
@@ -333,16 +280,16 @@ class ClaimBot {
     }
     
     public function autoFarm() {
-        if (!$this->login()) {
-            logMsg("Cannot proceed without login", RED, '❌');
+        if (empty($this->cookie)) {
+            logMsg("Cookie not set. Please set cookie first.", RED, '❌');
             return;
         }
         
         $coin = $this->config['coin'] ?? 'ltc';
         $coins = ['ltc', 'doge', 'dgb', 'sol', 'trx', 'bnb', 'bch', 'dash', 'eth', 'fey', 'zec', 'usdt'];
         $this->badCoins = [];
-        $errorCount = 0;
-        $captchaCount = 0;
+        $this->errorCount = 0;
+        $this->captchaCount = 0;
         
         logMsg("🚀 Starting infinite farming...", CYAN);
         logMsg("📌 Starting coin: " . strtoupper($coin), CYAN);
@@ -374,83 +321,51 @@ class ClaimBot {
             $result = $this->claimFaucet($coin);
             
             if ($result === 'captcha') {
-                $captchaCount++;
-                if ($captchaCount >= 3) {
+                $this->captchaCount++;
+                if ($this->captchaCount >= 3) {
                     logMsg("⚠️ Captcha persistent on " . strtoupper($coin) . ", switching...", RED, '🔄');
                     $this->badCoins[] = $coin;
-                    $captchaCount = 0;
-                    $errorCount = 0;
-                    $start = array_search($coin, $coins) ?: 0;
-                    for ($i = 1; $i < count($coins); $i++) {
-                        $idx = ($start + $i) % count($coins);
-                        if (!in_array($coins[$idx], $this->badCoins)) {
-                            $coin = $coins[$idx];
-                            break;
-                        }
-                    }
-                    logMsg("Switching to " . strtoupper($coin), CYAN, '🔄');
+                    $this->captchaCount = 0;
+                    $this->errorCount = 0;
+                    $this->switchCoin($coin, $coins);
                 } else {
-                    logMsg("Captcha detected, waiting 30s before retry...", YELLOW, '⏳');
+                    logMsg("Captcha detected, waiting 30s...", YELLOW, '⏳');
                     timer(30);
                 }
                 continue;
             } elseif ($result === 'limit' || $result === 'empty' || $result === 'invalid') {
                 logMsg("⚠️ " . strtoupper($coin) . " blocked — switching...", RED, '🔄');
                 $this->badCoins[] = $coin;
-                $captchaCount = 0;
-                $errorCount = 0;
-                $start = array_search($coin, $coins) ?: 0;
-                for ($i = 1; $i < count($coins); $i++) {
-                    $idx = ($start + $i) % count($coins);
-                    if (!in_array($coins[$idx], $this->badCoins)) {
-                        $coin = $coins[$idx];
-                        break;
-                    }
-                }
-                logMsg("Switching to " . strtoupper($coin), CYAN, '🔄');
+                $this->captchaCount = 0;
+                $this->errorCount = 0;
+                $coin = $this->switchCoin($coin, $coins);
                 continue;
             } elseif ($result === 'wait') {
                 timer(15);
                 continue;
             } elseif ($result === 'error') {
-                $errorCount++;
-                if ($errorCount >= 3) {
+                $this->errorCount++;
+                if ($this->errorCount >= 3) {
                     logMsg("❌ Too many errors on " . strtoupper($coin) . ", switching...", RED, '🔄');
                     $this->badCoins[] = $coin;
-                    $captchaCount = 0;
-                    $errorCount = 0;
-                    $start = array_search($coin, $coins) ?: 0;
-                    for ($i = 1; $i < count($coins); $i++) {
-                        $idx = ($start + $i) % count($coins);
-                        if (!in_array($coins[$idx], $this->badCoins)) {
-                            $coin = $coins[$idx];
-                            break;
-                        }
-                    }
-                    logMsg("Switching to " . strtoupper($coin), CYAN, '🔄');
+                    $this->captchaCount = 0;
+                    $this->errorCount = 0;
+                    $coin = $this->switchCoin($coin, $coins);
                 } else {
                     timer(5);
                 }
                 continue;
             } elseif ($result === true) {
-                $errorCount = 0;
-                $captchaCount = 0;
+                $this->errorCount = 0;
+                $this->captchaCount = 0;
             } else {
-                $errorCount++;
-                if ($errorCount >= 3) {
+                $this->errorCount++;
+                if ($this->errorCount >= 3) {
                     logMsg("❌ Too many failures on " . strtoupper($coin) . ", switching...", RED, '🔄');
                     $this->badCoins[] = $coin;
-                    $captchaCount = 0;
-                    $errorCount = 0;
-                    $start = array_search($coin, $coins) ?: 0;
-                    for ($i = 1; $i < count($coins); $i++) {
-                        $idx = ($start + $i) % count($coins);
-                        if (!in_array($coins[$idx], $this->badCoins)) {
-                            $coin = $coins[$idx];
-                            break;
-                        }
-                    }
-                    logMsg("Switching to " . strtoupper($coin), CYAN, '🔄');
+                    $this->captchaCount = 0;
+                    $this->errorCount = 0;
+                    $coin = $this->switchCoin($coin, $coins);
                 } else {
                     timer(3);
                 }
@@ -479,23 +394,41 @@ class ClaimBot {
         echo "   Bad Coins    : " . YELLOW . (empty($this->badCoins) ? 'None' : implode(', ', array_map('strtoupper', $this->badCoins))) . RESET . PHP_EOL;
         echo str_repeat('━', 50) . PHP_EOL . PHP_EOL;
     }
+    
+    private function switchCoin(&$coin, $coins) {
+        $start = array_search($coin, $coins) ?: 0;
+        for ($i = 1; $i < count($coins); $i++) {
+            $idx = ($start + $i) % count($coins);
+            if (!in_array($coins[$idx], $this->badCoins)) {
+                $coin = $coins[$idx];
+                logMsg("Switching to " . strtoupper($coin), CYAN, '🔄');
+                return $coin;
+            }
+        }
+        logMsg("❌ All coins blocked!", RED, '🛑');
+        return $coin;
+    }
 }
 
 // ============================================================
 // MENU
 // ============================================================
-function menuSetEmail(&$config) {
+function menuSetCookie(&$config) {
     banner();
-    $current = $config['email'] ?? 'Not Set';
-    echo CYAN . "Current Email: " . YELLOW . $current . RESET . PHP_EOL . PHP_EOL;
-    echo YELLOW . "Masukkan email FaucetPay: " . RESET;
-    $email = trim(fgets(STDIN));
-    if ($email) {
-        $config['email'] = $email;
+    $current = $config['cookie'] ?? 'Not Set';
+    echo CYAN . "Current Cookie: " . YELLOW . ($current ? substr($current, 0, 50) . '...' : 'Not Set') . RESET . PHP_EOL . PHP_EOL;
+    echo WHITE . "Cara ambil cookie:" . PHP_EOL;
+    echo "  1. Login ke claimcrypto.in via browser." . PHP_EOL;
+    echo "  2. Buka Dev Tools (F12) → Application → Cookies." . PHP_EOL;
+    echo "  3. Copy semua cookie dalam format: nama1=nilai1; nama2=nilai2; ..." . PHP_EOL . PHP_EOL;
+    echo YELLOW . "Masukkan Cookie: " . RESET;
+    $cookie = trim(fgets(STDIN));
+    if ($cookie) {
+        $config['cookie'] = $cookie;
         saveConfig($config);
-        echo GREEN . "✅ Email saved!" . RESET . PHP_EOL;
+        echo GREEN . "✅ Cookie saved!" . RESET . PHP_EOL;
     } else {
-        echo RED . "Email tidak boleh kosong." . RESET . PHP_EOL;
+        echo RED . "Cookie tidak boleh kosong." . RESET . PHP_EOL;
     }
     echo CYAN . "Press Enter to continue..." . RESET;
     fgets(STDIN);
@@ -543,8 +476,8 @@ function menuSelectCoin(&$config) {
 
 function menuStart(&$config) {
     banner();
-    if (empty($config['email'])) {
-        echo RED . "❌ Email belum di set. Menu 2 dulu." . RESET . PHP_EOL;
+    if (empty($config['cookie'])) {
+        echo RED . "❌ Cookie belum di set. Menu 2 dulu." . RESET . PHP_EOL;
         echo CYAN . "Press Enter to continue..." . RESET;
         fgets(STDIN);
         return;
@@ -563,7 +496,7 @@ function main() {
     while (true) {
         banner();
         echo CYAN . "[ 1 ] Start Farming (Infinite)" . RESET . PHP_EOL;
-        echo GREEN . "[ 2 ] Set Email (FaucetPay)" . RESET . PHP_EOL;
+        echo GREEN . "[ 2 ] Set Cookie" . RESET . PHP_EOL;
         echo YELLOW . "[ 3 ] Set User-Agent" . RESET . PHP_EOL;
         echo CYAN . "[ 4 ] Select Coin" . RESET . PHP_EOL;
         echo RED . "[ 0 ] Exit" . RESET . PHP_EOL;
@@ -571,7 +504,7 @@ function main() {
         $choice = trim(fgets(STDIN));
         switch ($choice) {
             case '1': menuStart($config); break;
-            case '2': menuSetEmail($config); break;
+            case '2': menuSetCookie($config); break;
             case '3': menuSetUserAgent($config); break;
             case '4': menuSelectCoin($config); break;
             case '0':
