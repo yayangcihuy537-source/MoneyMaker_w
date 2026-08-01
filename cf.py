@@ -2,8 +2,7 @@
 """
 CoinFree Auto Bot - All Modes + Auto Watch + Auto Claim + Captcha Solver
 By: Kyriel (for Bos)
-Dengan Human Timer - Anti Detection
-Skip Cooldown Mode - Langsung Claim Mode Ready
+Anti Detection - Pause kalo semua cooldown, nunggu timer
 """
 
 import os
@@ -47,6 +46,10 @@ def human_sleep(min_seconds: float = 0.5, max_seconds: float = 2.0):
     delay = random.uniform(min_seconds, max_seconds)
     time.sleep(delay)
 
+def random_delay(min_sec: float = 0.3, max_sec: float = 1.5):
+    delay = random.uniform(min_sec, max_sec)
+    time.sleep(delay)
+
 def human_timer(seconds: int, prefix: str = "⏳", show_spinner: bool = True):
     wait_time = int(seconds)
     if wait_time <= 0:
@@ -81,10 +84,6 @@ def human_timer(seconds: int, prefix: str = "⏳", show_spinner: bool = True):
         elapsed = time.time() - start_time
     
     print(f"\r{DIM}{prefix} Done!{' ' * 20}{RESET}")
-
-def random_delay(min_sec: float = 0.3, max_sec: float = 1.5):
-    delay = random.uniform(min_sec, max_sec)
-    time.sleep(delay)
 
 # ==================== LOG QUEUE ====================
 log_queue = deque(maxlen=3)
@@ -431,7 +430,7 @@ class CoinFreeBot:
         self.dashboard = Dashboard(self)
         self.dashboard_thread = None
         self.needs_new_init_data = False
-        self.claimed_in_cycle = False  # Flag buat tau ada yang claim di cycle ini
+        self.claimed_in_cycle = False
 
     def _request(self, payload: Dict) -> Dict:
         random_delay(0.2, 0.8)
@@ -533,7 +532,6 @@ class CoinFreeBot:
 
         random_delay(0.5, 1.5)
 
-        # CEK COOLDOWN - LANGSUNG SKIP KALO BELUM READY
         if not self.is_cooldown_ready(mode):
             now = time.time()
             wait_time = 0
@@ -548,7 +546,6 @@ class CoinFreeBot:
                 log(f"⏳ Cooldown {wait_time:.0f}s for mode {mode} - skipping", YELLOW)
                 return False
 
-        # Kalau ready, lanjut claim
         log(f"📡 Getting spin reward for {mode}...", DIM)
         random_delay(0.3, 1.0)
         self.dashboard.update_mode_status(mode, status="Getting reward")
@@ -662,10 +659,9 @@ class CoinFreeBot:
                 coin=coin
             )
 
-            # Reset flag
             self.claimed_in_cycle = False
 
-            # LOOP SEMUA MODE - SKIP KALAU COOLDOWN, LANGSUNG YANG READY
+            # SCAN SEMUA MODE
             for mode in self.modes:
                 if not self.running or self.needs_new_init_data:
                     break
@@ -674,23 +670,39 @@ class CoinFreeBot:
                     break
                 self.get_user_data()
                 self.dashboard.refresh_all_cooldowns()
-                random_delay(0.5, 1.5)  # delay kecil antar mode
+                random_delay(0.5, 1.5)
 
             if self.needs_new_init_data:
                 continue
 
-            # KALAU ADA YANG CLAIM DI CYCLE INI, LANGSUNG LOOP LAGI tanpa nunggu
+            # KALAU ADA CLAIM, LANGSUNG SCAN LAGI
             if self.claimed_in_cycle:
                 log("🔄 Ada claim! Lanjut scan mode lain...", DIM)
                 continue
 
-            # KALAU SEMUA MODE COOLDOWN, BARU NUNGGU 10 DETIK
-            log("🔄 Semua mode cooldown. Waiting 10s...", DIM)
-            human_timer(10, "⏳ Next cycle")
-            for _ in range(10):
-                if not self.running or self.needs_new_init_data:
-                    break
-                time.sleep(1)
+            # KALAU SEMUA COOLDOWN, HITUNG COOLDOWN TERCEPAT
+            now = time.time()
+            min_cooldown = None
+            for mode in self.modes:
+                cd_end = self.cooldowns.get(mode, 0)
+                if cd_end > now:
+                    remaining = cd_end - now
+                    if min_cooldown is None or remaining < min_cooldown:
+                        min_cooldown = remaining
+
+            if min_cooldown and min_cooldown > 0:
+                wait_seconds = int(min_cooldown) + random.randint(1, 3)
+                log(f"⏸️ Semua mode cooldown. Pause {wait_seconds}s sampai ada yang ready...", YELLOW)
+                # SLEEP TANPA REQUEST
+                time.sleep(wait_seconds)
+                # Refresh status abis sleep
+                self.get_user_data()
+                self.dashboard.refresh_all_cooldowns()
+                continue
+
+            # Fallback
+            log("⏳ Semua mode cooldown. Waiting 10s...", DIM)
+            time.sleep(10)
 
     def stop(self):
         self.running = False
@@ -730,70 +742,4 @@ def refresh_init_data() -> str:
     print(f"{YELLOW}📝 InitData expired or invalid. Please paste new initData:{RESET}")
     new_init_data = input("initData: ").strip()
     while not new_init_data:
-        log("InitData cannot be empty!", RED)
-        new_init_data = input("initData: ").strip()
-    config = load_config()
-    config["init_data"] = new_init_data
-    save_config(config)
-    log("✅ InitData updated!", GREEN)
-    return new_init_data
-
-def main():
-    config = load_config()
-    init_data = config.get("init_data")
-    device_id = config.get("device_id")
-
-    if not device_id:
-        device_id = uuid.uuid4().hex
-        config["device_id"] = device_id
-        save_config(config)
-
-    service = config.get("captcha_service")
-    api_key = config.get(f"{service}_apikey") if service else None
-    if not service or not api_key:
-        show_banner()
-        service = get_captcha_service()
-        api_key = input(f"Masukkan API Key untuk {service}: ").strip()
-        if not api_key:
-            log("API Key required!", RED)
-            sys.exit(1)
-        config["captcha_service"] = service
-        config[f"{service}_apikey"] = api_key
-        save_config(config)
-
-    captcha_solver = CaptchaSolver(service, api_key)
-
-    while True:
-        if not init_data:
-            show_banner()
-            print(f"{RED}❌ No InitData found!{RESET}")
-            print(f"{YELLOW}📝 Paste your initData from Telegram:{RESET}")
-            init_data = input("initData: ").strip()
-            if not init_data:
-                log("InitData cannot be empty!", RED)
-                time.sleep(1)
-                continue
-            config["init_data"] = init_data
-            save_config(config)
-
-        bot = CoinFreeBot(init_data, device_id, captcha_solver)
-        try:
-            bot.run_loop()
-        except KeyboardInterrupt:
-            log("\n👋 Stopping...", YELLOW)
-            bot.stop()
-            sys.exit(0)
-        except Exception as e:
-            log(f"⚠️ Unexpected error: {e}", RED)
-            bot.stop()
-            time.sleep(2)
-
-        if bot.needs_new_init_data:
-            log("🔁 InitData expired. Please provide new initData.", YELLOW)
-            init_data = refresh_init_data()
-            continue
-        else:
-            break
-
-if __name__ == "__main__":
-    main()
+        log("InitData
