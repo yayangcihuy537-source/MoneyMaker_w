@@ -29,8 +29,8 @@
       "name": "Apikey",
       "items": {
         "1": {
-          "label": "I will Soon",
-          "file": "",
+          "label": "Earnbitsun",
+          "file": "sun.py",
           "runner": "python3"
         },
         "2": {
