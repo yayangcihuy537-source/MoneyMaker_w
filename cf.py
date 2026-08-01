@@ -3,6 +3,7 @@
 CoinFree Auto Bot - All Modes + Auto Watch + Auto Claim + Captcha Solver
 By: Kyriel (for Bos)
 Dengan Human Timer - Anti Detection
+Skip Cooldown Mode - Langsung Claim Mode Ready
 """
 
 import os
@@ -43,24 +44,20 @@ CAPTCHA_PAGEURL = "https://coinfree.app"
 
 # ==================== HUMAN TIMER ====================
 def human_sleep(min_seconds: float = 0.5, max_seconds: float = 2.0):
-    """Sleep dengan variasi random, kayak manusia"""
     delay = random.uniform(min_seconds, max_seconds)
     time.sleep(delay)
 
 def human_timer(seconds: int, prefix: str = "⏳", show_spinner: bool = True):
-    """Timer dengan spinner dan delay random, keliatan kayak manusia nunggu"""
     wait_time = int(seconds)
     if wait_time <= 0:
         return
     
-    # Tambahin random delay ±10% biar gak presisi
     actual_wait = wait_time + random.uniform(-0.5, 1.5)
     actual_wait = max(1, actual_wait)
     
     frames = ['⣾', '⣽', '⣻', '⢿', '⡿', '⣟', '⣯', '⣷']
     frame_count = len(frames)
     current_frame = 0
-    frame_delay = 0.1
     
     start_time = time.time()
     elapsed = 0
@@ -79,7 +76,6 @@ def human_timer(seconds: int, prefix: str = "⏳", show_spinner: bool = True):
             print(f"\r{DIM}{prefix} {time_str} {spinner}{RESET}", end="", flush=True)
             current_frame = (current_frame + 1) % frame_count
         
-        # Sleep dengan variasi kecil (0.8-1.2 detik) biar gak presisi
         step = random.uniform(0.8, 1.2)
         time.sleep(min(step, remaining))
         elapsed = time.time() - start_time
@@ -87,7 +83,6 @@ def human_timer(seconds: int, prefix: str = "⏳", show_spinner: bool = True):
     print(f"\r{DIM}{prefix} Done!{' ' * 20}{RESET}")
 
 def random_delay(min_sec: float = 0.3, max_sec: float = 1.5):
-    """Delay random kayak manusia mikir"""
     delay = random.uniform(min_sec, max_sec)
     time.sleep(delay)
 
@@ -315,7 +310,7 @@ class Dashboard:
                         self.mode_status[mode]["cooldown"] = remaining
             else:
                 with self.lock:
-                    if status in ["⏳", "⏳0s", "❌"] and self.mode_status[mode]["reward"] == "-":
+                    if status in ["⏳", "⏳0s", "❌"]:
                         self.mode_status[mode]["status"] = "Ready"
                         self.mode_status[mode]["cooldown"] = "-"
 
@@ -436,9 +431,9 @@ class CoinFreeBot:
         self.dashboard = Dashboard(self)
         self.dashboard_thread = None
         self.needs_new_init_data = False
+        self.claimed_in_cycle = False  # Flag buat tau ada yang claim di cycle ini
 
     def _request(self, payload: Dict) -> Dict:
-        # Human delay before request
         random_delay(0.2, 0.8)
         try:
             resp = self.session.post(BASE_URL, json=payload)
@@ -521,20 +516,6 @@ class CoinFreeBot:
             return False
         return True
 
-    def wait_for_cooldown(self, mode: str):
-        now = time.time()
-        wait_time = 0
-        if self.global_cooldown > now:
-            wait_time = max(wait_time, self.global_cooldown - now)
-        if self.cooldowns.get(mode, 0) > now:
-            wait_time = max(wait_time, self.cooldowns[mode] - now)
-        if wait_time > 0:
-            self.dashboard.update_mode_status(mode, status=f"⏳{int(wait_time)}s", cooldown=wait_time)
-            log(f"⏳ Cooldown {wait_time:.0f}s for mode {mode}", YELLOW)
-            # Pake human_timer biar delay-nya lebih manusiawi
-            human_timer(wait_time, f"⏳ Cooldown {mode}")
-            self.dashboard.refresh_all_cooldowns()
-
     def solve_captcha(self, mode: str) -> Optional[str]:
         if not self.captcha_solver:
             log("❌ No captcha solver configured", RED)
@@ -550,16 +531,24 @@ class CoinFreeBot:
         self.dashboard.update_mode_status(mode, status="Running", reward="...", double="Done")
         log(f"🎮 Playing mode: {mode}", CYAN)
 
-        # Human delay sebelum mulai
         random_delay(0.5, 1.5)
 
+        # CEK COOLDOWN - LANGSUNG SKIP KALO BELUM READY
         if not self.is_cooldown_ready(mode):
-            self.wait_for_cooldown(mode)
-            if not self.is_cooldown_ready(mode):
-                log(f"⏳ Still cooldown for {mode}, skipping", YELLOW)
-                self.dashboard.update_mode_status(mode, status="Waiting", cooldown="-")
+            now = time.time()
+            wait_time = 0
+            if self.global_cooldown > now:
+                wait_time = max(wait_time, self.global_cooldown - now)
+            if self.cooldowns.get(mode, 0) > now:
+                wait_time = max(wait_time, self.cooldowns[mode] - now)
+            
+            if wait_time > 0:
+                status_text = f"⏳{int(wait_time)}s"
+                self.dashboard.update_mode_status(mode, status=status_text, cooldown=wait_time)
+                log(f"⏳ Cooldown {wait_time:.0f}s for mode {mode} - skipping", YELLOW)
                 return False
 
+        # Kalau ready, lanjut claim
         log(f"📡 Getting spin reward for {mode}...", DIM)
         random_delay(0.3, 1.0)
         self.dashboard.update_mode_status(mode, status="Getting reward")
@@ -578,14 +567,13 @@ class CoinFreeBot:
         reward_index = spin_result.get("rewardIndex", 0)
         log(f"🎯 Base: {base_amount:.2f} | Final: {final_amount:.2f} | Index: {reward_index}", GOLD)
 
-        # Human delay "membaca hasil"
         random_delay(1.0, 2.0)
 
         multiplier = self.double_reward_multiplier
         double_status = "Done"
         if multiplier > 1:
             log(f"📺 Watching ad for {multiplier}x reward...", CYAN)
-            random_delay(2.0, 4.0)  # Delay simulasi nonton iklan
+            random_delay(2.0, 4.0)
             self.dashboard.update_mode_status(mode, status="Watching Ad")
             ad_result = self.complete_double_reward_ad(mode)
             if ad_result.get("status") == "success":
@@ -622,6 +610,7 @@ class CoinFreeBot:
             except (ValueError, TypeError):
                 reward_display = str(claimed)
             self.total_claim_count += 1
+            self.claimed_in_cycle = True
             self.dashboard.update_mode_status(
                 mode,
                 status="✅",
@@ -672,6 +661,11 @@ class CoinFreeBot:
                 total_claim=self.total_claim_count,
                 coin=coin
             )
+
+            # Reset flag
+            self.claimed_in_cycle = False
+
+            # LOOP SEMUA MODE - SKIP KALAU COOLDOWN, LANGSUNG YANG READY
             for mode in self.modes:
                 if not self.running or self.needs_new_init_data:
                     break
@@ -680,12 +674,18 @@ class CoinFreeBot:
                     break
                 self.get_user_data()
                 self.dashboard.refresh_all_cooldowns()
-                # Human delay antar mode
-                random_delay(1.0, 3.0)
+                random_delay(0.5, 1.5)  # delay kecil antar mode
+
             if self.needs_new_init_data:
                 continue
-            log("🔄 Cycle complete. Waiting 10s before next round...", DIM)
-            # Human timer dengan spinner
+
+            # KALAU ADA YANG CLAIM DI CYCLE INI, LANGSUNG LOOP LAGI tanpa nunggu
+            if self.claimed_in_cycle:
+                log("🔄 Ada claim! Lanjut scan mode lain...", DIM)
+                continue
+
+            # KALAU SEMUA MODE COOLDOWN, BARU NUNGGU 10 DETIK
+            log("🔄 Semua mode cooldown. Waiting 10s...", DIM)
             human_timer(10, "⏳ Next cycle")
             for _ in range(10):
                 if not self.running or self.needs_new_init_data:
