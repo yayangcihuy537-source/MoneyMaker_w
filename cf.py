@@ -2,7 +2,7 @@
 """
 CoinFree Auto Bot - All Modes + Auto Watch + Auto Claim + Captcha Solver
 By: Kyriel (for Bos)
-Dengan Auto-Recovery (tanpa Telethon)
+Dengan Human Timer - Anti Detection
 """
 
 import os
@@ -10,6 +10,7 @@ import sys
 import json
 import time
 import uuid
+import random
 import requests
 import threading
 from typing import Dict, Optional
@@ -39,6 +40,56 @@ COOKIE_FILE = "coinfree_cookies.json"
 
 CAPTCHA_SITEKEY = "0x4AAAAAAB6mAUIH75NUE5fq"
 CAPTCHA_PAGEURL = "https://coinfree.app"
+
+# ==================== HUMAN TIMER ====================
+def human_sleep(min_seconds: float = 0.5, max_seconds: float = 2.0):
+    """Sleep dengan variasi random, kayak manusia"""
+    delay = random.uniform(min_seconds, max_seconds)
+    time.sleep(delay)
+
+def human_timer(seconds: int, prefix: str = "⏳", show_spinner: bool = True):
+    """Timer dengan spinner dan delay random, keliatan kayak manusia nunggu"""
+    wait_time = int(seconds)
+    if wait_time <= 0:
+        return
+    
+    # Tambahin random delay ±10% biar gak presisi
+    actual_wait = wait_time + random.uniform(-0.5, 1.5)
+    actual_wait = max(1, actual_wait)
+    
+    frames = ['⣾', '⣽', '⣻', '⢿', '⡿', '⣟', '⣯', '⣷']
+    frame_count = len(frames)
+    current_frame = 0
+    frame_delay = 0.1
+    
+    start_time = time.time()
+    elapsed = 0
+    
+    print(f"{DIM}{prefix} ", end="", flush=True)
+    
+    while elapsed < actual_wait:
+        remaining = actual_wait - elapsed
+        hours = int(remaining // 3600)
+        minutes = int((remaining % 3600) // 60)
+        seconds_left = int(remaining % 60)
+        time_str = f"{hours:02d}:{minutes:02d}:{seconds_left:02d}"
+        
+        if show_spinner:
+            spinner = frames[current_frame]
+            print(f"\r{DIM}{prefix} {time_str} {spinner}{RESET}", end="", flush=True)
+            current_frame = (current_frame + 1) % frame_count
+        
+        # Sleep dengan variasi kecil (0.8-1.2 detik) biar gak presisi
+        step = random.uniform(0.8, 1.2)
+        time.sleep(min(step, remaining))
+        elapsed = time.time() - start_time
+    
+    print(f"\r{DIM}{prefix} Done!{' ' * 20}{RESET}")
+
+def random_delay(min_sec: float = 0.3, max_sec: float = 1.5):
+    """Delay random kayak manusia mikir"""
+    delay = random.uniform(min_sec, max_sec)
+    time.sleep(delay)
 
 # ==================== LOG QUEUE ====================
 log_queue = deque(maxlen=3)
@@ -86,7 +137,6 @@ def save_cookies(cookies):
         json.dump(cookies, f, indent=2)
 
 def is_auth_error(response: Dict) -> bool:
-    """Cek apakah error disebabkan oleh initData kadaluarsa atau tidak valid"""
     if not isinstance(response, dict):
         return False
     msg = str(response.get('message', '')).lower()
@@ -272,7 +322,6 @@ class Dashboard:
     def render(self):
         with self.lock:
             clear()
-            # ====== CUSTOM HEADER ======
             print(f"""
 {WHITE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   {GOLD}⚡ SCRIPTYXSOUU{RESET}
@@ -280,7 +329,6 @@ class Dashboard:
   {PINK}DEV : ScriptyXSou{RESET}
 {WHITE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}
 """)
-            # Account Info Box
             balance = self.account_info["balance"]
             coin = self.account_info["coin"]
             username = self.account_info["username"][:15]
@@ -299,7 +347,6 @@ class Dashboard:
 {CYAN}╰─────────────────────────────────────────────────────╯{RESET}
 """)
 
-            # Table
             print(f"{CYAN}┌────────┬──────────────┬──────┬───────┬──────────────┐")
             print(f"│ {WHITE}MODE   │ STATUS       │ 2X   │ PLAY  │ REWARD       │{RESET}")
             print(f"{CYAN}├────────┼──────────────┼──────┼───────┼──────────────┤")
@@ -327,7 +374,6 @@ class Dashboard:
                 print(f"│ {mode:6} │ {status_color}{status_text:12}{RESET} │ {double_text:4} │ {play_text:5} │ {reward_text:12} │")
             print(f"{CYAN}└────────┴──────────────┴──────┴───────┴──────────────┘{RESET}")
 
-            # Live Logs
             print(f"\n{CYAN}┌──────────────────── LIVE LOGS ─────────────────────┐{RESET}")
             logs = get_logs()
             if logs:
@@ -392,6 +438,8 @@ class CoinFreeBot:
         self.needs_new_init_data = False
 
     def _request(self, payload: Dict) -> Dict:
+        # Human delay before request
+        random_delay(0.2, 0.8)
         try:
             resp = self.session.post(BASE_URL, json=payload)
             if resp.cookies:
@@ -432,39 +480,38 @@ class CoinFreeBot:
                 coin=coin
             )
         else:
-            # Cek apakah error karena auth
             if is_auth_error(result):
                 log("⚠️ InitData expired or invalid!", RED)
                 self.needs_new_init_data = True
         return result
 
     def get_faucet_spin_reward(self, mode: str) -> Dict:
-        payload = {
+        random_delay(0.3, 1.0)
+        return self._request({
             "action": "get_faucet_spin_reward",
             "initData": self.init_data,
             "deviceId": self.device_id,
             "mode": mode
-        }
-        return self._request(payload)
+        })
 
     def complete_double_reward_ad(self, mode: str) -> Dict:
-        payload = {
+        random_delay(0.5, 1.5)
+        return self._request({
             "action": "complete_double_reward_ad",
             "initData": self.init_data,
             "deviceId": self.device_id,
             "mode": mode
-        }
-        return self._request(payload)
+        })
 
     def claim_faucet(self, mode: str, captcha_token: str) -> Dict:
-        payload = {
+        random_delay(0.3, 0.8)
+        return self._request({
             "action": "claim_faucet",
             "initData": self.init_data,
             "deviceId": self.device_id,
             "captchaToken": captcha_token,
             "mode": mode
-        }
-        return self._request(payload)
+        })
 
     def is_cooldown_ready(self, mode: str) -> bool:
         now = time.time()
@@ -484,12 +531,9 @@ class CoinFreeBot:
         if wait_time > 0:
             self.dashboard.update_mode_status(mode, status=f"⏳{int(wait_time)}s", cooldown=wait_time)
             log(f"⏳ Cooldown {wait_time:.0f}s for mode {mode}", YELLOW)
-            while wait_time > 0 and self.running:
-                time.sleep(min(1, wait_time))
-                wait_time -= 1
-                if wait_time % 5 == 0 or wait_time < 5:
-                    self.dashboard.update_mode_status(mode, status=f"⏳{int(wait_time)}s", cooldown=wait_time)
-                    self.dashboard.refresh_all_cooldowns()
+            # Pake human_timer biar delay-nya lebih manusiawi
+            human_timer(wait_time, f"⏳ Cooldown {mode}")
+            self.dashboard.refresh_all_cooldowns()
 
     def solve_captcha(self, mode: str) -> Optional[str]:
         if not self.captcha_solver:
@@ -506,6 +550,9 @@ class CoinFreeBot:
         self.dashboard.update_mode_status(mode, status="Running", reward="...", double="Done")
         log(f"🎮 Playing mode: {mode}", CYAN)
 
+        # Human delay sebelum mulai
+        random_delay(0.5, 1.5)
+
         if not self.is_cooldown_ready(mode):
             self.wait_for_cooldown(mode)
             if not self.is_cooldown_ready(mode):
@@ -513,12 +560,11 @@ class CoinFreeBot:
                 self.dashboard.update_mode_status(mode, status="Waiting", cooldown="-")
                 return False
 
-        # 1. Get spin reward
         log(f"📡 Getting spin reward for {mode}...", DIM)
+        random_delay(0.3, 1.0)
         self.dashboard.update_mode_status(mode, status="Getting reward")
         spin_result = self.get_faucet_spin_reward(mode)
         if spin_result.get("status") != "success":
-            # Cek auth error
             if is_auth_error(spin_result):
                 log("⚠️ Auth error detected, need new initData", RED)
                 self.needs_new_init_data = True
@@ -532,11 +578,14 @@ class CoinFreeBot:
         reward_index = spin_result.get("rewardIndex", 0)
         log(f"🎯 Base: {base_amount:.2f} | Final: {final_amount:.2f} | Index: {reward_index}", GOLD)
 
-        # 2. Watch ad for double reward
+        # Human delay "membaca hasil"
+        random_delay(1.0, 2.0)
+
         multiplier = self.double_reward_multiplier
         double_status = "Done"
         if multiplier > 1:
             log(f"📺 Watching ad for {multiplier}x reward...", CYAN)
+            random_delay(2.0, 4.0)  # Delay simulasi nonton iklan
             self.dashboard.update_mode_status(mode, status="Watching Ad")
             ad_result = self.complete_double_reward_ad(mode)
             if ad_result.get("status") == "success":
@@ -546,7 +595,6 @@ class CoinFreeBot:
                 final_amount = final_amount * multiplier
                 double_status = "Done"
             else:
-                # Cek auth error
                 if is_auth_error(ad_result):
                     log("⚠️ Auth error detected, need new initData", RED)
                     self.needs_new_init_data = True
@@ -554,15 +602,14 @@ class CoinFreeBot:
                 log(f"⚠️ Ad failed: {ad_result.get('message')}, proceeding with normal reward", YELLOW)
                 double_status = "Skip"
 
-        # 3. Solve captcha
         token = self.solve_captcha(mode)
         if not token:
             log("❌ Failed to solve captcha", RED)
             self.dashboard.update_mode_status(mode, status="Captcha Fail", reward="fail")
             return False
 
-        # 4. Claim
         log(f"⛏️ Claiming reward for {mode}...", DIM)
+        random_delay(0.3, 0.8)
         self.dashboard.update_mode_status(mode, status="Claiming")
         claim_result = self.claim_faucet(mode, token)
         if claim_result.get("status") == "success":
@@ -589,7 +636,6 @@ class CoinFreeBot:
                 self.cooldowns[mode] = time.time() + claim_result[mode_key]
             return True
         else:
-            # Cek auth error
             if is_auth_error(claim_result):
                 log("⚠️ Auth error detected, need new initData", RED)
                 self.needs_new_init_data = True
@@ -606,10 +652,9 @@ class CoinFreeBot:
         log(f"📋 Modes: {', '.join(self.modes)}", DIM)
 
         while self.running:
-            # Cek auth dulu
             if self.needs_new_init_data:
                 log("🔄 InitData expired. Please update.", YELLOW)
-                break  # keluar dari loop, akan di-handle di main
+                break
 
             self.get_user_data()
             if self.needs_new_init_data:
@@ -635,10 +680,13 @@ class CoinFreeBot:
                     break
                 self.get_user_data()
                 self.dashboard.refresh_all_cooldowns()
-                time.sleep(2)
+                # Human delay antar mode
+                random_delay(1.0, 3.0)
             if self.needs_new_init_data:
                 continue
             log("🔄 Cycle complete. Waiting 10s before next round...", DIM)
+            # Human timer dengan spinner
+            human_timer(10, "⏳ Next cycle")
             for _ in range(10):
                 if not self.running or self.needs_new_init_data:
                     break
@@ -678,14 +726,12 @@ def get_captcha_service():
         return "bypassall"
 
 def refresh_init_data() -> str:
-    """Minta user input init_data baru dan simpan ke config"""
     show_banner()
     print(f"{YELLOW}📝 InitData expired or invalid. Please paste new initData:{RESET}")
     new_init_data = input("initData: ").strip()
     while not new_init_data:
         log("InitData cannot be empty!", RED)
         new_init_data = input("initData: ").strip()
-    # Simpan ke config
     config = load_config()
     config["init_data"] = new_init_data
     save_config(config)
@@ -697,13 +743,11 @@ def main():
     init_data = config.get("init_data")
     device_id = config.get("device_id")
 
-    # Jika device_id belum ada, buat baru
     if not device_id:
         device_id = uuid.uuid4().hex
         config["device_id"] = device_id
         save_config(config)
 
-    # Captcha solver
     service = config.get("captcha_service")
     api_key = config.get(f"{service}_apikey") if service else None
     if not service or not api_key:
@@ -719,7 +763,6 @@ def main():
 
     captcha_solver = CaptchaSolver(service, api_key)
 
-    # Loop utama dengan auto-recovery
     while True:
         if not init_data:
             show_banner()
@@ -733,7 +776,6 @@ def main():
             config["init_data"] = init_data
             save_config(config)
 
-        # Buat bot dengan init_data saat ini
         bot = CoinFreeBot(init_data, device_id, captcha_solver)
         try:
             bot.run_loop()
@@ -746,14 +788,11 @@ def main():
             bot.stop()
             time.sleep(2)
 
-        # Jika bot berhenti karena needs_new_init_data atau error, minta refresh
         if bot.needs_new_init_data:
             log("🔁 InitData expired. Please provide new initData.", YELLOW)
             init_data = refresh_init_data()
-            # Loop akan restart dengan init_data baru
             continue
         else:
-            # Bot berhenti normal (misal user stop), keluar
             break
 
 if __name__ == "__main__":
