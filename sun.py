@@ -384,7 +384,7 @@ def show_banner():
 {PURPLE}╔══════════════════════════════════════════════════════════════╗
 ║   {GOLD}⚡  EARNBITSUN AUTO FAUCET BOT                      {PURPLE}║
 ║   {LIME}🎯 Auto Claim • 🤖 Auto Captcha • 💰 Auto Earn     {PURPLE}║
-║   {PINK}👑 Made for Bos by Kyriel                          {PURPLE}║
+║   {PINK}👑 Made ScriptyXSou                          {PURPLE}║
 ╚══════════════════════════════════════════════════════════════╝{RESET}
 """)
 
