@@ -2,7 +2,7 @@
 """
 CoinFree Auto Bot - All Modes + Auto Watch + Auto Claim + Captcha Solver
 By: Kyriel (for Bos)
-Anti Detection - Pause kalo semua cooldown, nunggu timer
+Full Script - Fix Cooldown Handler + Anti Detection
 """
 
 import os
@@ -42,47 +42,33 @@ CAPTCHA_SITEKEY = "0x4AAAAAAB6mAUIH75NUE5fq"
 CAPTCHA_PAGEURL = "https://coinfree.app"
 
 # ==================== HUMAN TIMER ====================
-def human_sleep(min_seconds: float = 0.5, max_seconds: float = 2.0):
-    delay = random.uniform(min_seconds, max_seconds)
-    time.sleep(delay)
+def random_delay(min_sec: float = 0.2, max_sec: float = 0.8):
+    time.sleep(random.uniform(min_sec, max_sec))
 
-def random_delay(min_sec: float = 0.3, max_sec: float = 1.5):
-    delay = random.uniform(min_sec, max_sec)
-    time.sleep(delay)
-
-def human_timer(seconds: int, prefix: str = "⏳", show_spinner: bool = True):
+def human_timer(seconds: int, prefix: str = "⏳"):
     wait_time = int(seconds)
     if wait_time <= 0:
         return
-    
     actual_wait = wait_time + random.uniform(-0.5, 1.5)
     actual_wait = max(1, actual_wait)
-    
     frames = ['⣾', '⣽', '⣻', '⢿', '⡿', '⣟', '⣯', '⣷']
     frame_count = len(frames)
     current_frame = 0
-    
     start_time = time.time()
     elapsed = 0
-    
     print(f"{DIM}{prefix} ", end="", flush=True)
-    
     while elapsed < actual_wait:
         remaining = actual_wait - elapsed
         hours = int(remaining // 3600)
         minutes = int((remaining % 3600) // 60)
         seconds_left = int(remaining % 60)
         time_str = f"{hours:02d}:{minutes:02d}:{seconds_left:02d}"
-        
-        if show_spinner:
-            spinner = frames[current_frame]
-            print(f"\r{DIM}{prefix} {time_str} {spinner}{RESET}", end="", flush=True)
-            current_frame = (current_frame + 1) % frame_count
-        
+        spinner = frames[current_frame]
+        print(f"\r{DIM}{prefix} {time_str} {spinner}{RESET}", end="", flush=True)
+        current_frame = (current_frame + 1) % frame_count
         step = random.uniform(0.8, 1.2)
         time.sleep(min(step, remaining))
         elapsed = time.time() - start_time
-    
     print(f"\r{DIM}{prefix} Done!{' ' * 20}{RESET}")
 
 # ==================== LOG QUEUE ====================
@@ -91,9 +77,9 @@ log_lock = threading.Lock()
 
 def push_log(msg, color=WHITE):
     with log_lock:
-        timestamp_str = datetime.now().strftime("%H:%M:%S")
-        clean_msg = msg.replace(GREEN, '').replace(YELLOW, '').replace(RED, '').replace(CYAN, '').replace(BLUE, '').replace(PURPLE, '').replace(PINK, '').replace(LIME, '').replace(GOLD, '').replace(DIM, '').replace(WHITE, '').replace(RESET, '').replace(BOLD, '')
-        log_queue.append(f"[{timestamp_str}] {clean_msg}")
+        ts = datetime.now().strftime("%H:%M:%S")
+        clean = msg.replace(GREEN, '').replace(YELLOW, '').replace(RED, '').replace(CYAN, '').replace(BLUE, '').replace(PURPLE, '').replace(PINK, '').replace(LIME, '').replace(GOLD, '').replace(DIM, '').replace(WHITE, '').replace(RESET, '').replace(BOLD, '')
+        log_queue.append(f"[{ts}] {clean}")
 
 def get_logs():
     with log_lock:
@@ -299,10 +285,10 @@ class Dashboard:
     def refresh_all_cooldowns(self):
         now = time.time()
         for mode in self.bot.modes:
-            cooldown_end = self.bot.cooldowns.get(mode, 0)
+            cd_end = self.bot.cooldowns.get(mode, 0)
             status = self.mode_status[mode]["status"]
-            if cooldown_end > now:
-                remaining = int(cooldown_end - now)
+            if cd_end > now:
+                remaining = int(cd_end - now)
                 with self.lock:
                     if status not in ["✅", "Finished"]:
                         self.mode_status[mode]["status"] = f"⏳{remaining}s"
@@ -347,32 +333,28 @@ class Dashboard:
 
             for mode in self.bot.modes:
                 status = self.mode_status[mode]
-                status_text = status["status"]
-                if len(status_text) > 12:
-                    status_text = status_text[:12]
+                status_text = status["status"][:12]
                 double_text = status["double"][:6]
                 play_text = status["play"][:7]
-                reward_text = status["reward"]
-                if len(reward_text) > 12:
-                    reward_text = reward_text[:12]
+                reward_text = status["reward"][:12]
                 if "✅" in status_text or "Finished" in status_text:
-                    status_color = GREEN
+                    sc = GREEN
                 elif "Ready" in status_text:
-                    status_color = LIME
+                    sc = LIME
                 elif "⏳" in status_text:
-                    status_color = YELLOW
+                    sc = YELLOW
                 elif "❌" in status_text or "Error" in status_text:
-                    status_color = RED
+                    sc = RED
                 else:
-                    status_color = WHITE
-                print(f"│ {mode:6} │ {status_color}{status_text:12}{RESET} │ {double_text:4} │ {play_text:5} │ {reward_text:12} │")
+                    sc = WHITE
+                print(f"│ {mode:6} │ {sc}{status_text:12}{RESET} │ {double_text:4} │ {play_text:5} │ {reward_text:12} │")
             print(f"{CYAN}└────────┴──────────────┴──────┴───────┴──────────────┘{RESET}")
 
             print(f"\n{CYAN}┌──────────────────── LIVE LOGS ─────────────────────┐{RESET}")
             logs = get_logs()
             if logs:
-                for log_line in logs[-3:]:
-                    clean = log_line.replace(GREEN, '').replace(YELLOW, '').replace(RED, '').replace(CYAN, '').replace(BLUE, '').replace(PURPLE, '').replace(PINK, '').replace(LIME, '').replace(GOLD, '').replace(DIM, '').replace(WHITE, '').replace(RESET, '').replace(BOLD, '')
+                for line in logs[-3:]:
+                    clean = line.replace(GREEN, '').replace(YELLOW, '').replace(RED, '').replace(CYAN, '').replace(BLUE, '').replace(PURPLE, '').replace(PINK, '').replace(LIME, '').replace(GOLD, '').replace(DIM, '').replace(WHITE, '').replace(RESET, '').replace(BOLD, '')
                     if len(clean) > 46:
                         clean = clean[:43] + "..."
                     print(f"│ {clean:<46} │")
@@ -539,10 +521,8 @@ class CoinFreeBot:
                 wait_time = max(wait_time, self.global_cooldown - now)
             if self.cooldowns.get(mode, 0) > now:
                 wait_time = max(wait_time, self.cooldowns[mode] - now)
-            
             if wait_time > 0:
-                status_text = f"⏳{int(wait_time)}s"
-                self.dashboard.update_mode_status(mode, status=status_text, cooldown=wait_time)
+                self.dashboard.update_mode_status(mode, status=f"⏳{int(wait_time)}s", cooldown=wait_time)
                 log(f"⏳ Cooldown {wait_time:.0f}s for mode {mode} - skipping", YELLOW)
                 return False
 
@@ -661,7 +641,7 @@ class CoinFreeBot:
 
             self.claimed_in_cycle = False
 
-            # SCAN SEMUA MODE
+            # SCAN SEMUA MODE - YANG READY LANGSUNG CLAIM
             for mode in self.modes:
                 if not self.running or self.needs_new_init_data:
                     break
@@ -675,12 +655,12 @@ class CoinFreeBot:
             if self.needs_new_init_data:
                 continue
 
-            # KALAU ADA CLAIM, LANGSUNG SCAN LAGI
+            # KALAU ADA CLAIM, LANGSUNG SCAN LAGI TANPA NUNGGU
             if self.claimed_in_cycle:
                 log("🔄 Ada claim! Lanjut scan mode lain...", DIM)
                 continue
 
-            # KALAU SEMUA COOLDOWN, HITUNG COOLDOWN TERCEPAT
+            # KALAU SEMUA MODE COOLDOWN, HITUNG YANG PALING CEPET
             now = time.time()
             min_cooldown = None
             for mode in self.modes:
@@ -692,16 +672,16 @@ class CoinFreeBot:
 
             if min_cooldown and min_cooldown > 0:
                 wait_seconds = int(min_cooldown) + random.randint(1, 3)
-                log(f"⏸️ Semua mode cooldown. Pause {wait_seconds}s sampai ada yang ready...", YELLOW)
-                # SLEEP TANPA REQUEST
+                log(f"⏸️ Semua mode cooldown. Pause {wait_seconds}s...", YELLOW)
+                # SLEEP SAMPAI COOLDOWN TERCEPAT HABIS - TANPA REQUEST
                 time.sleep(wait_seconds)
-                # Refresh status abis sleep
+                # REFRESH STATUS ABIS SLEEP
                 self.get_user_data()
                 self.dashboard.refresh_all_cooldowns()
                 continue
 
-            # Fallback
-            log("⏳ Semua mode cooldown. Waiting 10s...", DIM)
+            # FALLBACK
+            log("⏳ Waiting 10s...", DIM)
             time.sleep(10)
 
     def stop(self):
@@ -729,17 +709,77 @@ def get_captcha_service():
   {GREEN}[2]{RESET} BypassAllShortlinks.space
 """)
     choice = input(f"{PURPLE}❯ Pilih (1/2): {RESET}").strip()
-    if choice == "1":
-        return "waryono"
-    elif choice == "2":
-        return "bypassall"
-    else:
-        log("Pilihan tidak valid, default ke bypassall", YELLOW)
-        return "bypassall"
+    return "waryono" if choice == "1" else "bypassall"
 
 def refresh_init_data() -> str:
     show_banner()
     print(f"{YELLOW}📝 InitData expired or invalid. Please paste new initData:{RESET}")
-    new_init_data = input("initData: ").strip()
-    while not new_init_data:
-        log("InitData
+    new = input("initData: ").strip()
+    while not new:
+        log("InitData cannot be empty!", RED)
+        new = input("initData: ").strip()
+    config = load_config()
+    config["init_data"] = new
+    save_config(config)
+    log("✅ InitData updated!", GREEN)
+    return new
+
+def main():
+    config = load_config()
+    init_data = config.get("init_data")
+    device_id = config.get("device_id")
+
+    if not device_id:
+        device_id = uuid.uuid4().hex
+        config["device_id"] = device_id
+        save_config(config)
+
+    service = config.get("captcha_service")
+    api_key = config.get(f"{service}_apikey") if service else None
+    if not service or not api_key:
+        show_banner()
+        service = get_captcha_service()
+        api_key = input(f"Masukkan API Key untuk {service}: ").strip()
+        if not api_key:
+            log("API Key required!", RED)
+            sys.exit(1)
+        config["captcha_service"] = service
+        config[f"{service}_apikey"] = api_key
+        save_config(config)
+
+    captcha_solver = CaptchaSolver(service, api_key)
+
+    while True:
+        if not init_data:
+            show_banner()
+            print(f"{RED}❌ No InitData found!{RESET}")
+            print(f"{YELLOW}📝 Paste your initData from Telegram:{RESET}")
+            init_data = input("initData: ").strip()
+            if not init_data:
+                log("InitData cannot be empty!", RED)
+                time.sleep(1)
+                continue
+            config["init_data"] = init_data
+            save_config(config)
+
+        bot = CoinFreeBot(init_data, device_id, captcha_solver)
+        try:
+            bot.run_loop()
+        except KeyboardInterrupt:
+            log("\n👋 Stopping...", YELLOW)
+            bot.stop()
+            sys.exit(0)
+        except Exception as e:
+            log(f"⚠️ Unexpected error: {e}", RED)
+            bot.stop()
+            time.sleep(2)
+
+        if bot.needs_new_init_data:
+            log("🔁 InitData expired. Please provide new initData.", YELLOW)
+            init_data = refresh_init_data()
+            continue
+        else:
+            break
+
+if __name__ == "__main__":
+    main()
