@@ -30,7 +30,7 @@
       "items": {
         "1": {
           "label": "Coming Soon",
-          "file": "",
+          "file": "gamefaucet.py",
           "runner": "python3"
         },
         "2": {
@@ -75,7 +75,7 @@
         },
         "6": {
           "label": "Coming Soon",
-          "file": "cf.py",
+          "file": "gram.py",
           "runner": "python3"
         },
         "7": {
