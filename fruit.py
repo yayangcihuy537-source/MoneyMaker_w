@@ -3,7 +3,7 @@
 """
 🍓 Fruit Cut Bot — Full Menu
 - 1. Auto Game (loop sampai token habis)
-- 2. Auto Watch Ads (loop semua network sampai limit)
+- 2. Auto Watch Ads (loop semua network sampai limit habis)
 - 3. Check Balance
 - 4. Set InitData
 - 0. Exit
@@ -309,18 +309,18 @@ def auto_game(bot, max_rounds=999):
         print(f"\n{C.GREEN}✅ Selesai {round_count} round!{C.RESET}")
     input("Tekan Enter untuk kembali...")
 
-def auto_watch_ads(bot, max_loops=10):
+def auto_watch_ads(bot):
     if not bot.login():
         print(f"{C.RED}❌ Gagal login, mungkin init_data salah.{C.RESET}")
         if input("Ingin set ulang init_data? (y/n): ").lower() == 'y':
             if ensure_init_data():
                 bot = FruitCutBot(INIT_DATA)
-                auto_watch_ads(bot, max_loops)
+                auto_watch_ads(bot)
                 return
         input("Tekan Enter...")
         return
 
-    # Daftar network & limit harian
+    # Daftar network & limit harian (total 30 iklan)
     ad_networks = [
         ("adsgram", 5),
         ("adsgramDaily", 5),
@@ -333,34 +333,32 @@ def auto_watch_ads(bot, max_loops=10):
 
     clear()
     print(BANNER)
-    box("📺 AUTO WATCH ADS", 54)
-    print(f"{C.WHITE}║  Target: {max_loops} iklan (akan coba semua network){C.RESET}")
+    box("📺 AUTO WATCH ADS — ALL NETWORKS", 54)
+    print(f"{C.WHITE}║  Total potensi: 30 iklan (5+5+10+10){C.RESET}")
     print(f"{C.WHITE}║{C.RESET}")
     box_end(54)
 
     for network, limit in ad_networks:
-        if total_success >= max_loops:
-            break
-        # Coba network ini sampai limit atau sampai gagal
-        for i in range(min(max_loops - total_success, limit)):
-            print(f"\n{C.YELLOW}[{total_success+1}/{max_loops}] Menonton {network}...{C.RESET}")
+        print(f"\n{C.CYAN}▶️  Network: {network} (limit {limit}){C.RESET}")
+        success_network = 0
+        for i in range(limit):
+            print(f"\n  [{i+1}/{limit}] Menonton {network}...", end="")
             ok = bot.watch_ad(network)
             if ok:
+                success_network += 1
                 total_success += 1
-                print(f"{C.GREEN}✅ Iklan {network} selesai, +Gold!{C.RESET}")
+                print(f"\r  ✅ [{i+1}/{limit}] {network} selesai! +Gold", end="")
                 bot.sync()
-                print(f"{C.WHITE}💰 Gold sekarang: {C.YELLOW}{bot.gold}{C.RESET}")
+                print(f"\n  💰 Gold sekarang: {C.YELLOW}{bot.gold}{C.RESET}")
             else:
+                print(f"\r  ❌ [{i+1}/{limit}] {network} gagal (error/limit), skip ke network berikutnya.")
                 total_failed += 1
-                print(f"{C.RED}❌ Gagal menonton {network}, skip ke network berikutnya.{C.RESET}")
-                # Langsung keluar dari loop network ini, lanjut ke network berikutnya
-                break
+                break  # keluar dari network ini, lanjut ke network selanjutnya
             time.sleep(1)
-        # Jika sukses sudah mencapai target, keluar dari loop network
-        if total_success >= max_loops:
-            break
+        # Tampilkan ringkasan network
+        print(f"\n  └─ {network}: {success_network} berhasil, {limit-success_network} gagal/limit\n")
 
-    print(f"\n{C.GREEN}✅ Selesai menonton {total_success} iklan (gagal: {total_failed}){C.RESET}")
+    print(f"\n{C.GREEN}✅ Selesai! Total iklan berhasil: {total_success}, gagal: {total_failed}{C.RESET}")
     if total_success == 0:
         print(f"{C.RED}⚠️ Tidak ada iklan yang berhasil. Cek koneksi atau coba lagi nanti.{C.RESET}")
     input("Tekan Enter untuk kembali...")
@@ -391,7 +389,7 @@ def main():
                 continue
             if bot is None or bot.init_data != INIT_DATA:
                 bot = FruitCutBot(INIT_DATA)
-            auto_watch_ads(bot, max_loops=10)  # bisa diubah
+            auto_watch_ads(bot)
         elif choice == "3":
             if not ensure_init_data():
                 print(f"{C.RED}❌ Gagal mendapatkan init_data.{C.RESET}")
