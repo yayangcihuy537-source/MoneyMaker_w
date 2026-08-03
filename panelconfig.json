@@ -74,12 +74,12 @@
           "runner": "python3"
         },
         "6": {
-          "label": "Coming Soon",
+          "label": "GramAd",
           "file": "gram.py",
           "runner": "python3"
         },
         "7": {
-          "label": "Coming Soon",
+          "label": "FruitCutPlay",
           "file": "fruit.py",
           "runner": "python3"
         },
