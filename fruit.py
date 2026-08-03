@@ -3,7 +3,7 @@
 """
 🍓 Fruit Cut Bot — Full Menu
 - 1. Auto Game (loop sampai token habis)
-- 2. Auto Watch Ads (loop sampai limit)
+- 2. Auto Watch Ads (loop semua network sampai limit)
 - 3. Check Balance
 - 4. Set InitData
 - 0. Exit
@@ -100,7 +100,7 @@ class FruitCutBot:
     def api(self, endpoint, data=None):
         url = f"{BASE_URL}{endpoint}"
         try:
-            resp = self.session.post(url, json=data or {})
+            resp = self.session.post(url, json=data or {}, timeout=10)
             resp.raise_for_status()
             return resp.json()
         except Exception as e:
@@ -160,11 +160,11 @@ class FruitCutBot:
             "network": ad_type
         })
         if not session_res or not session_res.get("success"):
-            self.log("❌ Gagal request session iklan", C.RED)
+            self.log(f"❌ Gagal request session {ad_type}", C.RED)
             return False
         session_id = session_res.get("sessionId")
 
-        self.log("⏳ Menonton iklan 17 detik...", C.CYAN)
+        self.log(f"⏳ Menonton {ad_type} 17 detik...", C.CYAN)
         for i in range(17, 0, -1):
             print(f"\r   {progress_bar(i, 17, '📺', 20)}", end="")
             time.sleep(1)
@@ -177,7 +177,7 @@ class FruitCutBot:
         if claim_res and claim_res.get("success"):
             self.sync()
             return True
-        self.log("❌ Gagal claim reward iklan", C.RED)
+        self.log(f"❌ Gagal claim reward {ad_type}", C.RED)
         return False
 
 # ─── MENU FUNCTIONS ────────────────────────────────────────
@@ -231,7 +231,7 @@ def show_menu():
     box("🍓 FRUIT GAME BOT", 54)
     print(f"{C.WHITE}║{C.RESET}")
     print(f"{C.WHITE}║  {C.GREEN}[1]{C.WHITE} 🎮 Auto Game (loop sampai token habis){C.RESET}")
-    print(f"{C.WHITE}║  {C.YELLOW}[2]{C.WHITE} 📺 Auto Watch Ads{C.RESET}")
+    print(f"{C.WHITE}║  {C.YELLOW}[2]{C.WHITE} 📺 Auto Watch Ads (semua network){C.RESET}")
     print(f"{C.WHITE}║  {C.CYAN}[3]{C.WHITE} 💰 Check Balance{C.RESET}")
     print(f"{C.WHITE}║  {C.MAGENTA}[4]{C.WHITE} 🔐 Set InitData (ganti){C.RESET}")
     print(f"{C.WHITE}║{C.RESET}")
@@ -303,7 +303,6 @@ def auto_game(bot, max_rounds=999):
         print(f"{C.WHITE}💰 Gold sekarang: {C.YELLOW}{bot.gold}{C.RESET}")
         time.sleep(1)
 
-    # Selesai loop
     if bot.game_tokens <= 0:
         print(f"\n{C.YELLOW}⚠️ Token habis! Bot berhenti. Tunggu refill atau beli token.{C.RESET}")
     else:
@@ -321,6 +320,7 @@ def auto_watch_ads(bot, max_loops=10):
         input("Tekan Enter...")
         return
 
+    # Daftar network & limit harian
     ad_networks = [
         ("adsgram", 5),
         ("adsgramDaily", 5),
@@ -328,32 +328,41 @@ def auto_watch_ads(bot, max_loops=10):
         ("gigapub", 10)
     ]
 
+    total_success = 0
+    total_failed = 0
+
     clear()
     print(BANNER)
     box("📺 AUTO WATCH ADS", 54)
-    print(f"{C.WHITE}║  Target: {max_loops} iklan (atau sampai limit harian){C.RESET}")
+    print(f"{C.WHITE}║  Target: {max_loops} iklan (akan coba semua network){C.RESET}")
     print(f"{C.WHITE}║{C.RESET}")
     box_end(54)
 
-    count = 0
     for network, limit in ad_networks:
-        for i in range(min(max_loops - count, limit)):
-            count += 1
-            print(f"\n{C.YELLOW}[{count}/{max_loops}] Menonton {network}...{C.RESET}")
+        if total_success >= max_loops:
+            break
+        # Coba network ini sampai limit atau sampai gagal
+        for i in range(min(max_loops - total_success, limit)):
+            print(f"\n{C.YELLOW}[{total_success+1}/{max_loops}] Menonton {network}...{C.RESET}")
             ok = bot.watch_ad(network)
             if ok:
+                total_success += 1
                 print(f"{C.GREEN}✅ Iklan {network} selesai, +Gold!{C.RESET}")
                 bot.sync()
                 print(f"{C.WHITE}💰 Gold sekarang: {C.YELLOW}{bot.gold}{C.RESET}")
             else:
-                print(f"{C.RED}❌ Gagal menonton {network}, skip.{C.RESET}")
-            time.sleep(1)
-            if count >= max_loops:
+                total_failed += 1
+                print(f"{C.RED}❌ Gagal menonton {network}, skip ke network berikutnya.{C.RESET}")
+                # Langsung keluar dari loop network ini, lanjut ke network berikutnya
                 break
-        if count >= max_loops:
+            time.sleep(1)
+        # Jika sukses sudah mencapai target, keluar dari loop network
+        if total_success >= max_loops:
             break
 
-    print(f"\n{C.GREEN}✅ Selesai menonton {count} iklan!{C.RESET}")
+    print(f"\n{C.GREEN}✅ Selesai menonton {total_success} iklan (gagal: {total_failed}){C.RESET}")
+    if total_success == 0:
+        print(f"{C.RED}⚠️ Tidak ada iklan yang berhasil. Cek koneksi atau coba lagi nanti.{C.RESET}")
     input("Tekan Enter untuk kembali...")
 
 # ─── MAIN ──────────────────────────────────────────────────
@@ -382,7 +391,7 @@ def main():
                 continue
             if bot is None or bot.init_data != INIT_DATA:
                 bot = FruitCutBot(INIT_DATA)
-            auto_watch_ads(bot, max_loops=5)
+            auto_watch_ads(bot, max_loops=10)  # bisa diubah
         elif choice == "3":
             if not ensure_init_data():
                 print(f"{C.RED}❌ Gagal mendapatkan init_data.{C.RESET}")
