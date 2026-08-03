@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 """
 🍓 Fruit Cut Bot — Full Menu
-- 1. Auto Game (main + claim + optional ad)
-- 2. Auto Watch Ads (loop sampai limit harian)
+- 1. Auto Game (loop sampai token habis)
+- 2. Auto Watch Ads (loop sampai limit)
 - 3. Check Balance
-- 4. Set InitData (ganti)
+- 4. Set InitData
 - 0. Exit
 """
 
@@ -76,9 +76,6 @@ def progress_bar(seconds, total, label="", width=20):
     bar = '█' * filled + '░' * (width - filled)
     return f"{label} [{C.GREEN}{bar}{C.RESET}] {seconds}/{total}s"
 
-def show_toast(msg, color=C.GREEN):
-    print(f"{color}└─ {msg}{C.RESET}")
-
 # ─── BOT CLASS ─────────────────────────────────────────────
 class FruitCutBot:
     def __init__(self, init_data):
@@ -96,10 +93,6 @@ class FruitCutBot:
         self.game_tokens = 0
         self.lottery_tokens = 0
         self.max_tokens = 10
-        self.adsgram_count = 0
-        self.adsgram_daily_count = 0
-        self.monetag_count = 0
-        self.gigapub_count = 0
 
     def log(self, msg, color=C.WHITE, end="\n"):
         print(f"{color}{msg}{C.RESET}", end=end)
@@ -162,7 +155,6 @@ class FruitCutBot:
         return None
 
     def watch_ad(self, ad_type="adsgram"):
-        # 1. request session
         session_res = self.api("/api/ads", {
             "action": "request_session",
             "network": ad_type
@@ -172,14 +164,12 @@ class FruitCutBot:
             return False
         session_id = session_res.get("sessionId")
 
-        # 2. simulate 17 detik
         self.log("⏳ Menonton iklan 17 detik...", C.CYAN)
         for i in range(17, 0, -1):
             print(f"\r   {progress_bar(i, 17, '📺', 20)}", end="")
             time.sleep(1)
         print("\r   ✅ Iklan selesai!        ")
 
-        # 3. claim reward
         claim_res = self.api("/api/ads", {
             "action": ad_type,
             "sessionId": session_id
@@ -193,7 +183,6 @@ class FruitCutBot:
 # ─── MENU FUNCTIONS ────────────────────────────────────────
 
 def get_init_data():
-    """Minta init_data dari user, simpan ke file"""
     clear()
     print(BANNER)
     box("🔐 SET INIT DATA", 54)
@@ -217,7 +206,6 @@ def get_init_data():
     return None
 
 def load_init_data():
-    """Load dari file, jika ada"""
     if os.path.exists(INIT_FILE):
         with open(INIT_FILE, "r") as f:
             data = f.read().strip()
@@ -226,7 +214,6 @@ def load_init_data():
     return None
 
 def ensure_init_data():
-    """Pastikan init_data tersedia (load dari file atau minta user)"""
     global INIT_DATA
     data = load_init_data()
     if data:
@@ -243,7 +230,7 @@ def show_menu():
     print(BANNER)
     box("🍓 FRUIT GAME BOT", 54)
     print(f"{C.WHITE}║{C.RESET}")
-    print(f"{C.WHITE}║  {C.GREEN}[1]{C.WHITE} 🎮 Auto Game{C.RESET}")
+    print(f"{C.WHITE}║  {C.GREEN}[1]{C.WHITE} 🎮 Auto Game (loop sampai token habis){C.RESET}")
     print(f"{C.WHITE}║  {C.YELLOW}[2]{C.WHITE} 📺 Auto Watch Ads{C.RESET}")
     print(f"{C.WHITE}║  {C.CYAN}[3]{C.WHITE} 💰 Check Balance{C.RESET}")
     print(f"{C.WHITE}║  {C.MAGENTA}[4]{C.WHITE} 🔐 Set InitData (ganti){C.RESET}")
@@ -258,7 +245,7 @@ def check_balance(bot):
         if input("Ingin set ulang init_data? (y/n): ").lower() == 'y':
             if ensure_init_data():
                 bot = FruitCutBot(INIT_DATA)
-                check_balance(bot)  # retry
+                check_balance(bot)
                 return
         input("Tekan Enter...")
         return
@@ -271,7 +258,7 @@ def check_balance(bot):
     """)
     input("Tekan Enter untuk kembali...")
 
-def auto_game(bot, max_rounds=10):
+def auto_game(bot, max_rounds=999):
     if not bot.login():
         print(f"{C.RED}❌ Gagal login, mungkin init_data salah.{C.RESET}")
         if input("Ingin set ulang init_data? (y/n): ").lower() == 'y':
@@ -287,10 +274,9 @@ def auto_game(bot, max_rounds=10):
         round_count += 1
         clear()
         print(BANNER)
-        box(f"🚀 AUTO GAME — Round {round_count}/{max_rounds}", 54)
+        box(f"🚀 AUTO GAME — Round {round_count}", 54)
         print(f"{C.WHITE}║  🎟 Tokens  : {bot.game_tokens} → {bot.game_tokens-1}{C.RESET}")
         
-        # Start game
         session_id = bot.start_game()
         if not session_id:
             print(f"{C.RED}║  ❌ Start game gagal!{C.RESET}")
@@ -299,14 +285,12 @@ def auto_game(bot, max_rounds=10):
             break
         print(f"{C.WHITE}║  🆔 Session : {session_id[:8]}...{C.RESET}")
         
-        # Simulate 15s
         print(f"{C.WHITE}║  ⏳ Playing :{C.RESET}", end="")
         for i in range(15, 0, -1):
             print(f"\r║  ⏳ Playing : {progress_bar(i, 15, '', 20)}", end="")
             time.sleep(1)
         print(f"\r║  ✅ Finished : {C.GREEN}15s{C.RESET}")
         
-        # Claim reward (tanpa ad dulu)
         print(f"{C.WHITE}║  🎁 Claim reward...{C.RESET}")
         reward = bot.claim_reward(session_id, watch_ad=False)
         if reward is None:
@@ -315,29 +299,13 @@ def auto_game(bot, max_rounds=10):
             print(f"{C.WHITE}║  💰 Reward  : +{C.GREEN}{reward}{C.WHITE} Gold{C.RESET}")
             print(f"{C.WHITE}║  🪙 Total   : {C.YELLOW}{bot.gold}{C.WHITE} Gold{C.RESET}")
         
-        # Tanya mau tonton iklan untuk 2x reward?
-        print(f"{C.WHITE}║{C.RESET}")
-        box_end(54)
-        tanya = input(f"{C.CYAN}➜ Tonton iklan untuk 2x reward? (y/n): {C.RESET}").strip().lower()
-        if tanya == 'y':
-            print(f"{C.WHITE}📺 Memutar iklan...{C.RESET}")
-            if bot.watch_ad("adsgram"):
-                reward2 = bot.claim_reward(session_id, watch_ad=True)
-                if reward2:
-                    print(f"{C.GREEN}✅ +{reward2} Gold (2x reward)!{C.RESET}")
-                else:
-                    print(f"{C.RED}❌ Gagal claim 2x reward{C.RESET}")
-            else:
-                print(f"{C.RED}❌ Iklan gagal, reward tetap.{C.RESET}")
-        else:
-            print(f"{C.WHITE}⏭️  Skip iklan{C.RESET}")
-
         bot.sync()
         print(f"{C.WHITE}💰 Gold sekarang: {C.YELLOW}{bot.gold}{C.RESET}")
-        time.sleep(2)
+        time.sleep(1)
 
+    # Selesai loop
     if bot.game_tokens <= 0:
-        print(f"\n{C.YELLOW}⚠️ Token habis! Tunggu refill atau beli di Shop.{C.RESET}")
+        print(f"\n{C.YELLOW}⚠️ Token habis! Bot berhenti. Tunggu refill atau beli token.{C.RESET}")
     else:
         print(f"\n{C.GREEN}✅ Selesai {round_count} round!{C.RESET}")
     input("Tekan Enter untuk kembali...")
@@ -359,8 +327,6 @@ def auto_watch_ads(bot, max_loops=10):
         ("monetag", 10),
         ("gigapub", 10)
     ]
-    if not hasattr(bot, 'ads_count'):
-        bot.ads_count = 0
 
     clear()
     print(BANNER)
@@ -393,7 +359,6 @@ def auto_watch_ads(bot, max_loops=10):
 # ─── MAIN ──────────────────────────────────────────────────
 def main():
     global INIT_DATA
-    # Load init_data from file if exists (tapi ga wajib)
     INIT_DATA = load_init_data() or ""
 
     bot = None
@@ -409,7 +374,7 @@ def main():
                 continue
             if bot is None or bot.init_data != INIT_DATA:
                 bot = FruitCutBot(INIT_DATA)
-            auto_game(bot, max_rounds=5)
+            auto_game(bot, max_rounds=999)
         elif choice == "2":
             if not ensure_init_data():
                 print(f"{C.RED}❌ Gagal mendapatkan init_data.{C.RESET}")
