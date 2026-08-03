@@ -80,7 +80,7 @@
         },
         "7": {
           "label": "Coming Soon",
-          "file": "",
+          "file": "fruit.py",
           "runner": "python3"
         },
         "8": {
