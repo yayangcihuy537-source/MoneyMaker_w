@@ -14,9 +14,9 @@ RESET = "\033[0m"
 def show_banner():
     print(f"""
 {CYAN}╔══════════════════════════════════════════════════════════╗
-║   {YELLOW}ARCADEPXC — AUTO CLAIM + 3 ADS (SKIP 429)         {CYAN}║
-║   {GREEN}⚡ Daily • Claim • Interstitial • Gigapub • Monetag {CYAN}║
-║   {YELLOW}⏭️  429 = Skip lanjut iklan lain                 {CYAN}║
+║   {YELLOW}ARCADEPXC — AUTO CLAIM + 3 ADS (SKIP 429/400)      {CYAN}║
+║   {GREEN}⚡ Daily 1x • Claim 1x • Ads loop sampai limit      {CYAN}║
+║   {YELLOW}⏭️  429/400 = skip (already claimed)              {CYAN}║
 ║   {CYAN}👑 Owner: ScriptyXSouu                             ║
 ╚══════════════════════════════════════════════════════════╝{RESET}
 """)
@@ -69,11 +69,11 @@ class ArcadePXC:
         self.base_url = BASE_URL
         self.session_cookie = None
         self.balance = 0
-        self.daily_claimed = False
+        self.daily_claimed = False   # flag internal
         self.inter_count = 0
         self.giga_count = 0
         self.monetag_count = 0
-        self._claim_done = False
+        self._claim_done = False     # flag PXC
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36",
             "Accept": "*/*",
@@ -82,6 +82,7 @@ class ArcadePXC:
             "Origin": "https://app.arcadepxc.xyz",
             "Referer": f"https://app.arcadepxc.xyz/tasks?user_id={user_id}",
             "X-Requested-With": "org.telegram.messenger.web",
+            "x-telegram-init-data": init_data,   # WAJIB
             "Sec-Fetch-Site": "same-origin",
             "Sec-Fetch-Mode": "cors",
             "Sec-Fetch-Dest": "empty",
@@ -113,9 +114,11 @@ class ArcadePXC:
         else:
             print(f"{RED}└─ ❌ Sync gagal: {resp.status_code}{RESET}")
             return False
+
+    # ─── DAILY (hanya 1x) ──────────────────────────────────
     def claim_daily(self):
         if self.daily_claimed:
-            print(f"{YELLOW}⏹️ Daily sudah diklaim hari ini.{RESET}")
+            print(f"{YELLOW}⏹️ Daily sudah diklaim (skip).{RESET}")
             return True
         print(f"{BLUE}┌─ 📅 Claim Daily Challenge...{RESET}")
         resp = self.session.get(f"{self.base_url}/api/daily-challenge?user_id={self.user_id}&lang=en", headers=self.headers)
@@ -129,23 +132,30 @@ class ArcadePXC:
                     print(f"{GREEN}└─ ✅ Daily claimed! +{reward} PXC{RESET}")
                     return True
                 else:
-                    print(f"{YELLOW}└─ ⚠️ Daily sudah diklaim.{RESET}")
+                    # kemungkinan sudah diklaim
+                    print(f"{YELLOW}└─ ⚠️ Daily sudah diklaim atau error: {data}{RESET}")
                     self.daily_claimed = True
                     return True
             except:
-                print(f"{GREEN}└─ ✅ Daily claimed!{RESET}")
+                print(f"{GREEN}└─ ✅ Daily claimed (asumsi sukses){RESET}")
                 self.daily_claimed = True
                 return True
+        elif resp.status_code == 429 or resp.status_code == 400:
+            print(f"{YELLOW}└─ ⏳ Daily 429/400 — anggap sudah diklaim, skip.{RESET}")
+            self.daily_claimed = True
+            return True
         else:
-            print(f"{RED}└─ ❌ Daily gagal: {resp.status_code}{RESET}")
+            print(f"{RED}└─ ❌ Daily gagal: {resp.status_code} — {resp.text[:50]}{RESET}")
             return False
 
+    # ─── CLAIM PXC (hanya 1x) ──────────────────────────────
     def claim_pxc(self):
         if self._claim_done:
-            print(f"{YELLOW}⏹️ Claim PXC sudah dilakukan sebelumnya.{RESET}")
+            print(f"{YELLOW}⏹️ Claim PXC sudah dilakukan (skip).{RESET}")
             return True
         print(f"{BLUE}┌─ 💰 Claim PXC...{RESET}")
-        resp = self.session.post(f"{self.base_url}/api/claim?user_id={self.user_id}", headers=self.headers)
+        payload = {"user_id": self.user_id, "initData": self.init_data}
+        resp = self.session.post(f"{self.base_url}/api/claim", json=payload, headers=self.headers)
         if resp.status_code == 200:
             try:
                 data = resp.json()
@@ -155,17 +165,18 @@ class ArcadePXC:
                     return True
             except:
                 self._claim_done = True
-                print(f"{GREEN}└─ ✅ Claim PXC berhasil!{RESET}")
+                print(f"{GREEN}└─ ✅ Claim PXC berhasil (asumsi)!{RESET}")
                 return True
-        elif resp.status_code == 429:
-            print(f"{YELLOW}└─ ⏳ Claim PXC 429 (rate limit) — anggap sudah sukses{RESET}")
+        elif resp.status_code == 429 or resp.status_code == 400:
+            # 400 biasanya "already claimed"
+            print(f"{YELLOW}└─ ⏳ Claim PXC {resp.status_code} — anggap sudah sukses, skip.{RESET}")
             self._claim_done = True
             return True
         else:
-            print(f"{RED}└─ ❌ Claim PXC gagal: {resp.status_code}{RESET}")
+            print(f"{RED}└─ ❌ Claim PXC gagal: {resp.status_code} — {resp.text[:50]}{RESET}")
             return False
 
-    # ---- ADS ----
+    # ─── ADS ──────────────────────────────────────────────────
     def watch_interstitial(self):
         if self.inter_count >= MAX_INTERSTITIAL:
             print(f"{YELLOW}⏹️ Interstitial limit ({self.inter_count}/{MAX_INTERSTITIAL}){RESET}")
@@ -288,18 +299,19 @@ class ArcadePXC:
 
 # ==================== FARMING ====================
 def farming(bot):
-    # 1. Daily
+    # ─── SETUP: Daily + Claim (hanya SEKALI) ──────────────
+    print(f"\n{CYAN}═══ SETUP — DAILY & CLAIM (hanya 1x) ═══{RESET}")
     if not bot.claim_daily():
         print(f"{RED}❌ Daily gagal, stop.{RESET}")
         return
     bot.countdown(INTERVAL_ACTION, "⏳ Jeda setelah daily")
 
-    # 2. Claim PXC SEKALI (hanya di awal)
     if not bot.claim_pxc():
         print(f"{RED}❌ Claim PXC gagal, stop.{RESET}")
         return
     bot.countdown(INTERVAL_ACTION, "⏳ Jeda setelah claim")
 
+    # ─── LOOP ADS ────────────────────────────────────────────
     cycle = 0
     while True:
         # Cek limit semua iklan
