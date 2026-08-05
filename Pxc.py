@@ -25,7 +25,7 @@ CONFIG_FILE = "arcadepxc_config.json"
 BASE_URL = "https://app.arcadepxc.xyz"
 INTERVAL_ACTION = 5
 INTERVAL_AD = 15
-INTERVAL_CYCLE = 15   # <--- DIUBAH DARI 60 JADI 15
+INTERVAL_CYCLE = 15
 DAILY_BLOCK_ID = "int-34589"
 MAX_INTERSTITIAL = 8
 MAX_GIGAPUB = 20
@@ -73,6 +73,7 @@ class ArcadePXC:
         self.inter_count = 0
         self.giga_count = 0
         self.monetag_count = 0
+        self._claim_done = False
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36",
             "Accept": "*/*",
@@ -138,18 +139,28 @@ class ArcadePXC:
         else:
             print(f"{RED}└─ ❌ Daily gagal: {resp.status_code}{RESET}")
             return False
+
     def claim_pxc(self):
+        if self._claim_done:
+            print(f"{YELLOW}⏹️ Claim PXC sudah dilakukan sebelumnya.{RESET}")
+            return True
         print(f"{BLUE}┌─ 💰 Claim PXC...{RESET}")
         resp = self.session.post(f"{self.base_url}/api/claim?user_id={self.user_id}", headers=self.headers)
         if resp.status_code == 200:
             try:
                 data = resp.json()
                 if data.get('success') or data.get('claimed'):
+                    self._claim_done = True
                     print(f"{GREEN}└─ ✅ Claim PXC berhasil!{RESET}")
                     return True
             except:
+                self._claim_done = True
                 print(f"{GREEN}└─ ✅ Claim PXC berhasil!{RESET}")
                 return True
+        elif resp.status_code == 429:
+            print(f"{YELLOW}└─ ⏳ Claim PXC 429 (rate limit) — anggap sudah sukses{RESET}")
+            self._claim_done = True
+            return True
         else:
             print(f"{RED}└─ ❌ Claim PXC gagal: {resp.status_code}{RESET}")
             return False
@@ -277,12 +288,21 @@ class ArcadePXC:
 
 # ==================== FARMING ====================
 def farming(bot):
+    # 1. Daily
     if not bot.claim_daily():
         print(f"{RED}❌ Daily gagal, stop.{RESET}")
         return
     bot.countdown(INTERVAL_ACTION, "⏳ Jeda setelah daily")
+
+    # 2. Claim PXC SEKALI (hanya di awal)
+    if not bot.claim_pxc():
+        print(f"{RED}❌ Claim PXC gagal, stop.{RESET}")
+        return
+    bot.countdown(INTERVAL_ACTION, "⏳ Jeda setelah claim")
+
     cycle = 0
     while True:
+        # Cek limit semua iklan
         if bot.is_all_ads_limit_reached():
             print(f"\n{GREEN}✅ Semua iklan sudah habis hari ini.{RESET}")
             print(f"📊 Interstitial: {bot.inter_count}/{MAX_INTERSTITIAL}")
@@ -291,26 +311,30 @@ def farming(bot):
             print(f"{YELLOW}🛑 Bot berhenti. Kembali ke menu...{RESET}")
             time.sleep(2)
             return
+
         cycle += 1
         print(f"\n{CYAN}╔════════════════════════════════════════════════════╗")
         print(f"║                 🎮 CYCLE #{cycle}                        ║")
         print(f"╚════════════════════════════════════════════════════╝{RESET}")
-        if not bot.claim_pxc():
-            print(f"{RED}❌ Claim PXC gagal, stop.{RESET}")
-            return
-        bot.countdown(INTERVAL_ACTION, "⏳ Jeda sebelum iklan")
+
+        # Interstitial
         if not bot.watch_interstitial():
-            print(f"{RED}❌ Interstitial gagal (bukan 429/limit), stop.{RESET}")
+            print(f"{RED}❌ Interstitial gagal, stop.{RESET}")
             return
         bot.countdown(INTERVAL_AD, "⏳ Jeda iklan 15s")
+
+        # Gigapub
         if not bot.watch_gigapub():
-            print(f"{RED}❌ Gigapub gagal (bukan 429/limit), stop.{RESET}")
+            print(f"{RED}❌ Gigapub gagal, stop.{RESET}")
             return
         bot.countdown(INTERVAL_AD, "⏳ Jeda iklan 15s")
+
+        # Monetag
         if not bot.watch_monetag():
-            print(f"{RED}❌ Monetag gagal (bukan 429/limit), stop.{RESET}")
+            print(f"{RED}❌ Monetag gagal, stop.{RESET}")
             return
         bot.countdown(INTERVAL_AD, "⏳ Jeda iklan 15s")
+
         print(f"{DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}")
         print(f"{YELLOW}⏰ Cycle #{cycle} selesai. Tunggu {INTERVAL_CYCLE} detik...{RESET}")
         bot.countdown(INTERVAL_CYCLE, "⏳ Next cycle dalam")
