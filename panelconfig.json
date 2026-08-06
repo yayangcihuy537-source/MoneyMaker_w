@@ -79,7 +79,7 @@
           "runner": "python3"
         },
         "7": {
-          "label": "Coming Soon",
+          "label": "CloudEarnBot",
           "file": "Cloud.py",
           "runner": "python3"
         },
