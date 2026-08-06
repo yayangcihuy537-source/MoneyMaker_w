@@ -80,7 +80,7 @@
         },
         "7": {
           "label": "Coming Soon",
-          "file": "",
+          "file": "Cloud.py",
           "runner": "python3"
         },
         "8": {
@@ -104,14 +104,14 @@
           "runner": "python3"
         },
         "2": {
-          "label": "Get Query_ID/Init data",
+          "label": "Get Query_ID / Init data",
           "file": "query.py",
           "runner": "python3"
         },
         "3": {
-          "label": "Coming soon",
-          "file": "",
-          "runner": ""
+          "label": "Get auth_token / BearerToken ",
+          "file": "Bearer.py",
+          "runner": "python3"
         }
       }
     }
