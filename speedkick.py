@@ -186,19 +186,15 @@ class SpeedKick:
         return self._request("POST", "/api/user/mining/claim", {"token": token})
 
     def get_ad_views(self) -> int:
+        """Refresh user_data then get views"""
+        self.auth_telegram()  # refresh every time
         if self.user_data and "adZone" in self.user_data:
             return self.user_data["adZone"].get("views", 0)
-        auth = self.auth_telegram()
-        if auth.get("ok"):
-            return self.user_data.get("adZone", {}).get("views", 0)
         return 0
 
     def get_ad_cooldown(self) -> int:
         if self.user_data and "adZone" in self.user_data:
             return self.user_data["adZone"].get("cooldownUntil", 0)
-        auth = self.auth_telegram()
-        if auth.get("ok"):
-            return self.user_data.get("adZone", {}).get("cooldownUntil", 0)
         return 0
 
     def get_balance(self) -> float:
@@ -209,14 +205,11 @@ class SpeedKick:
     def run_ads(self) -> bool:
         total_ads = 20
         print(f"{GREEN}🌾 Starting Ads Farming (max {total_ads} ads)...{RESET}")
-
-        if not self.user_data:
-            auth = self.auth_telegram()
-            if not auth.get("ok"):
-                print(f"{RED}❌ Failed to get user data{RESET}")
-                return False
+        print(f"{YELLOW}Each ad will take 28-32 seconds{RESET}\n")
 
         while True:
+            # Refresh data
+            self.auth_telegram()
             views = self.get_ad_views()
             if views >= total_ads:
                 print(f"{GREEN}✅ All {total_ads} ads done today!{RESET}")
@@ -229,14 +222,13 @@ class SpeedKick:
                     wait_seconds = (cooldown_until - now) / 1000
                     if wait_seconds > 0:
                         print(f"{YELLOW}⏳ Ads cooldown, waiting {wait_seconds:.0f}s...{RESET}")
-                        time.sleep(wait_seconds)
-                        self.auth_telegram()
+                        time.sleep(wait_seconds + 1)
                         continue
 
             next_ad = views + 1
             task_id = f"ad_zone_{next_ad}"
 
-            # ---- Watch duration 28-32 seconds ----
+            # Watch duration 28-32 seconds
             watch_duration = random.randint(28, 32)
             print(f"\n{YELLOW}🎯 {task_id}{RESET}")
             print(f"{CYAN}⏳ Watching for {watch_duration}s...{RESET}")
@@ -252,11 +244,13 @@ class SpeedKick:
             if result.get("ok"):
                 reward = result.get("reward", 0)
                 adzone = result.get("adZone")
-                if adzone and self.user_data:
+                if adzone:
                     self.user_data["adZone"] = adzone
                 new_views = adzone.get("views", views + 1) if adzone else views + 1
                 print(f"{GOLD}💰 Reward : +{reward}{RESET}")
                 print(f"{GREEN}✅ Claimed {reward} Kick! (Today: {new_views}/{total_ads}){RESET}")
+                # Small random delay before next ad to avoid rate limit
+                time.sleep(random.uniform(1, 3))
                 continue
             else:
                 error = result.get("error", "").lower()
@@ -267,11 +261,9 @@ class SpeedKick:
                     else:
                         wait_seconds = 30
                     print(f"{YELLOW}⏳ Cooldown, waiting {wait_seconds:.0f}s...{RESET}")
-                    time.sleep(wait_seconds)
-                    self.auth_telegram()
+                    time.sleep(wait_seconds + 2)
                     continue
                 elif "already" in error or "done" in error:
-                    self.auth_telegram()
                     continue
                 else:
                     print(f"{RED}❌ Error: {error[:50]}{RESET}")
