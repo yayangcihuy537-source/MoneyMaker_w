@@ -245,7 +245,7 @@ def record_ad_view(network: str, ticket: str):
     supabase_request("record_ad_view", {"network": network, "ad_ticket_id": ticket})
 
 # ============================================================
-# FUNGSI FARMING
+# FUNGSI FARMING (dengan deteksi limit & stop otomatis)
 # ============================================================
 def start_farming():
     global HEADERS, INIT_DATA, AUTH_TOKEN
@@ -274,6 +274,8 @@ def start_farming():
     print(f"{Y}⏹ Tekan Ctrl+C untuk berhenti.{RS}\n")
     
     cycle_count = 0
+    done_networks = set()  # network yang sudah habis / limit
+    
     while True:
         try:
             cycle_count += 1
@@ -284,19 +286,33 @@ def start_farming():
             
             stats = get_ad_stats()
             cooldowns = stats.get("cooldowns", {})
-            for net, cd in cooldowns.items():
+            
+            # Tampilkan status & tentukan network yang siap (cooldown 0 dan belum done)
+            ready_networks = []
+            all_exhausted = True
+            for net in NETWORKS:
+                cd = cooldowns.get(net, 0)
+                if net in done_networks:
+                    print(f"  {DIM}{net}: DONE (skipped){RS}")
+                    continue
                 if cd == 0:
+                    ready_networks.append(net)
                     print(f"  {G}{net}: {cd}s cooldown ✅{RS}")
+                    all_exhausted = False
                 else:
                     print(f"  {Y}{net}: {cd}s cooldown ⏳{RS}")
+                    all_exhausted = False
             
-            ready = [n for n in NETWORKS if cooldowns.get(n, 0) == 0]
-            if not ready:
+            if not ready_networks:
+                if all_exhausted:
+                    print(f"\n{G}✅ Semua iklan sudah ditonton! Bot berhenti.{RS}")
+                    break
                 print(f"\n{Y}Semua network cooldown. Tunggu 30 detik...{RS}")
                 time.sleep(30)
                 continue
             
-            for net in ready:
+            # Proses masing-masing network yang siap
+            for net in ready_networks:
                 print(f"\n{LC}>>> Menonton iklan {net}{RS}")
                 try:
                     ticket = issue_ticket(net)
@@ -310,13 +326,38 @@ def start_farming():
                     record_ad_view(net, ticket)
                     print(f"  {G}✅ {net} selesai{RS}")
                 except Exception as e:
-                    print(f"  {R}❌ {net} gagal: {e}{RS}")
+                    err_str = str(e)
+                    # Jika error menunjukkan "ad_required" atau "ticket_too_early" -> network habis
+                    if "ad_required" in err_str or "ticket_too_early" in err_str or "limit" in err_str.lower():
+                        print(f"  {Y}⚠️ {net} sudah habis / limit, dilewati.{RS}")
+                        done_networks.add(net)
+                    else:
+                        print(f"  {R}❌ {net} gagal: {e}{RS}")
+                        # Jika error lain, mungkin cooldown? Kita tetap anggap belum done
+                        # Bisa juga kita tambahkan ke done jika sering gagal, tapi untuk sekarang skip
+                        # Setelah beberapa kali error, bisa ditambahkan ke done_networks agar tidak diulang terus
+                        # Tapi agar tidak infinite, kita tambahkan ke done jika error berulang? 
+                        # Untuk sementara, kita tidak tambahkan ke done agar dicoba lagi nanti.
+                        pass
             
+            # Refresh stat setelah satu putaran
             stats = get_ad_stats()
             cooldowns = stats.get("cooldowns", {})
-            if all(cd > 0 for cd in cooldowns.values()):
-                print(f"\n{Y}Semua network cooldown. Tunggu 30 detik...{RS}")
-                time.sleep(30)
+            # Cek apakah semua network sudah done atau cooldown > 0
+            all_done = True
+            for net in NETWORKS:
+                if net not in done_networks and cooldowns.get(net, 0) == 0:
+                    all_done = False
+                    break
+            if all_done:
+                print(f"\n{G}✅ Semua iklan sudah ditonton! Bot berhenti.{RS}")
+                break
+            else:
+                # Jika ada yang cooldown > 0, tunggu
+                any_cooldown = any(cd > 0 for cd in cooldowns.values() if net not in done_networks)
+                if any_cooldown:
+                    print(f"\n{Y}Menunggu cooldown...{RS}")
+                    time.sleep(30)
             
         except KeyboardInterrupt:
             print(f"\n{R}⏹ Dihentikan oleh user.{RS}")
