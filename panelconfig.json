@@ -84,11 +84,21 @@
           "runner": "python3"
         },
         "8": {
+          "label": "Helix",
+          "file": "helix.py",
+          "runner": "python3"
+        },
+        "9": {
+          "label": "NewTube",
+          "file": "newtube.py",
+          "runner": "python3"
+        },
+        "10": {
           "label": "Coming Soon",
           "file": "",
           "runner": ""
         },
-        "9": {
+        "11": {
           "label": "Coming Soon",
           "file": "",
           "runner": ""
