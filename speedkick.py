@@ -51,6 +51,13 @@ def banner():
 ╚══════════════════════════════════════════════════════════════╝{RESET}
 """)
 
+# ==================== PROGRESS BAR ====================
+def progress_bar(current, total, bar_len=20, fill='█', empty='░'):
+    pct = current / total
+    filled_len = int(bar_len * pct)
+    bar = fill * filled_len + empty * (bar_len - filled_len)
+    return f"[{bar}] {int(pct*100)}%"
+
 # ==================== SPEEDKICK CLASS ====================
 class SpeedKick:
     def __init__(self, init_data: str):
@@ -178,32 +185,48 @@ class SpeedKick:
         return self._request("POST", "/api/user/mining/claim", {"token": token})
 
     def get_ad_views(self) -> int:
-        # Selalu refresh dari server
-        status = self.get_mining_status()
-        if status.get("ok"):
-            return status.get("adZone", {}).get("views", 0)
+        """Ambil views terbaru dari self.user_data (diupdate setiap claim)"""
+        if self.user_data and "adZone" in self.user_data:
+            return self.user_data["adZone"].get("views", 0)
+        # fallback: panggil auth untuk refresh
+        auth = self.auth_telegram()
+        if auth.get("ok"):
+            return self.user_data.get("adZone", {}).get("views", 0)
         return 0
 
     def get_ad_cooldown(self) -> int:
-        status = self.get_mining_status()
-        if status.get("ok"):
-            return status.get("adZone", {}).get("cooldownUntil", 0)
+        """Ambil cooldown dari self.user_data"""
+        if self.user_data and "adZone" in self.user_data:
+            return self.user_data["adZone"].get("cooldownUntil", 0)
+        auth = self.auth_telegram()
+        if auth.get("ok"):
+            return self.user_data.get("adZone", {}).get("cooldownUntil", 0)
         return 0
 
     def get_balance(self) -> float:
         status = self.get_mining_status()
         return status.get("balance", 0) if status.get("ok") else 0
 
-    # --- FIXED: Ads loop with proper refresh ---
+    # --- Updated Ads loop with proper ad_zone progression ---
     def run_ads(self) -> bool:
-        total = 20
+        total_ads = 20
+        print(f"{GREEN}🌾 Starting Ads Farming (max {total_ads} ads)...{RESET}")
+
+        # Pastikan user_data fresh
+        if not self.user_data:
+            auth = self.auth_telegram()
+            if not auth.get("ok"):
+                print(f"{RED}❌ Failed to get user data{RESET}")
+                return False
+
         while True:
-            # Ambil fresh views setiap iterasi
+            # Ambil views terbaru dari self.user_data
             views = self.get_ad_views()
-            if views >= total:
-                print(f"{GREEN}✅ All {total} ads done today{RESET}")
+            if views >= total_ads:
+                print(f"{GREEN}✅ All {total_ads} ads done today!{RESET}")
                 return True
 
+            # Cooldown check
             cooldown_until = self.get_ad_cooldown()
             if cooldown_until and cooldown_until > 0:
                 now = int(time.time() * 1000)
@@ -212,18 +235,44 @@ class SpeedKick:
                     if wait_seconds > 0:
                         print(f"{YELLOW}⏳ Ads cooldown, waiting {wait_seconds:.0f}s...{RESET}")
                         time.sleep(wait_seconds)
+                        # Refresh data setelah cooldown
+                        self.auth_telegram()
                         continue
 
+            # Next ad number = views + 1
             next_ad = views + 1
             task_id = f"ad_zone_{next_ad}"
-            print(f"\n{WHITE}🎯 {task_id}{RESET}")
+
+            # ---- Simulate watching ad with progress bar ----
+            watch_duration = 20  # fixed 20 seconds
+            print(f"\n{YELLOW}🎯 {task_id}{RESET}")
+            print(f"{CYAN}⏳ Watching for {watch_duration}s...{RESET}")
+            for sec in range(1, watch_duration + 1):
+                time.sleep(1)
+                bar = progress_bar(sec, watch_duration)
+                sys.stdout.write(f"\r  {GREEN}{bar}{RESET} {sec}s/{watch_duration}s")
+                sys.stdout.flush()
+            print()  # newline after progress
+
+            # Verify/claim
             result = self.verify_task(task_id)
 
             if result.get("ok"):
                 reward = result.get("reward", 0)
+                # Update user_data dengan adZone terbaru dari response
+                adzone = result.get("adZone")
+                if adzone and self.user_data:
+                    self.user_data["adZone"] = adzone
+                new_views = adzone.get("views", views + 1) if adzone else views + 1
                 print(f"{GOLD}💰 Reward : +{reward}{RESET}")
-                print(f"{GREEN}✅ Claimed Successfully{RESET}")
-                # Loop lagi, ambil views terbaru di awal loop
+                print(f"{GREEN}✅ Claimed {reward} Kick! (Today: {new_views}/{total_ads}){RESET}")
+
+                # Jika sudah mencapai limit dari response
+                if adzone and adzone.get("cooldownUntil") and adzone.get("cooldownUntil") > 0:
+                    # masih ada cooldown, mungkin limit tercapai
+                    pass
+
+                # Loop lagi (akan lanjut ke ad_zone berikutnya karena views sudah update)
                 continue
             else:
                 error = result.get("error", "").lower()
@@ -235,10 +284,12 @@ class SpeedKick:
                         wait_seconds = 30
                     print(f"{YELLOW}⏳ Cooldown, waiting {wait_seconds:.0f}s...{RESET}")
                     time.sleep(wait_seconds)
+                    # Refresh user data
+                    self.auth_telegram()
                     continue
                 elif "already" in error or "done" in error:
-                    print(f"{GREEN}✅ Already done, refreshing views...{RESET}")
-                    # Refresh views dan lanjut
+                    # Refresh data
+                    self.auth_telegram()
                     continue
                 else:
                     print(f"{RED}❌ Error: {error[:50]}{RESET}")
@@ -330,7 +381,7 @@ class SpeedKick:
             print(f"{RED}❌ Withdraw failed: {result.get('error')}{RESET}")
         return result
 
-    # --- Smart Loop (FIXED: uses run_ads that now works) ---
+    # --- Smart Loop (FIXED: uses run_ads) ---
     def smart_loop(self):
         print(f"\n{GREEN}🌾 Starting Ads Farming...{RESET}")
         print(f"{YELLOW}Press Ctrl+C to return to menu{RESET}\n")
