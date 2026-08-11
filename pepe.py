@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-MULTI-BOT: PepeFlow + Coinszon (Smart Dual Mode) - FIXED v2
+MULTI-BOT: PepeFlow + Coinszon (Smart Dual Mode) - FIXED v3
+Hanya Lucky Wheel & Mystery Box (slots dihapus)
 """
 
 import os, sys, time, json, random, re, requests
@@ -17,16 +18,15 @@ PEPE_URL = "https://pepeflow.com"
 COIN_URL = "https://coinszon.com"
 UA = "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.47 Mobile Safari/537.36 Telegram-Android/12.6.4"
 
-PEPE_GAMES = ["lucky_wheel", "slots", "mystery_box"]
+# ========== HANYA 2 GAME: Lucky Wheel & Mystery Box ==========
+PEPE_GAMES = ["lucky_wheel", "mystery_box"]
 PEPE_GAME_MAP = {
     "lucky_wheel": {"display": "SPIN", "icon": "🎡"},
-    "slots":       {"display": "TAP",  "icon": "🎰"},
     "mystery_box": {"display": "NEON", "icon": "🎁"},
 }
-COIN_GAMES = ["lucky_wheel", "slots", "mystery_box"]
+COIN_GAMES = ["lucky_wheel", "mystery_box"]
 COIN_GAME_MAP = {
     "lucky_wheel": {"display": "SPIN", "icon": "🎡"},
-    "slots":       {"display": "TAP",  "icon": "🎰"},
     "mystery_box": {"display": "NEON", "icon": "🎁"},
 }
 
@@ -111,7 +111,7 @@ class MiniAppBot:
         self.rewards = {g: 0 for g in game_list}
         self.logs = deque(maxlen=10)
         self.running = True
-        self.retry_doubled = {g: True for g in game_list}  # track retry for doubled
+        self.retry_doubled = {g: True for g in game_list}
 
     def fmt(self, sec):
         if sec <= 0: return "Ready"
@@ -201,21 +201,19 @@ class MiniAppBot:
                     return data
                 except: pass
             else:
-                # Coinszon: balance di HTML
                 html = resp.text
                 patterns = [
                     r'id="dash-balance-pepe">\s*([\d.,]+)\s*<',
                     r'balance-pepe["\']?\s*[:>]\s*([\d.,]+)',
                     r'Balance:\s*([\d.,]+)',
                     r'class="balance"[^>]*>([\d.,]+)<',
-                    r'(\d+\.\d+)\s*<span',  # fallback
+                    r'(\d+\.\d+)\s*<span',
                 ]
                 for p in patterns:
                     match = re.search(p, html, re.IGNORECASE)
                     if match:
                         self.balance = safe_float(match.group(1))
                         return html
-                # fallback: cari angka di elemen dengan id dash-balance-pepe
                 match = re.search(r'dash-balance-pepe[^>]*>([^<]+)</', html)
                 if match:
                     self.balance = safe_float(match.group(1))
@@ -239,7 +237,6 @@ class MiniAppBot:
                             self.doubled_available[g] = bool(info.get('doubled', False))
                     return data
                 except: pass
-            # fallback: cari cooldown dari HTML
             for g in self.game_list:
                 pattern = rf'{g}.*?cooldown.*?(\d+)'
                 match = re.search(pattern, html, re.IGNORECASE | re.DOTALL)
@@ -262,33 +259,24 @@ class MiniAppBot:
         return None
 
     def play_single(self, game):
-        # Jika 2x tersedia dan belum pernah retry, coba doubled
+        # Coba doubled jika tersedia
         if self.doubled_available.get(game, False) and self.retry_doubled.get(game, True):
-            # Coba dengan doubled
-            doubled = True
             base = random.randint(10, 30)
             result = self.play_game(game, doubled=True, base_reward=base)
             if result and result.get('status') == 'success':
-                # sukses
                 return result
             elif result and result.get('status') == 'error':
                 err = result.get('message', '')
                 if '2x bonus window has expired' in err:
-                    # Gagal karena 2x expired, tandai agar tidak coba doubled lagi
                     self.retry_doubled[game] = False
                     self.log(f"{Y}⚠️ 2x expired untuk {game}, fallback ke normal{RESET}")
-                    # Lanjut ke normal claim
                 else:
-                    # error lain, return
                     return result
             else:
-                # gagal total
                 return result
-        # Normal claim (tanpa doubled)
+        # Normal
         if game == "lucky_wheel":
             return self.play_game(game, doubled=False)
-        elif game == "slots":
-            return self.play_game("slots")
         elif game == "mystery_box":
             pick = random.randint(0,7)
             return self.play_game("mystery_box", pick=pick)
@@ -348,7 +336,7 @@ class MiniAppBot:
                             self.balance = safe_float(result2.get('new_balance', self.balance))
                             self.rewards[g] = rwd
                             self.play_counts[g] += 1
-                            self.log(f"{G}✔ {self.game_map[g]['display']} +{rwd:.8f} (Bal: {self.balance:.8f}) [retry OK]")
+                            self.log(f"{G}✔ {self.game_map[g]['display']} +{rwd:.8f} [retry OK]")
                         else:
                             err2 = result2.get('message','No resp') if result2 else 'No resp'
                             self.log(f"{R}✖ {self.game_map[g]['display']} FAIL: {err2} [retry failed]")
@@ -358,7 +346,6 @@ class MiniAppBot:
                     err = result.get('message','No resp') if result else 'No resp'
                     self.log(f"{R}✖ {self.game_map[g]['display']} FAIL: {err}")
                 time.sleep(random.uniform(2, 5))
-
             self.get_dashboard()
             self.display_dashboard()
             return True
@@ -410,11 +397,11 @@ def main():
 ║   {GOLD}🤖 MULTI-BOT (PepeFlow + Coinszon)                 {PURPLE}║
 ║   {PINK}Developer: @MoneyMaker_w                         {PURPLE}║
 ╠══════════════════════════════════════════════════════════╣
-║   {G}[1]{RESET} 🐸 PepeFlow only                            ║
-║   {C}[2]{RESET} 🪙 Coinszon only (No Withdraw)              ║
+║   {G}[1]{RESET} 🐸 PepeFlow only (Lucky Wheel + Mystery Box) ║
+║   {C}[2]{RESET} 🪙 Coinszon only (Lucky Wheel + Mystery Box) ║
 ║   {Y}[3]{RESET} 🔄 Smart Dual Mode (PepeFlow ⇄ Coinszon)   ║
-║   {W}[4]{RESET} 📝 Set PHPSESSID for PepeFlow              ║
-║   {W}[5]{RESET} 📝 Set PHPSESSID + Init data for Coinszon  ║
+║   {W}[4]{RESET} 📝 Set PHPSESSID + InitData for PepeFlow   ║
+║   {W}[5]{RESET} 📝 Set PHPSESSID + InitData for Coinszon   ║
 ║   {R}[0]{RESET} ❌ Exit                                   ║
 ╚══════════════════════════════════════════════════════════╝{RESET}
 """)
