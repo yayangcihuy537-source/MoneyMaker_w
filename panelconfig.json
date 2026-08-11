@@ -22,6 +22,16 @@
           "label": "ClaimCrypto",
           "file": "bot.php",
           "runner": "php"
+        },
+        "5": {
+          "label": "CryptoFuture",
+          "file": "Future.py",
+          "runner": "python3"
+        },
+        "6": {
+          "label": "Coming Soon",
+          "file": "",
+          "runner": ""
         }
       }
     },
