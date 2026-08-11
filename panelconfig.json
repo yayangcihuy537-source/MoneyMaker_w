@@ -104,9 +104,9 @@
           "runner": "python3"
         },
         "10": {
-          "label": "Coming Soon",
-          "file": "",
-          "runner": ""
+          "label": "Bossdogearnbot",
+          "file": "bos.py",
+          "runner": "python3"
         },
         "11": {
           "label": "Coming Soon",
