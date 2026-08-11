@@ -17,6 +17,7 @@ B = '\033[94m'
 W = '\033[97m'
 BLD = '\033[1m'
 RS = '\033[0m'
+DIM = '\033[2m'
 
 # ============================================================
 # BANNER
@@ -60,7 +61,7 @@ MENU = f"""
 ║          {LC}AUTO FARMING & WATCH ADS{RS}{C}           ║
 ╠══════════════════════════════════════════════╣
 ║  {G}[1] 🚀 Start Farming{RS}{C}                       ║
-║  {Y}[2] 🔑 Set Init_Data & Bearer Token{RS}{C}        ║
+║  {Y}[2] 🔑 Set Init_Data (Bearer opsional){RS}{C}     ║
 ║  {B}[3] 💰 Check Balance{RS}{C}                       ║
 ║                                              ║
 ║  {R}[0] ❌ Exit{RS}{C}                                ║
@@ -97,59 +98,41 @@ def save_config(data):
     with open(CONFIG_FILE, 'w') as f:
         json.dump(data, f, indent=4)
 
-def get_input_data():
-    print(f"\n{Y}MASUKKAN DATA DARI CLOUDEARNBOT (WebApp):{RS}")
-    print(f"{C}{'='*50}{RS}")
-    init_data = input(f"{LC}init_data (panjang): {RS}").strip()
-    auth_token = input(f"{LC}Authorization (Bearer ...): {RS}").strip()
-    
-    if not init_data or not auth_token:
-        print(f"{R}❌ Kedua data wajib diisi!{RS}")
-        return None, None
-    
-    if not auth_token.startswith("Bearer "):
-        auth_token = "Bearer " + auth_token
-    
-    return init_data, auth_token
-
 # ============================================================
-# FUNGSI SET DATA
+# FUNGSI SET DATA (HANYA INIT_DATA WAJIB)
 # ============================================================
 def set_data(force=False):
     global INIT_DATA, AUTH_TOKEN, APIKEY, START_PARAM, SUPABASE_URL, HEADERS
     os.system('cls' if os.name == 'nt' else 'clear')
     print(BANNER)
-    
-    if not force:
-        # Coba load dari config
-        config = load_config()
-        if config:
-            print(f"{G}✅ Config ditemukan, mencoba validasi...{RS}")
-            INIT_DATA = config.get("init_data", "")
-            AUTH_TOKEN = config.get("auth_token", "")
-            APIKEY = config.get("apikey", "")
-            START_PARAM = config.get("start_param", "")
-            SUPABASE_URL = config.get("supabase_url", "https://supabase.cloudearn.org")
-            HEADERS = config.get("headers", {})
-            
-            # Coba validasi dengan init_session
-            if init_session():
-                print(f"{G}✅ Config valid!{RS}")
-                time.sleep(1.5)
-                return True
-            else:
-                print(f"{R}❌ Config kadaluarsa / tidak valid. Masukkan data baru.{RS}")
-                time.sleep(2)
-    
-    # Input baru
-    init_data, auth_token = get_input_data()
-    if not init_data or not auth_token:
+
+    # Coba load config lama untuk ambil auth_token jika ada
+    old_config = load_config()
+    old_auth_token = old_config.get("auth_token", "") if old_config else ""
+
+    print(f"\n{Y}🔑 SET INIT_DATA (Bearer token opsional){RS}")
+    print(f"{C}{'='*50}{RS}")
+    init_data = input(f"{LC}init_data (wajib): {RS}").strip()
+    if not init_data:
+        print(f"{R}❌ init_data tidak boleh kosong!{RS}")
+        time.sleep(2)
         return False
-    
+
+    # Tanyakan Bearer token (opsional)
+    print(f"{Y}Masukkan Bearer token (opsional, Enter untuk skip):{RS}")
+    auth_token = input(f"{LC}Bearer token: {RS}").strip()
+    if not auth_token and old_auth_token:
+        auth_token = old_auth_token
+        print(f"{G}✅ Menggunakan Bearer token dari config sebelumnya.{RS}")
+        time.sleep(1)
+    if auth_token and not auth_token.startswith("Bearer "):
+        auth_token = "Bearer " + auth_token
+
+    # Set variabel global
     INIT_DATA = init_data
     AUTH_TOKEN = auth_token
-    APIKEY = AUTH_TOKEN.replace("Bearer ", "")
-    
+    APIKEY = AUTH_TOKEN.replace("Bearer ", "") if AUTH_TOKEN else ""
+
     parsed = urllib.parse.parse_qs(INIT_DATA)
     START_PARAM = parsed.get("start_param", [None])[0]
     if START_PARAM:
@@ -157,10 +140,9 @@ def set_data(force=False):
     else:
         print(f"{Y}⚠️ Start param tidak ada, akan dikosongkan{RS}")
         START_PARAM = ""
-    
+
+    # Build headers – hanya tambahkan authorization/apikey jika ada token
     HEADERS = {
-        "authorization": AUTH_TOKEN,
-        "apikey": APIKEY,
         "x-telegram-init-data": INIT_DATA,
         "user-agent": "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.181 Mobile Safari/537.36 Telegram-Android/12.6.4",
         "content-type": "application/json",
@@ -172,7 +154,10 @@ def set_data(force=False):
         "sec-fetch-dest": "empty",
         "x-requested-with": "org.telegram.messenger.web",
     }
-    
+    if AUTH_TOKEN:
+        HEADERS["authorization"] = AUTH_TOKEN
+        HEADERS["apikey"] = APIKEY
+
     # Simpan config
     config = {
         "init_data": INIT_DATA,
@@ -203,7 +188,8 @@ def supabase_request(action: str, payload: dict = None) -> dict:
     return resp.json()
 
 def init_session():
-    if not HEADERS:
+    # Cek hanya init_data yang wajib
+    if not HEADERS or not HEADERS.get("x-telegram-init-data"):
         return False
     payload = {
         "fp_hash": "88bba40c3cc06e4bc78f354c012a1d5b0f0307f72934bc902352886f2d03cc9b",
@@ -245,19 +231,18 @@ def record_ad_view(network: str, ticket: str):
     supabase_request("record_ad_view", {"network": network, "ad_ticket_id": ticket})
 
 # ============================================================
-# FUNGSI FARMING (dengan deteksi limit & stop otomatis)
+# FUNGSI FARMING
 # ============================================================
 def start_farming():
     global HEADERS, INIT_DATA, AUTH_TOKEN
     
-    if not HEADERS or not INIT_DATA:
-        print(f"{R}❌ Data belum diset! Silakan pilih menu 2 dulu.{RS}")
+    if not HEADERS or not HEADERS.get("x-telegram-init-data"):
+        print(f"{R}❌ Init_Data belum diset! Silakan pilih menu 2 dulu.{RS}")
         time.sleep(2)
         return
     
-    # Cek validasi config
     if not init_session():
-        print(f"{R}❌ Config kadaluarsa! Silakan set ulang di menu 2.{RS}")
+        print(f"{R}❌ Session gagal! Cek init_data atau koneksi.{RS}")
         time.sleep(2)
         return
     
@@ -274,7 +259,8 @@ def start_farming():
     print(f"{Y}⏹ Tekan Ctrl+C untuk berhenti.{RS}\n")
     
     cycle_count = 0
-    done_networks = set()  # network yang sudah habis / limit
+    done_networks = set()
+    retry_count = {}
     
     while True:
         try:
@@ -287,9 +273,8 @@ def start_farming():
             stats = get_ad_stats()
             cooldowns = stats.get("cooldowns", {})
             
-            # Tampilkan status & tentukan network yang siap (cooldown 0 dan belum done)
             ready_networks = []
-            all_exhausted = True
+            all_done = True
             for net in NETWORKS:
                 cd = cooldowns.get(net, 0)
                 if net in done_networks:
@@ -298,65 +283,80 @@ def start_farming():
                 if cd == 0:
                     ready_networks.append(net)
                     print(f"  {G}{net}: {cd}s cooldown ✅{RS}")
-                    all_exhausted = False
+                    all_done = False
                 else:
                     print(f"  {Y}{net}: {cd}s cooldown ⏳{RS}")
-                    all_exhausted = False
+                    all_done = False
             
             if not ready_networks:
-                if all_exhausted:
+                if all_done:
                     print(f"\n{G}✅ Semua iklan sudah ditonton! Bot berhenti.{RS}")
                     break
                 print(f"\n{Y}Semua network cooldown. Tunggu 30 detik...{RS}")
                 time.sleep(30)
                 continue
             
-            # Proses masing-masing network yang siap
             for net in ready_networks:
+                if net not in retry_count:
+                    retry_count[net] = 0
+                
                 print(f"\n{LC}>>> Menonton iklan {net}{RS}")
-                try:
-                    ticket = issue_ticket(net)
-                    print(f"  {Y}Ticket: {ticket}{RS}")
-                    print(f"  {C}Menonton selama {WATCH_DURATION} detik...{RS}")
-                    for i in range(WATCH_DURATION):
-                        time.sleep(1)
-                        sys.stdout.write(f"\r  {G}[{'#' * (i+1)}{' ' * (WATCH_DURATION - i - 1)}] {i+1}/{WATCH_DURATION}s{RS}")
-                        sys.stdout.flush()
-                    print()
-                    record_ad_view(net, ticket)
-                    print(f"  {G}✅ {net} selesai{RS}")
-                except Exception as e:
-                    err_str = str(e)
-                    # Jika error menunjukkan "ad_required" atau "ticket_too_early" -> network habis
-                    if "ad_required" in err_str or "ticket_too_early" in err_str or "limit" in err_str.lower():
-                        print(f"  {Y}⚠️ {net} sudah habis / limit, dilewati.{RS}")
-                        done_networks.add(net)
-                    else:
-                        print(f"  {R}❌ {net} gagal: {e}{RS}")
-                        # Jika error lain, mungkin cooldown? Kita tetap anggap belum done
-                        # Bisa juga kita tambahkan ke done jika sering gagal, tapi untuk sekarang skip
-                        # Setelah beberapa kali error, bisa ditambahkan ke done_networks agar tidak diulang terus
-                        # Tapi agar tidak infinite, kita tambahkan ke done jika error berulang? 
-                        # Untuk sementara, kita tidak tambahkan ke done agar dicoba lagi nanti.
-                        pass
+                success = False
+                attempt = 0
+                max_retry = 1
+                while attempt <= max_retry and not success:
+                    try:
+                        attempt += 1
+                        print(f"  {Y}Percobaan {attempt}/{max_retry+1}{RS}")
+                        
+                        ticket = issue_ticket(net)
+                        print(f"  {Y}Ticket: {ticket}{RS}")
+                        print(f"  {C}Menonton selama {WATCH_DURATION} detik...{RS}")
+                        for i in range(WATCH_DURATION):
+                            time.sleep(1)
+                            sys.stdout.write(f"\r  {G}[{'#' * (i+1)}{' ' * (WATCH_DURATION - i - 1)}] {i+1}/{WATCH_DURATION}s{RS}")
+                            sys.stdout.flush()
+                        print()
+                        record_ad_view(net, ticket)
+                        print(f"  {G}✅ {net} selesai{RS}")
+                        success = True
+                        retry_count[net] = 0
+                    except Exception as e:
+                        err_str = str(e)
+                        if "ad_required" in err_str or "ticket_too_early" in err_str or "limit" in err_str.lower():
+                            print(f"  {Y}⚠️ {net} sudah habis / limit, dilewati.{RS}")
+                            done_networks.add(net)
+                            break
+                        else:
+                            print(f"  {R}❌ Gagal: {e}{RS}")
+                            if attempt > max_retry:
+                                print(f"  {Y}⚠️ {net} gagal setelah {max_retry+1} percobaan, dilewati.{RS}")
+                                done_networks.add(net)
+                            else:
+                                print(f"  {Y}🔄 Retry dalam 3 detik...{RS}")
+                                time.sleep(3)
+                                continue
             
-            # Refresh stat setelah satu putaran
+            if len(done_networks) >= len(NETWORKS):
+                print(f"\n{G}✅ Semua iklan telah ditonton! Bot berhenti.{RS}")
+                break
+            
             stats = get_ad_stats()
             cooldowns = stats.get("cooldowns", {})
-            # Cek apakah semua network sudah done atau cooldown > 0
-            all_done = True
+            
+            any_ready = False
             for net in NETWORKS:
                 if net not in done_networks and cooldowns.get(net, 0) == 0:
-                    all_done = False
+                    any_ready = True
                     break
-            if all_done:
-                print(f"\n{G}✅ Semua iklan sudah ditonton! Bot berhenti.{RS}")
-                break
-            else:
-                # Jika ada yang cooldown > 0, tunggu
-                any_cooldown = any(cd > 0 for cd in cooldowns.values() if net not in done_networks)
-                if any_cooldown:
-                    print(f"\n{Y}Menunggu cooldown...{RS}")
+            if not any_ready:
+                all_cooldown = True
+                for net in NETWORKS:
+                    if net not in done_networks and cooldowns.get(net, 0) == 0:
+                        all_cooldown = False
+                        break
+                if all_cooldown:
+                    print(f"\n{Y}Semua network cooldown. Tunggu 30 detik...{RS}")
                     time.sleep(30)
             
         except KeyboardInterrupt:
@@ -373,14 +373,13 @@ def start_farming():
 def check_balance():
     os.system('cls' if os.name == 'nt' else 'clear')
     print(BANNER)
-    if not HEADERS:
-        print(f"{R}❌ Data belum diset! Silakan pilih menu 2 dulu.{RS}")
+    if not HEADERS or not HEADERS.get("x-telegram-init-data"):
+        print(f"{R}❌ Init_Data belum diset! Silakan pilih menu 2 dulu.{RS}")
         time.sleep(2)
         return
     
-    # Cek validasi config
     if not init_session():
-        print(f"{R}❌ Config kadaluarsa! Silakan set ulang di menu 2.{RS}")
+        print(f"{R}❌ Session gagal! Cek init_data atau koneksi.{RS}")
         time.sleep(2)
         return
     
@@ -415,7 +414,6 @@ def check_balance():
 # ============================================================
 def main():
     global HEADERS, INIT_DATA, AUTH_TOKEN, APIKEY, START_PARAM, SUPABASE_URL
-    # Coba load config di awal
     config = load_config()
     if config:
         INIT_DATA = config.get("init_data", "")
@@ -430,9 +428,8 @@ def main():
         print(BANNER)
         print(MENU)
         
-        # Tampilkan status config
-        if HEADERS and INIT_DATA:
-            print(f"{G}🔑 Config: Aktif ✅{RS}")
+        if HEADERS and HEADERS.get("x-telegram-init-data"):
+            print(f"{G}🔑 Config: Aktif ✅ (Init_Data tersimpan){RS}")
         else:
             print(f"{R}🔑 Config: Belum diset ❌{RS}")
         
@@ -441,7 +438,7 @@ def main():
         if choice == "1":
             start_farming()
         elif choice == "2":
-            set_data(force=True)  # Force input ulang
+            set_data(force=True)
         elif choice == "3":
             check_balance()
         elif choice == "0":
@@ -453,3 +450,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
