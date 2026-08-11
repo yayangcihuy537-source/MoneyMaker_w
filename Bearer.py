@@ -1,20 +1,16 @@
 #!/usr/bin/env python3
 """
-╔══════════════════════════════════════════════════════════════════════╗
-║  🔥 AUTO GET BEARER TOKEN CLOUDEARNBOT v1.0                       ║
-║  DEVELOPED BY SCRIPTYXSOUU                                         ║
-║  Ambil Bearer Token saja (init_data di belakang layar)            ║
-╚══════════════════════════════════════════════════════════════════════╝
+Bearer Token Extractor v6 - Khusus Bossdogearnbot & CloudEarnBot
 """
 
 import asyncio
 import urllib.parse
+import requests
 import json
 import os
 import sys
 import sqlite3
-import requests
-from telethon import TelegramClient, functions, types
+from telethon import TelegramClient, functions
 
 # ==================== WARNA ====================
 R, G, Y, B, M, C, W, X = '\033[91m', '\033[92m', '\033[93m', '\033[94m', '\033[95m', '\033[96m', '\033[97m', '\033[0m'
@@ -29,38 +25,29 @@ API_HASH = "b7562db4c393baff2f415d14a14d1f76"
 SESSION_FILE = "telegram_session_bearer"
 PHONE_FILE = "phone_number.txt"
 CONFIG_FILE = "config.json"
-SUPABASE_URL = "https://supabase.cloudearn.org"
 
-# Bearer Token default (anon key)
-DEFAULT_AUTH_TOKEN = "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc4NTgzNTU2MCwiZXhwIjo0OTQxNTA5MTYwLCJyb2xlIjoiYW5vbiJ9.zBqsny9LpLfI5TKgl2tdH5lj5KDcRQpYswNgvQ3mIiM"
-DEFAULT_APIKEY = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc4NTgzNTU2MCwiZXhwIjo0OTQxNTA5MTYwLCJyb2xlIjoiYW5vbiJ9.zBqsny9LpLfI5TKgl2tdH5lj5KDcRQpYswNgvQ3mIiM"
+# Token default untuk CloudEarnBot
+CLOUDEARN_TOKEN = "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc4NTgzNTU2MCwiZXhwIjo0OTQxNTA5MTYwLCJyb2xlIjoiYW5vbiJ9.zBqsny9LpLfI5TKgl2tdH5lj5KDcRQpYswNgvQ3mIiM"
+CLOUDEARN_APIKEY = CLOUDEARN_TOKEN.replace("Bearer ", "")
 
 # ==================== BANNER ====================
-def show_banner():
+def banner():
     print(f"""
 {GOLD}╔══════════════════════════════════════════════════════════════════════╗
-║  {CYAN}🔥 AUTO GET BEARER TOKEN CLOUDEARNBOT v1.0{GOLD}                  ║
-║  {PINK}DEVELOPED BY SCRIPTYXSOUU{GOLD}                                   ║
-║  Ambil Bearer Token saja (init_data di belakang layar)                 ║
+║  {CYAN}🔑 BEARER TOKEN EXTRACTOR v6 (Bossdog + CloudEarn){GOLD}          ║
+║  {PINK}BY SCRIPTYXSOU{GOLD}                                              ║
 ╚══════════════════════════════════════════════════════════════════════╝{X}
 """)
 
-# ==================== FUNGSI PENDUKUNG ====================
+# ==================== FUNGSI ====================
 def save_phone(phone):
-    try:
-        with open(PHONE_FILE, 'w') as f:
-            f.write(phone.strip())
-        return True
-    except:
-        return False
+    with open(PHONE_FILE, 'w') as f:
+        f.write(phone.strip())
 
 def load_phone():
-    try:
-        if os.path.exists(PHONE_FILE):
-            with open(PHONE_FILE, 'r') as f:
-                return f.read().strip()
-    except:
-        pass
+    if os.path.exists(PHONE_FILE):
+        with open(PHONE_FILE, 'r') as f:
+            return f.read().strip()
     return None
 
 def clear_session_if_locked():
@@ -72,47 +59,16 @@ def clear_session_if_locked():
             return False
         except sqlite3.OperationalError as e:
             if "database is locked" in str(e):
-                try:
-                    os.remove(session_path)
-                    print(f"{Y}🗑️ Session file terkunci, dihapus.{X}")
-                    return True
-                except:
-                    pass
+                os.remove(session_path)
+                return True
     return False
 
-def save_config(init_data, auth_token, apikey, start_param=""):
-    config = {
-        "init_data": init_data,
-        "auth_token": auth_token,
-        "apikey": apikey,
-        "start_param": start_param,
-        "supabase_url": SUPABASE_URL,
-        "headers": {
-            "authorization": auth_token,
-            "apikey": apikey,
-            "x-telegram-init-data": init_data,
-            "user-agent": "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.181 Mobile Safari/537.36 Telegram-Android/12.6.4",
-            "content-type": "application/json",
-            "accept": "*/*",
-            "origin": "https://cloudearn.vercel.app/",
-            "referer": "https://cloudearn.vercel.app/",
-            "sec-fetch-site": "cross-site",
-            "sec-fetch-mode": "cors",
-            "sec-fetch-dest": "empty",
-            "x-requested-with": "org.telegram.messenger.web",
-        }
-    }
-    with open(CONFIG_FILE, 'w') as f:
-        json.dump(config, f, indent=4)
-    print(f"{G}✅ Config disimpan ke {CONFIG_FILE}{X}")
-
-# ==================== AMBIL INITDATA (SILENT) ====================
 async def get_webview_initdata(client, bot_username):
     try:
         bot = await client.get_input_entity(bot_username)
     except Exception as e:
-        print(f"{R}❌ Gagal menemukan bot @{bot_username}: {e}{X}")
-        return None
+        print(f"{R}❌ Bot tidak ditemukan: {e}{X}")
+        return None, None
 
     target_url = None
     try:
@@ -120,14 +76,16 @@ async def get_webview_initdata(client, bot_username):
         bot_info = full_user.full_user.bot_info
         if bot_info and bot_info.menu_button and hasattr(bot_info.menu_button, 'url'):
             target_url = bot_info.menu_button.url
-            print(f"{DIM}✅ Auto-detected URL: {target_url}{X}")
-    except Exception as e:
-        print(f"{DIM}⚠️ Gagal ambil menu button, pakai default{X}")
+            print(f"{G}✅ Detected menu URL: {target_url}{X}")
+    except:
+        pass
 
     if not target_url:
-        target_url = "https://cloudearn.vercel.app/"
+        name = bot_username.replace('@', '')
+        target_url = f"https://t.me/{name}/play"
+        print(f"{Y}⚠️ Fallback URL: {target_url}{X}")
 
-    print(f"{C}📱 Meminta WebView...{X}")
+    print(f"{C}📱 Membuka WebView: {target_url}{X}")
     try:
         result = await client(functions.messages.RequestWebViewRequest(
             peer=bot,
@@ -137,165 +95,172 @@ async def get_webview_initdata(client, bot_username):
             url=target_url
         ))
     except Exception as e:
-        print(f"{R}❌ Gagal meminta WebView: {e}{X}")
-        return None
+        print(f"{R}❌ Gagal buka WebView: {e}{X}")
+        return None, None
 
     parsed = urllib.parse.urlparse(result.url)
     init_data = None
-
     if parsed.fragment:
         params = urllib.parse.parse_qs(parsed.fragment)
         init_data = params.get('tgWebAppData', [None])[0]
     if not init_data and parsed.query:
         params = urllib.parse.parse_qs(parsed.query)
         init_data = params.get('tgWebAppData', [None])[0]
+    return init_data, result.url
 
-    if init_data:
-        print(f"{G}✅ initData berhasil (tidak ditampilkan){X}")
-        return init_data
-    else:
-        print(f"{R}❌ Tidak ditemukan tgWebAppData.{X}")
-        return None
-
-# ==================== LOGIN TELEGRAM ====================
 async def login_telegram():
     clear_session_if_locked()
     session_path = SESSION_FILE + ".session"
-
     if os.path.exists(session_path):
         try:
             client = TelegramClient(SESSION_FILE, API_ID, API_HASH)
             await client.connect()
             if await client.is_user_authorized():
-                print(f"{G}✅ Session Telegram ditemukan! Login otomatis.{X}")
                 return client, await client.get_me()
-            else:
-                print(f"{Y}⚠️ Session tidak valid, login ulang.{X}")
-                os.remove(session_path)
-        except Exception as e:
-            print(f"{Y}⚠️ Session error: {e}{X}")
-            if os.path.exists(session_path):
-                try: os.remove(session_path)
-                except: pass
+        except:
+            pass
 
-    print(f"\n{C}📱 Login ke Telegram diperlukan.{X}")
-    saved_phone = load_phone()
-    if saved_phone:
-        print(f"{G}📞 Menggunakan nomor tersimpan: {saved_phone}{X}")
-        phone = saved_phone
-    else:
-        phone = input(f"{G}📞 Masukkan nomor HP (dengan kode negara, +628...): {X}").strip()
+    phone = load_phone()
+    if not phone:
+        phone = input(f"{G}📞 Nomor HP (dengan kode negara, +62...): {X}").strip()
         if not phone:
-            print(f"{R}❌ Nomor HP tidak boleh kosong.{X}")
             return None, None
-
     client = TelegramClient(SESSION_FILE, API_ID, API_HASH)
     await client.connect()
-
     try:
         await client.send_code_request(phone)
-        code = input(f"{G}🔑 Masukkan kode OTP: {X}").strip()
+        code = input(f"{G}🔑 Kode OTP: {X}").strip()
         if not code:
-            print(f"{R}❌ Kode OTP tidak boleh kosong.{X}")
             return None, None
         await client.sign_in(phone, code)
         save_phone(phone)
-        print(f"{G}✅ Login sukses!{X}")
         return client, await client.get_me()
     except Exception as e:
         print(f"{R}❌ Login gagal: {e}{X}")
         return None, None
 
-# ==================== VALIDASI & TAMPIL TOKEN ====================
-def validate_and_show_token(init_data, auth_token, apikey):
-    url = f"{SUPABASE_URL}/functions/v1/api?action=init"
-    headers = {
-        "authorization": auth_token,
-        "apikey": apikey,
-        "x-telegram-init-data": init_data,
-        "content-type": "application/json",
-        "user-agent": "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.181 Mobile Safari/537.36",
-        "origin": "https://cloudearn.vercel.app/",
-        "referer": "https://cloudearn.vercel.app/",
-    }
-    payload = {
-        "fp_hash": "88bba40c3cc06e4bc78f354c012a1d5b0f0307f72934bc902352886f2d03cc9b",
-        "webgl_hash": "bfc8fbb0012f8c92b0f1f0e178d08ba95ec000335360ca22edcf270a098ddab2",
-        "audio_hash": "05d0c5571616fb4731d584d3a16738cc81dcd566dcb2598bee29200a1eeb4a46",
-        "tz": "Asia/Jakarta",
-        "lang": "id-ID",
-        "platform": "Linux aarch64"
-    }
+def get_start_param(init_data):
     parsed = urllib.parse.parse_qs(init_data)
-    start_param = parsed.get('start_param', [None])[0]
-    if start_param:
-        payload["start_param"] = start_param
+    return parsed.get('start_param', [None])[0]
 
+def get_domain_from_url(url):
+    parsed = urllib.parse.urlparse(url)
+    host = parsed.netloc
+    if host.startswith('www.'):
+        host = host[4:]
+    return host
+
+async def get_bossdog_token(client, bot_username):
+    """Ambil token dari Bossdogearnbot via /api/auth/verify"""
+    init_data, webview_url = await get_webview_initdata(client, bot_username)
+    if not init_data:
+        return None
+
+    domain = get_domain_from_url(webview_url)
+    if not domain:
+        print(f"{R}❌ Gagal ekstrak domain.{X}")
+        return None
+
+    print(f"{DIM}🏠 Domain: {domain}{X}")
+
+    start_param = get_start_param(init_data) or ""
+    base_url = f"https://{domain}"
+    verify_url = f"{base_url}/api/auth/verify"
+    fingerprint = "3fb8034"
+    payload = {
+        "initData": init_data,
+        "fingerprint": fingerprint,
+        "startParam": start_param
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 Chrome/150.0.7871.124 Mobile Safari/537.36",
+        "Accept": "*/*",
+        "Origin": base_url,
+        "Referer": f"{base_url}/",
+    }
+
+    print(f"\n{C}🔐 Mengirim ke {verify_url}...{X}")
     try:
-        resp = requests.post(url, json=payload, headers=headers)
+        resp = requests.post(verify_url, json=payload, headers=headers, timeout=15)
         if resp.status_code == 200:
             data = resp.json()
-            user = data.get('user', {})
-            print(f"{G}✅ Validasi sukses!{X}")
-            print(f"{C}👤 User: {user.get('username', 'N/A')} (ID: {user.get('tg_id', 'N/A')}){X}")
-            return data, start_param
+            token = data.get('token') or data.get('access_token') or data.get('bearer') or data.get('auth_token')
+            if token:
+                if not token.startswith("Bearer "):
+                    token = "Bearer " + token
+                print(f"{G}✅ Token didapat!{X}")
+                return token
         else:
-            print(f"{R}❌ Validasi gagal: {resp.status_code}{X}")
-            return None, None
+            print(f"{Y}⚠️ Gagal (status {resp.status_code}){X}")
     except Exception as e:
-        print(f"{R}❌ Error validasi: {e}{X}")
-        return None, None
+        print(f"{R}❌ Error: {e}{X}")
 
-# ==================== MAIN ====================
+    return None
+
+def get_cloudearn_token():
+    """Token CloudEarnBot sudah diketahui (anon key)"""
+    print(f"{G}✅ Token CloudEarn sudah tersedia (anon key).{X}")
+    return CLOUDEARN_TOKEN
+
 async def main():
-    show_banner()
+    banner()
     print(f"{C}{'═' * 60}{X}")
 
     client, me = await login_telegram()
     if not client:
-        print(f"{R}❌ Gagal login. Keluar.{X}")
+        print(f"{R}❌ Gagal login.{X}")
         return
     print(f"{G}👤 Login sebagai: @{me.username if me.username else me.first_name}{X}")
 
-    bot_name = input(f"\n{C}🤖 Masukkan username bot (default: CloudEarnBot): {X}").strip()
-    if not bot_name:
-        bot_name = "CloudEarnBot"
-    if not bot_name.startswith('@'):
-        bot_name = '@' + bot_name
+    print(f"\n{C}🤖 Pilih bot:{X}")
+    print(f"  {G}[1]{X} Bossdogearnbot (ambil via API)")
+    print(f"  {G}[2]{X} CloudEarnBot (token default)")
+    choice = input(f"{C}Pilih (1/2): {X}").strip()
 
-    print(f"\n{C}🔍 Mengambil initData...{X}")
-    init_data = await get_webview_initdata(client, bot_name)
+    token = None
+    if choice == "1":
+        bot = "Bossdogearnbot"
+        if not bot.startswith('@'):
+            bot = '@' + bot
+        print(f"\n{C}🔍 Mengambil Bearer Token dari {bot}...{X}")
+        token = await get_bossdog_token(client, bot)
+    elif choice == "2":
+        token = get_cloudearn_token()
+    else:
+        print(f"{R}❌ Pilihan tidak valid.{X}")
+        return
 
     await client.disconnect()
 
-    if not init_data:
-        print(f"\n{R}❌ Gagal mendapatkan initData.{X}")
-        return
-
-    # Validasi dan tampilkan user
-    print(f"\n{C}🔄 Validasi ke Supabase...{X}")
-    data, start_param = validate_and_show_token(init_data, DEFAULT_AUTH_TOKEN, DEFAULT_APIKEY)
-    if not data:
-        print(f"{R}❌ Token tidak valid.{X}")
-        return
-
-    # TAMPILKAN BEARER TOKEN SAJA (tanpa init_data)
-    print(f"\n{GOLD}{'═' * 60}{X}")
-    print(f"{G}🎯 BEARER TOKEN:{X}")
-    print(f"{C}{DEFAULT_AUTH_TOKEN}{X}")
-    print(f"{GOLD}{'═' * 60}{X}")
-
-    # Simpan config?
-    save_choice = input(f"\n{G}💾 Simpan ke config.json (termasuk init_data) untuk farming? (y/n): {X}").strip().lower()
-    if save_choice == 'y':
-        save_config(init_data, DEFAULT_AUTH_TOKEN, DEFAULT_APIKEY, start_param or "")
-        print(f"{G}✅ Config siap digunakan!{X}")
-
-    print(f"\n{G}✅ Selesai! Token di atas bisa langsung dipakai.{X}")
+    if token:
+        print(f"\n{GOLD}{'═' * 60}{X}")
+        print(f"{G}🎯 BEARER TOKEN:{X}")
+        print(f"{C}{token}{X}")
+        print(f"{GOLD}{'═' * 60}{X}")
+        save = input(f"\n{G}💾 Simpan ke config.json? (y/n): {X}").strip().lower()
+        if save == 'y':
+            apikey = token.replace("Bearer ", "")
+            config = {
+                "auth_token": token,
+                "apikey": apikey,
+                "headers": {
+                    "Authorization": token,
+                    "apikey": apikey,
+                    "Content-Type": "application/json",
+                    "User-Agent": "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 Chrome/150.0.7871.124 Mobile Safari/537.36",
+                }
+            }
+            with open(CONFIG_FILE, 'w') as f:
+                json.dump(config, f, indent=4)
+            print(f"{G}✅ Config disimpan.{X}")
+    else:
+        print(f"\n{R}❌ Gagal mendapatkan Bearer Token.{X}")
+        print(f"{Y}💡 Coba manual: buka bot di browser, devtools, cari request ke /api/me, copy Authorization header.{X}")
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print(f"\n{Y}⚠️ Dihentikan oleh user.{X}")
+        print(f"\n{Y}⚠️ Dihentikan user.{X}")
         sys.exit(0)
