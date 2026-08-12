@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Helix Bot - Fixed v4 (Green Progress Bar + Tower Support + Retry)
+Helix Bot - Fixed v8 (Monetag Auto Block + Dynamic Watch)
 """
 
 import requests
@@ -23,6 +23,14 @@ PINK = '\033[38;5;206m'
 DIM = '\033[2;37m'
 P = PINK
 RS = X
+
+# ============================================================
+# GLOBAL VARIABLES
+# ============================================================
+bot = None
+ANTI_DETECTION = True
+WATCH_DURATION = 15  # detik
+BLOCKED_PROVIDERS = ['monetag']  # <-- Monetag di-block permanen
 
 # ========== BANNER ==========
 BANNER = f"""
@@ -115,6 +123,8 @@ class HelixBot:
         self.last_balance = None
         self.session_valid = True
         self.reauth_attempts = 0
+        self.current_ua = None
+        self.blocked_providers = set(BLOCKED_PROVIDERS)  # <-- Monetag blocked
 
     def _reset_session(self):
         self.device_uuid = random_uuid()
@@ -122,6 +132,7 @@ class HelixBot:
         self.session.cookies.clear()
         self.session.headers.clear()
         self.reauth_attempts += 1
+        self.current_ua = None
         print(f"{Y}🔄 Reset session (UUID: {self.device_uuid[:8]}..., FP: {self.device_fp}){X}")
 
     def _update_init_data(self, new_init_data):
@@ -165,7 +176,9 @@ class HelixBot:
             return self._get_new_init_data()
 
     def _build_headers(self, extra=None):
-        ua = random_user_agent() if self.anti_detection else USER_AGENTS[0]
+        if self.current_ua is None:
+            self.current_ua = random_user_agent() if self.anti_detection else USER_AGENTS[0]
+        ua = self.current_ua
         fp = random_fingerprint() if self.anti_detection else self.device_fp
         headers = {
             "Host": "app.helixverse.site",
@@ -254,21 +267,28 @@ class HelixBot:
         return None
 
     def ads_shown(self, provider):
+        # Skip if provider is blocked
+        if provider in self.blocked_providers:
+            print(f"{R}🚫 {provider} [ Blocked ]{X}")
+            return False, None, WATCH_DURATION, None
+            
+        self.current_ua = random_user_agent() if self.anti_detection else USER_AGENTS[0]
+        self.session.headers.update({'User-Agent': self.current_ua})
         payload = {"provider": provider, "gesture": random_gesture()}
         resp = self.request("POST", "/api/ads/shown", json=payload)
         if resp and resp.status_code == 200:
             try:
                 data = resp.json()
                 token = data.get('token') or data.get('ad_token') or data.get('data', {}).get('token')
-                min_seconds = data.get('min_seconds', 8)
-                if token:
-                    return True, token, min_seconds
-                return True, None, min_seconds
+                return True, token, WATCH_DURATION, self.current_ua
             except:
-                return True, None, 8
-        return False, None, 8
+                return True, None, WATCH_DURATION, self.current_ua
+        return False, None, WATCH_DURATION, self.current_ua
 
     def ads_watched(self, provider, token):
+        if provider in self.blocked_providers:
+            return False
+        self.session.headers.update({'User-Agent': self.current_ua})
         payload = {"provider": provider, "token": token}
         resp = self.request("POST", "/api/ads/watched", json=payload)
         if resp and resp.status_code == 200:
@@ -276,12 +296,18 @@ class HelixBot:
         return False
 
     def watch_ad_attempt(self, provider, max_retries=2):
+        if provider in self.blocked_providers:
+            print(f"{R}🚫 {provider} [ Blocked ]{X}")
+            return False
+            
         for attempt in range(max_retries):
-            success, token, watch_duration = self.ads_shown(provider)
+            success, token, watch_duration, ua_used = self.ads_shown(provider)
             if not success:
                 print(f"{R}❌ Gagal shown {provider}{X}")
                 time.sleep(2)
                 continue
+
+            self.session.headers.update({'User-Agent': ua_used})
 
             print(f"{DIM}[ STATUS ] Watching Advertisement...{X}")
             for sec in range(watch_duration):
@@ -304,6 +330,10 @@ class HelixBot:
             else:
                 print(f"{Y}⚠️ Token tidak tersedia, lewati watched.{X}")
                 return False
+                
+        # If failed, block provider for this session
+        self.blocked_providers.add(provider)
+        print(f"{R}🚫 {provider} [ Blocked ] (gagal {max_retries}x){X}")
         return False
 
     def spin_wheel(self):
@@ -418,6 +448,7 @@ class HelixBot:
 
     def watch_ads_loop(self, max_rounds=50):
         print(f"{G}🚀 Memulai auto watch...{X}")
+        print(f"{Y}⏱️ Watch duration: {WATCH_DURATION} detik{X}")
         if not self.init_data:
             print(f"{R}❌ Init_Data belum diset!{X}")
             return
@@ -444,6 +475,9 @@ class HelixBot:
             providers = []
             provider_list = ['adsgram', 'adsgram_reward', 'giga', 'monetag', 'tower']
             for prov in provider_list:
+                # Skip blocked providers
+                if prov in self.blocked_providers:
+                    continue
                 if prov in ads_data and ads_data[prov].get('available', False):
                     max_ = ads_data[prov].get('max', 0)
                     watched = ads_data[prov].get('watched', 0)
@@ -465,6 +499,9 @@ class HelixBot:
             print(f"{Y}📺 Available Providers:{X}")
             for p in providers:
                 print(f"  {C}{p['provider']}{X}: {p['watched']}/{p['max']} (reward: {p.get('reward',0)} HLX)")
+            # Tampilkan blocked providers
+            if self.blocked_providers:
+                print(f"  {R}🚫 {', '.join(self.blocked_providers)} [ Blocked ]{X}")
 
             for p in providers:
                 provider = p["provider"]
@@ -474,6 +511,7 @@ class HelixBot:
                 for i in range(max_watch):
                     if not self.session_valid:
                         break
+                    self.current_ua = None
                     success = self.watch_ad_attempt(provider, max_retries=2)
                     if not success:
                         print(f"{R}❌ Gagal menonton {provider}{X}")
@@ -572,6 +610,7 @@ def start_farming():
 
     print(f"{G}🚀 Memulai Auto Watch dengan Anti Detection{' AKTIF' if ANTI_DETECTION else ' NONAKTIF'}{X}")
     print(f"{Y}⏹ Tekan Ctrl+C untuk berhenti.{X}\n")
+    print(f"{Y}⏱️ Durasi watch: {WATCH_DURATION} detik{X}")
     bot.watch_ads_loop(max_rounds=50)
 
 def start_game():
@@ -637,8 +676,11 @@ def main():
         print(MENU)
         print(f"{DIM}Status: {'🟢 Bot siap' if bot and bot.init_data else '🔴 Belum set credentials'}")
         print(f"{DIM}Anti Detection: {'🟢 AKTIF' if ANTI_DETECTION else '🔴 NONAKTIF'}{X}")
+        print(f"{DIM}⏱️ Watch Duration: {WATCH_DURATION} detik{X}")
         if bot:
             print(f"{DIM}Device UUID: {bot.device_uuid[:16]}...{X}")
+            if bot.blocked_providers:
+                print(f"{R}🚫 Blocked: {', '.join(bot.blocked_providers)}{X}")
 
         choice = input(f"\n{CYAN}Select Menu » {X}").strip()
 
