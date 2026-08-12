@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-MULTI-BOT: PepeFlow + Coinszon (Smart Dual Mode) - FIXED v3
-Hanya Lucky Wheel & Mystery Box (slots dihapus)
+PEPEFLOW BOT - LUCKY WHEEL + MYSTERY BOX ONLY
+CoinZona disabled temporarily
 """
 
 import os, sys, time, json, random, re, requests
@@ -13,17 +13,19 @@ GOLD = '\033[38;5;220m'; PURPLE = '\033[38;5;141m'; PINK = '\033[38;5;206m'
 DIM = '\033[2m'; RESET = '\033[0m'
 
 PEPE_CONFIG = "pepeflow_config.json"
-COIN_CONFIG = "coinszon_config.json"
 PEPE_URL = "https://pepeflow.com"
-COIN_URL = "https://coinszon.com"
 UA = "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.47 Mobile Safari/537.36 Telegram-Android/12.6.4"
 
-# ========== HANYA 2 GAME: Lucky Wheel & Mystery Box ==========
+# ========== ONLY 2 GAMES: Lucky Wheel & Mystery Box ==========
 PEPE_GAMES = ["lucky_wheel", "mystery_box"]
 PEPE_GAME_MAP = {
     "lucky_wheel": {"display": "SPIN", "icon": "🎡"},
     "mystery_box": {"display": "NEON", "icon": "🎁"},
 }
+
+# ========== COINZONA DISABLED (keep code for later) ==========
+COIN_CONFIG = "coinszon_config.json"
+COIN_URL = "https://coinszon.com"
 COIN_GAMES = ["lucky_wheel", "mystery_box"]
 COIN_GAME_MAP = {
     "lucky_wheel": {"display": "SPIN", "icon": "🎡"},
@@ -353,29 +355,33 @@ class MiniAppBot:
             self.log(f"{R}✖ Process error: {e}{RESET}")
             return False
 
-def smart_dual_loop(pbot, cbot):
-    while pbot.running and cbot.running:
-        try:
-            played_p = pbot.process_ready_games()
-            if not played_p:
-                print(f"{Y}⏩ PepeFlow semua cooldown, switch ke Coinszon{RESET}")
-            time.sleep(1)
-
-            played_c = cbot.process_ready_games()
-            if not played_c:
-                print(f"{Y}⏩ Coinszon semua cooldown{RESET}")
-
-            all_cds = list(pbot.cooldowns.values()) + list(cbot.cooldowns.values())
-            all_cds = [cd for cd in all_cds if cd > 0]
-            if all_cds:
-                min_cd = min(all_cds)
-                live_timer(min_cd, f"⏳ Menunggu game berikutnya")
-        except KeyboardInterrupt:
-            pbot.running = cbot.running = False
-            break
-        except Exception as e:
-            print(f"{R}❌ Dual loop error: {e}{RESET}")
-            time.sleep(5)
+# =====================================================
+# PELEPASAN UNTUK COINZONA (DISABLED SEMENTARA)
+# =====================================================
+# class CoinzonBot(MiniAppBot):
+#     pass
+# 
+# def smart_dual_loop(pbot, cbot):
+#     while pbot.running and cbot.running:
+#         try:
+#             played_p = pbot.process_ready_games()
+#             if not played_p:
+#                 print(f"{Y}⏩ PepeFlow semua cooldown, switch ke Coinszon{RESET}")
+#             time.sleep(1)
+#             played_c = cbot.process_ready_games()
+#             if not played_c:
+#                 print(f"{Y}⏩ Coinszon semua cooldown{RESET}")
+#             all_cds = list(pbot.cooldowns.values()) + list(cbot.cooldowns.values())
+#             all_cds = [cd for cd in all_cds if cd > 0]
+#             if all_cds:
+#                 min_cd = min(all_cds)
+#                 live_timer(min_cd, f"⏳ Menunggu game berikutnya")
+#         except KeyboardInterrupt:
+#             pbot.running = cbot.running = False
+#             break
+#         except Exception as e:
+#             print(f"{R}❌ Dual loop error: {e}{RESET}")
+#             time.sleep(5)
 
 def set_phpsessid(file, label):
     print(f"{Y}📝 Masukkan PHPSESSID untuk {label}:{RESET}")
@@ -394,14 +400,11 @@ def main():
         os.system('clear')
         print(f"""
 {PURPLE}╔══════════════════════════════════════════════════════════╗
-║   {GOLD}🤖 MULTI-BOT (PepeFlow + Coinszon)                 {PURPLE}║
+║   {GOLD}🐸 PEPEFLOW AUTO-BOT (Lucky Wheel + Mystery Box){PURPLE}║
 ║   {PINK}Developer: @MoneyMaker_w                         {PURPLE}║
 ╠══════════════════════════════════════════════════════════╣
-║   {G}[1]{RESET} 🐸 PepeFlow only (Lucky Wheel + Mystery Box) ║
-║   {C}[2]{RESET} 🪙 Coinszon only (Lucky Wheel + Mystery Box) ║
-║   {Y}[3]{RESET} 🔄 Smart Dual Mode (PepeFlow ⇄ Coinszon)   ║
-║   {W}[4]{RESET} 📝 Set PHPSESSID + InitData for PepeFlow   ║
-║   {W}[5]{RESET} 📝 Set PHPSESSID + InitData for Coinszon   ║
+║   {G}[1]{RESET} 🚀 Start PepeFlow Auto                      ║
+║   {W}[2]{RESET} 📝 Set PHPSESSID + InitData for PepeFlow   ║
 ║   {R}[0]{RESET} ❌ Exit                                   ║
 ╚══════════════════════════════════════════════════════════╝{RESET}
 """)
@@ -423,40 +426,7 @@ def main():
                 bot.running = False
             input("Enter...")
         elif c == '2':
-            cfg = BaseConfig(COIN_CONFIG)
-            if not cfg.load() or not cfg.phpsessid:
-                print(f"{R}❌ Coinszon PHPSESSID belum diset!{RESET}")
-                input("Enter..."); continue
-            bot = MiniAppBot(COIN_URL, cfg, COIN_GAMES, COIN_GAME_MAP, "Coinszon")
-            try:
-                while bot.running:
-                    bot.process_ready_games()
-                    time.sleep(1)
-            except KeyboardInterrupt:
-                bot.running = False
-            input("Enter...")
-        elif c == '3':
-            pcfg = BaseConfig(PEPE_CONFIG)
-            ccfg = BaseConfig(COIN_CONFIG)
-            if not pcfg.load() or not pcfg.phpsessid:
-                print(f"{R}❌ PepeFlow PHPSESSID belum diset!{RESET}")
-                input("Enter..."); continue
-            if not ccfg.load() or not ccfg.phpsessid:
-                print(f"{R}❌ Coinszon PHPSESSID belum diset!{RESET}")
-                input("Enter..."); continue
-            pbot = MiniAppBot(PEPE_URL, pcfg, PEPE_GAMES, PEPE_GAME_MAP, "PepeFlow")
-            cbot = MiniAppBot(COIN_URL, ccfg, COIN_GAMES, COIN_GAME_MAP, "Coinszon")
-            print(f"{Y}🔄 Smart Dual Mode started. Press Ctrl+C to stop.{RESET}")
-            try:
-                smart_dual_loop(pbot, cbot)
-            except KeyboardInterrupt:
-                pbot.running = cbot.running = False
-            input("Enter...")
-        elif c == '4':
             set_phpsessid(PEPE_CONFIG, "PepeFlow")
-            input("Enter...")
-        elif c == '5':
-            set_phpsessid(COIN_CONFIG, "Coinszon")
             input("Enter...")
         else:
             print(f"{R}❌ Invalid{RESET}")
@@ -468,4 +438,3 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print(f"\n{R}👋 Keluar.{RESET}")
         sys.exit(0)
-
