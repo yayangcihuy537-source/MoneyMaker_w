@@ -69,7 +69,7 @@
           "runner": "python3"
         },
         "3": {
-          "label": "Pepeflow X CoinsZon",
+          "label": "Pepeflow ",
           "file": "pepe.py",
           "runner": "python3"
         },
