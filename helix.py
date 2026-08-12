@@ -52,6 +52,9 @@ USER_AGENTS = [
 
 GAME_IDS = ["g1", "g2", "g3", "g4", "g5"]
 
+def clear_screen():
+    os.system('cls' if os.name == 'nt' else 'clear')
+
 def random_delay(min_sec=0.5, max_sec=3.0):
     time.sleep(random.uniform(min_sec, max_sec))
 
@@ -91,10 +94,9 @@ def save_config(data):
     with open(CONFIG_FILE, 'w') as f:
         json.dump(data, f, indent=4)
 
-# ========== PROGRESS BAR (WARNA HIJAU) ==========
 def progress_bar(current, total, bar_len=20, fill='█', empty='░'):
     if total == 0:
-        return f"[{fill * bar_len}] 100%"
+        return f"{G}[{fill * bar_len}] 100%{X}"
     pct = current / total
     filled_len = int(bar_len * pct)
     bar = fill * filled_len + empty * (bar_len - filled_len)
@@ -258,7 +260,7 @@ class HelixBot:
             try:
                 data = resp.json()
                 token = data.get('token') or data.get('ad_token') or data.get('data', {}).get('token')
-                min_seconds = data.get('min_seconds', 8)  # default 8 detik
+                min_seconds = data.get('min_seconds', 8)
                 if token:
                     return True, token, min_seconds
                 return True, None, min_seconds
@@ -274,7 +276,6 @@ class HelixBot:
         return False
 
     def watch_ad_attempt(self, provider, max_retries=2):
-        """Coba nonton iklan dengan retry jika gagal"""
         for attempt in range(max_retries):
             success, token, watch_duration = self.ads_shown(provider)
             if not success:
@@ -282,7 +283,6 @@ class HelixBot:
                 time.sleep(2)
                 continue
 
-            # Progress bar hijau
             print(f"{DIM}[ STATUS ] Watching Advertisement...{X}")
             for sec in range(watch_duration):
                 time.sleep(1)
@@ -306,8 +306,115 @@ class HelixBot:
                 return False
         return False
 
-    # ========== SISANYA SAMA (spin_wheel, checkin, start_game, dll) ==========
-    # (Di sini saya hanya tampilkan fungsi yang diubah untuk hemat space)
+    def spin_wheel(self):
+        resp = self.request("POST", "/api/wheel/spin")
+        if resp:
+            try:
+                return resp.json()
+            except:
+                return {"status": "ok"}
+        return None
+
+    def checkin(self):
+        resp = self.request("POST", "/api/checkin/claim")
+        if resp:
+            try:
+                return resp.json()
+            except:
+                return {"status": "ok"}
+        return None
+
+    def start_game(self, game_id):
+        payload = {"game_id": game_id}
+        resp = self.request("POST", "/api/games/start", json=payload)
+        if resp and resp.status_code == 200:
+            try:
+                return resp.json()
+            except:
+                return {"status": "ok", "game_id": game_id}
+        return None
+
+    def play_game(self, max_games=5):
+        print(f"{C}🎮 Memulai Auto Game...{X}")
+        if not self.init_data:
+            print(f"{R}❌ Init_Data belum diset!{X}")
+            return
+
+        clear_screen()
+        print(BANNER)
+        print(f"\n{CYAN}[ HELIX ] Initializing Game Protocol...{X}")
+
+        user = self.get_me()
+        if user:
+            energy = user.get('energy', 0)
+            print(f"{Y}⚡ Energy tersisa: {energy}{X}")
+            if energy < 5:
+                print(f"{Y}⚠️ Energy kurang dari 5, skip game.{X}")
+                return
+
+        played = 0
+        for game_id in GAME_IDS[:max_games]:
+            if played >= max_games or not self.session_valid:
+                break
+            print(f"\n{CYAN}>>> PLAYING GAME: {game_id}{X}")
+            result = self.start_game(game_id)
+            if result:
+                print(f"{G}[ ✓ ] Game {game_id} started{X}")
+                game_duration = random.randint(5, 10)
+                for sec in range(game_duration):
+                    time.sleep(1)
+                    bar = progress_bar(sec+1, game_duration)
+                    sys.stdout.write(f"\r{bar} Playing... {sec+1}s/{game_duration}s")
+                    sys.stdout.flush()
+                print()
+                print(f"{G}[ ✓ ] Game {game_id} completed!{X}")
+                played += 1
+                random_delay(1, 3)
+            else:
+                print(f"{R}❌ Gagal start game {game_id}{X}")
+                if not self.session_valid:
+                    break
+
+            if played % 2 == 0:
+                user = self.get_me()
+                if user:
+                    energy = user.get('energy', 0)
+                    print(f"{DIM}⚡ Energy tersisa: {energy}{X}")
+
+        print(f"\n{G}✅ Selesai {played} game.{X}")
+
+    def claim_all(self):
+        print(f"{C}🎡 Auto Claim Spin + Check-in...{X}")
+        if not self.init_data:
+            print(f"{R}❌ Init_Data belum diset!{X}")
+            return
+
+        clear_screen()
+        print(BANNER)
+        print(f"\n{CYAN}[ HELIX ] Claiming Rewards...{X}")
+
+        print(f"\n{Y}🎡 Spinning Wheel...{X}")
+        spin_result = self.spin_wheel()
+        if spin_result:
+            print(f"{G}[ ✓ ] Spin berhasil!{X}")
+        else:
+            print(f"{Y}⚠️ Spin skip/error (mungkin sudah di-claim){X}")
+
+        random_delay(1, 2)
+
+        print(f"\n{Y}📅 Daily Check-in...{X}")
+        checkin_result = self.checkin()
+        if checkin_result:
+            print(f"{G}[ ✓ ] Check-in berhasil!{X}")
+        else:
+            print(f"{Y}⚠️ Check-in skip/error (mungkin sudah di-claim){X}")
+
+        user = self.get_me()
+        if user:
+            print(f"{G}   Claimable: {user.get('claimable_reward', 0)} HLX{X}")
+            print(f"{G}   Energy: {user.get('energy', 0)}/{user.get('energy_max', 100)}{X}")
+        
+        print(f"\n{G}✅ Claim selesai!{X}")
 
     def watch_ads_loop(self, max_rounds=50):
         print(f"{G}🚀 Memulai auto watch...{X}")
@@ -323,7 +430,7 @@ class HelixBot:
         round_count = 0
         while round_count < max_rounds and self.session_valid:
             round_count += 1
-            os.system('cls' if os.name == 'nt' else 'clear')
+            clear_screen()
             print(BANNER)
             print(f"\n{CYAN}[ HELIX ] Initializing Ads Protocol...{X}")
             print(f"{G}[ ✓ ] Connection Established{X}\n")
@@ -335,7 +442,6 @@ class HelixBot:
                 continue
 
             providers = []
-            # Parse semua provider termasuk tower
             provider_list = ['adsgram', 'adsgram_reward', 'giga', 'monetag', 'tower']
             for prov in provider_list:
                 if prov in ads_data and ads_data[prov].get('available', False):
@@ -374,7 +480,6 @@ class HelixBot:
                         random_delay(2, 5)
                         continue
 
-                    # Refresh balance setelah sukses
                     user_data = self.get_me()
                     if user_data:
                         current_balance = user_data.get('claimable_reward', 0)
@@ -396,14 +501,106 @@ class HelixBot:
 
         print(f"\n{G}✅ Selesai {round_count} round.{X}")
 
-    # (Fungsi lainnya seperti play_game, claim_all, dll tetap sama seperti versi sebelumnya)
-    # Saya tidak menyalin ulang semua agar jawaban tidak terlalu panjang.
+# ============================================================
+# MENU FUNCTIONS
+# ============================================================
+def set_credentials():
+    global bot, ANTI_DETECTION
+    clear_screen()
+    print(BANNER)
+    print(f"\n{Y}🔑 SET CREDENTIALS{X}")
+    print(f"{C}{'='*50}{X}")
+    init_data = input(f"{G}Masukkan init_data (panjang): {X}").strip()
+    if not init_data:
+        print(f"{R}❌ init_data tidak boleh kosong!{X}")
+        time.sleep(2)
+        return
+
+    config = {"init_data": init_data, "anti_detection": ANTI_DETECTION}
+    save_config(config)
+    bot = HelixBot(init_data=init_data, anti_detection=ANTI_DETECTION)
+    print(f"{G}✅ Credentials disimpan!{X}")
+    time.sleep(1.5)
+
+def check_balance():
+    global bot
+    clear_screen()
+    print(BANNER)
+    if not bot or not bot.init_data:
+        print(f"{R}❌ Credentials belum diset! Gunakan menu 5.{X}")
+        time.sleep(2)
+        return
+
+    print(f"{B}💰 Mengecek Balance...{X}\n")
+    user = bot.get_me()
+    if user:
+        print(f"{G}👤 User: {user.get('username', 'N/A')} (ID: {user.get('telegram_id', 'N/A')}){X}")
+        print(f"{G}💰 Balance TON: {user.get('ton_balance', 0)}{X}")
+        print(f"{G}💰 Balance USDT: {user.get('usdt_balance', 0)}{X}")
+        print(f"{G}⛏️ Claimable HLX: {user.get('claimable_reward', 0)}{X}")
+        print(f"{G}📈 Total Mined: {user.get('total_mined', 0)}{X}")
+        print(f"{G}⚡ Energy: {user.get('energy', 0)}/{user.get('energy_max', 100)}{X}")
+        print(f"{G}📊 Rank: {user.get('rank', 'N/A')}{X}")
+        print(f"{G}📅 Days Active: {user.get('days_active', 0)}{X}")
+        print(f"{G}🎮 Games Won: {user.get('games_won', 0)}{X}")
+    else:
+        print(f"{R}❌ Gagal mengambil data.{X}")
+    input(f"\n{C}Tekan Enter untuk kembali...{X}")
+
+def toggle_anti_detection():
+    global ANTI_DETECTION, bot
+    clear_screen()
+    print(BANNER)
+    ANTI_DETECTION = not ANTI_DETECTION
+    print(f"{G}✅ Anti Detection sekarang: {'AKTIF' if ANTI_DETECTION else 'NONAKTIF'}{X}")
+    if bot:
+        bot.anti_detection = ANTI_DETECTION
+    config = load_config()
+    if config:
+        config["anti_detection"] = ANTI_DETECTION
+        save_config(config)
+    time.sleep(1.5)
+
+def start_farming():
+    global bot
+    clear_screen()
+    print(BANNER)
+    if not bot or not bot.init_data:
+        print(f"{R}❌ Credentials belum diset! Gunakan menu 5.{X}")
+        time.sleep(2)
+        return
+
+    print(f"{G}🚀 Memulai Auto Watch dengan Anti Detection{' AKTIF' if ANTI_DETECTION else ' NONAKTIF'}{X}")
+    print(f"{Y}⏹ Tekan Ctrl+C untuk berhenti.{X}\n")
+    bot.watch_ads_loop(max_rounds=50)
+
+def start_game():
+    global bot
+    clear_screen()
+    print(BANNER)
+    if not bot or not bot.init_data:
+        print(f"{R}❌ Credentials belum diset! Gunakan menu 5.{X}")
+        time.sleep(2)
+        return
+
+    print(f"{C}🎮 Memulai Auto Game...{X}")
+    bot.play_game(max_games=5)
+
+def claim_spin_checkin():
+    global bot
+    clear_screen()
+    print(BANNER)
+    if not bot or not bot.init_data:
+        print(f"{R}❌ Credentials belum diset! Gunakan menu 5.{X}")
+        time.sleep(2)
+        return
+
+    bot.claim_all()
+    input(f"\n{C}Tekan Enter untuk kembali...{X}")
 
 # ============================================================
-# MENU FUNCTIONS (sama seperti sebelumnya)
+# MAIN
 # ============================================================
-# ... (potong untuk ringkas, karena yang diubah hanya watch_ads_loop dan progress_bar)
-
 def main():
     global bot, ANTI_DETECTION
 
