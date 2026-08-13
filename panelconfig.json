@@ -104,8 +104,8 @@
           "runner": "python3"
         },
         "10": {
-          "label": "Coming Soon",
-          "file": "",
+          "label": "TReward",
+          "file": "tr.py",
           "runner": "python3"
         },
         "11": {
