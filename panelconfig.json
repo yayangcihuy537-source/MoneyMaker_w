@@ -84,8 +84,8 @@
           "runner": "python3"
         },
         "6": {
-          "label": "GramAd",
-          "file": "gram.py",
+          "label": "Bossdogearnbot",
+          "file": "bos.py",
           "runner": "python3"
         },
         "7": {
@@ -104,8 +104,8 @@
           "runner": "python3"
         },
         "10": {
-          "label": "Bossdogearnbot",
-          "file": "bos.py",
+          "label": "Coming Soon",
+          "file": "",
           "runner": "python3"
         },
         "11": {
