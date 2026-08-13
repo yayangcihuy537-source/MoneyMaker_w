@@ -2,6 +2,7 @@
 """
 BOSSDOG BOT – AUTO FARM + DAILY + TASKS (AUTO ADS TASK)
 🐶 B O S S D O G  B O T 🐶
+Login menggunakan init_data (seperti Fruit Cut)
 """
 
 import os
@@ -51,7 +52,7 @@ MENU = f"""
 ╠══════════════════════════════════════════════╣
 ║  {G}[1] 🚀 Start Auto Claim (Task + Farm){RS}{CYAN}        ║
 ║  {B}[2] 💰 Check Balance & Info{RS}{CYAN}               ║
-║  {Y}[3] 🔑 Set Token (Bearer){RS}{CYAN}                 ║
+║  {Y}[3] 🔑 Set InitData (login){RS}{CYAN}               ║
 ║  {C}[4] 📋 Show Tasks{RS}{CYAN}                         ║
 ║                                              ║
 ║  {R}[0] ❌ Exit{RS}{CYAN}                                ║
@@ -64,6 +65,7 @@ CONFIG_FILE = "bossdog_config.json"
 # GLOBAL
 # ============================================================
 BASE_URL = "https://bossdogsearn.site/api"
+INIT_DATA = ""
 TOKEN = ""
 
 # ============================================================
@@ -83,7 +85,46 @@ def save_config(data):
         json.dump(data, f, indent=4)
 
 # ============================================================
-# FUNGSI HEADERS
+# LOGIN DENGAN INIT_DATA
+# ============================================================
+def login_with_init_data(init_data):
+    """Kirim initData ke /api/auth/verify, dapatkan token bearer"""
+    url = f"{BASE_URL}/auth/verify"
+    payload = {
+        "initData": init_data,
+        "fingerprint": "3fb8034",  # bisa diganti atau dinamis
+        "startParam": "ref_C26EB750"  # bisa disesuaikan
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Linux; Android 16; K) Telegram-Android/12.9.1 (Samsung SM-A556E; Android 16; SDK 36; HIGH)",
+        "Accept": "*/*",
+        "X-Requested-With": "org.telegram.messenger.web",
+        "Origin": "https://bossdogsearn.site",
+        "Referer": "https://bossdogsearn.site/?tgWebAppStartParam=ref_C26EB750",
+        "sec-ch-ua": '"Not;A=Brand";v="8", "Chromium";v="150", "Android WebView";v="150"',
+        "sec-ch-ua-mobile": "?1",
+        "sec-ch-ua-platform": '"Android"',
+    }
+    try:
+        resp = requests.post(url, json=payload, headers=headers, timeout=15)
+        if resp.status_code == 200:
+            data = resp.json()
+            token = data.get('token') or data.get('accessToken') or data.get('bearer')
+            if token:
+                return token
+            else:
+                print(f"{R}❌ Login gagal: response tidak mengandung token{RS}")
+                return None
+        else:
+            print(f"{R}❌ Login error: {resp.status_code} - {resp.text[:200]}{RS}")
+            return None
+    except Exception as e:
+        print(f"{R}❌ Login request error: {e}{RS}")
+        return None
+
+# ============================================================
+# HEADERS DENGAN TOKEN
 # ============================================================
 def headers():
     return {
@@ -153,11 +194,9 @@ def get_tasks():
     return api_get("tasks")
 
 def start_task(task_key, provider="adsgram"):
-    """Start task iklan, dapat token"""
     return api_post(f"tasks/{task_key}/start", {"provider": provider})
 
 def claim_task(task_key, token):
-    """Claim task iklan dengan token"""
     return api_post(f"tasks/{task_key}/claim", {"token": token, "clicked": True})
 
 # ============================================================
@@ -170,9 +209,19 @@ def progress_bar(current, total, length=20, fill='█', empty='░'):
     return f"[{bar}] {int(pct*100)}%"
 
 # ============================================================
-# AUTO CLAIM (dengan task otomatis + progress bar 30 detik)
+# AUTO CLAIM
 # ============================================================
 def auto_claim():
+    global TOKEN
+    # Login dulu
+    if not INIT_DATA:
+        print(f"{R}❌ InitData belum diset!{RS}")
+        return
+    TOKEN = login_with_init_data(INIT_DATA)
+    if not TOKEN:
+        print(f"{R}❌ Gagal login dengan init_data.{RS}")
+        return
+
     print(f"{G}🚀 Memulai Auto Claim (Farm + Daily + Task)...{RS}")
     print(f"{Y}⏹ Tekan Ctrl+C untuk berhenti.{RS}\n")
 
@@ -224,7 +273,6 @@ def auto_claim():
                     if start_res and start_res.get('token'):
                         token = start_res['token']
                         print(f"{G}✅ Iklan dimulai, token: {token}{RS}")
-                        # Progress bar 30 detik
                         duration = 30
                         for i in range(1, duration+1):
                             bar = progress_bar(i, duration)
@@ -260,7 +308,6 @@ def auto_claim():
                 all_tasks_done = True
                 break
 
-            # Filter task iklan yang repeatable dan belum mencapai limit
             ad_tasks = []
             for t in pending_tasks:
                 if t.get('requireAd', False) and t.get('repeatable', False):
@@ -278,18 +325,15 @@ def auto_claim():
                 all_ads_exhausted = True
                 break
 
-            # Proses task iklan satu per satu
             for task in ad_tasks:
                 key = task['key']
                 title = task.get('title', key)
                 reward = task.get('reward', 0)
                 print(f"{Y}📺 Menonton iklan untuk task: {title} (reward {reward}){RS}")
-                # Start task untuk dapat token
                 start_res = start_task(key, "adsgram")
                 if start_res and start_res.get('token'):
                     token = start_res['token']
                     print(f"{G}✅ Token didapat: {token}{RS}")
-                    # Progress bar 30 detik
                     duration = 30
                     for i in range(1, duration+1):
                         bar = progress_bar(i, duration)
@@ -297,7 +341,6 @@ def auto_claim():
                         sys.stdout.flush()
                         time.sleep(1)
                     print()
-                    # Claim task
                     claim_res = claim_task(key, token)
                     if claim_res and claim_res.get('ok'):
                         coins = claim_res.get('coins', 0)
@@ -311,14 +354,13 @@ def auto_claim():
         else:
             print(f"{R}❌ Gagal ambil tasks{RS}")
 
-        # Cek lagi apakah masih ada task yang bisa dikerjakan (untuk stop)
+        # Cek lagi
         tasks_after = get_tasks()
         if tasks_after and isinstance(tasks_after, list):
             remaining = [t for t in tasks_after if not t.get('done', False) and t.get('requireAd', False) and t.get('repeatable', False)]
             if not remaining:
                 print(f"{G}✅ Tidak ada task iklan yang tersisa. Bot akan berhenti.{RS}")
                 break
-            # Cek limit juga
             any_available = False
             for t in remaining:
                 key = t.get('key')
@@ -333,7 +375,6 @@ def auto_claim():
                 print(f"{Y}⚠️ Semua task iklan sudah mencapai limit. Bot berhenti.{RS}")
                 break
 
-        # Jika masih ada, tunggu sebelum siklus berikutnya
         if not all_tasks_done and not all_ads_exhausted:
             wait = 10
             print(f"{Y}⏳ Tunggu {wait} detik sebelum siklus berikutnya...{RS}")
@@ -349,6 +390,15 @@ def auto_claim():
 # CEK BALANCE
 # ============================================================
 def check_balance():
+    global TOKEN
+    if not INIT_DATA:
+        print(f"{R}❌ InitData belum diset!{RS}")
+        return
+    TOKEN = login_with_init_data(INIT_DATA)
+    if not TOKEN:
+        print(f"{R}❌ Gagal login.{RS}")
+        return
+
     print(f"{B}💰 Mengecek Balance & Info...{RS}\n")
     me = get_me()
     if me:
@@ -372,6 +422,15 @@ def check_balance():
 # TAMPILKAN TASKS
 # ============================================================
 def show_tasks():
+    global TOKEN
+    if not INIT_DATA:
+        print(f"{R}❌ InitData belum diset!{RS}")
+        return
+    TOKEN = login_with_init_data(INIT_DATA)
+    if not TOKEN:
+        print(f"{R}❌ Gagal login.{RS}")
+        return
+
     print(f"{C}📋 Daftar Tasks:{RS}\n")
     tasks = get_tasks()
     if tasks and isinstance(tasks, list):
@@ -393,58 +452,65 @@ def show_tasks():
         print(f"{R}❌ Gagal ambil tasks{RS}")
 
 # ============================================================
-# SET TOKEN
+# SET INIT DATA
 # ============================================================
-def set_token():
-    global TOKEN
-    print(f"{Y}🔑 Masukkan Bearer Token:{RS}")
-    token = input(f"{W}Token: {RS}").strip()
-    if token:
-        TOKEN = token
-        save_config({"token": TOKEN})
-        print(f"{G}✅ Token disimpan!{RS}")
+def set_init_data():
+    global INIT_DATA
+    print(f"{Y}🔑 Masukkan InitData (panjang):{RS}")
+    print(f"{DIM}Paste di sini, lalu tekan Enter 2x untuk selesai{RS}")
+    lines = []
+    while True:
+        line = input()
+        if line == "":
+            break
+        lines.append(line)
+    data = "".join(lines).strip()
+    if data:
+        INIT_DATA = data
+        save_config({"init_data": INIT_DATA})
+        print(f"{G}✅ InitData disimpan!{RS}")
     else:
-        print(f"{R}❌ Token kosong!{RS}")
+        print(f"{R}❌ InitData kosong!{RS}")
 
 # ============================================================
 # MAIN
 # ============================================================
 def main():
-    global TOKEN
+    global INIT_DATA, TOKEN
     os.system('clear' if os.name == 'posix' else 'cls')
     print(BANNER)
     print(MENU)
 
     config = load_config()
-    if config and config.get('token'):
-        TOKEN = config['token']
-        print(f"{G}🔑 Token ditemukan di config.{RS}")
+    if config and config.get('init_data'):
+        INIT_DATA = config['init_data']
+        print(f"{G}🔑 InitData ditemukan di config.{RS}")
     else:
-        print(f"{R}🔑 Token belum diset. Silakan menu 3.{RS}")
+        print(f"{R}🔑 InitData belum diset. Silakan menu 3.{RS}")
 
     while True:
         choice = input(f"\n{CYAN}Select Menu » {RS}").strip()
 
         if choice == "1":
-            if not TOKEN:
-                print(f"{R}❌ Token belum diset!{RS}")
+            if not INIT_DATA:
+                print(f"{R}❌ InitData belum diset!{RS}")
                 time.sleep(1)
                 continue
             auto_claim()
             input(f"\n{C}Tekan Enter untuk kembali...{RS}")
         elif choice == "2":
-            if not TOKEN:
-                print(f"{R}❌ Token belum diset!{RS}")
+            if not INIT_DATA:
+                print(f"{R}❌ InitData belum diset!{RS}")
                 time.sleep(1)
                 continue
             check_balance()
             input(f"\n{C}Tekan Enter untuk kembali...{RS}")
         elif choice == "3":
-            set_token()
+            set_init_data()
             input(f"\n{C}Tekan Enter untuk kembali...{RS}")
         elif choice == "4":
-            if not TOKEN:
-                print(f"{R}❌ Token belum diset!{RS}")
+            if not INIT_DATA:
+                print(f"{R}❌ InitData belum diset!{RS}")
                 time.sleep(1)
                 continue
             show_tasks()
