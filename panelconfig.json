@@ -64,8 +64,8 @@
           "runner": "python3"
         },
         "2": {
-          "label": "ArcadePXC",
-          "file": "Pxc.py",
+          "label": "TReward",
+          "file": "tr.py",
           "runner": "python3"
         },
         "3": {
@@ -104,8 +104,8 @@
           "runner": "python3"
         },
         "10": {
-          "label": "TReward",
-          "file": "tr.py",
+          "label": "Coming Soon",
+          "file": "",
           "runner": "python3"
         },
         "11": {
