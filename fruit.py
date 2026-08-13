@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-🍓 Fruit Cut Bot — Full Menu
+🍓 Fruit Cut Bot — FULL MENU (LOTTERY REMOVED)
 - 1. Auto Game (loop sampai token habis)
 - 2. Auto Watch Ads (loop semua network sampai limit habis)
 - 3. Check Balance
@@ -14,6 +14,7 @@ import time
 import json
 import sys
 import os
+import urllib.parse
 from datetime import datetime
 
 # ─── COLOR ─────────────────────────────────────────────────
@@ -22,6 +23,12 @@ try:
     init(autoreset=True)
     C = Fore
     S = Style
+    class DIM_CLASS:
+        def __getattr__(self, name):
+            if name == 'DIM':
+                return '\033[2m'
+            return ''
+    DIM = DIM_CLASS()
 except ImportError:
     class C:
         GREEN = '\033[92m'
@@ -35,6 +42,7 @@ except ImportError:
     class S:
         BRIGHT = '\033[1m'
         RESET = '\033[0m'
+    DIM = '\033[2m'
 
 BASE_URL = "https://fruit-cut-eight.vercel.app"
 INIT_DATA = ""
@@ -76,6 +84,19 @@ def progress_bar(seconds, total, label="", width=20):
     bar = '█' * filled + '░' * (width - filled)
     return f"{label} [{C.GREEN}{bar}{C.RESET}] {seconds}/{total}s"
 
+def extract_telegram_id(init_data):
+    if not init_data:
+        return None
+    parsed = urllib.parse.parse_qs(init_data)
+    user_str = parsed.get('user', [None])[0]
+    if user_str:
+        try:
+            user_json = json.loads(urllib.parse.unquote(user_str))
+            return str(user_json.get('id'))
+        except:
+            pass
+    return None
+
 # ─── BOT CLASS ─────────────────────────────────────────────
 class FruitCutBot:
     def __init__(self, init_data):
@@ -91,8 +112,8 @@ class FruitCutBot:
         self.fruit_coin = 0
         self.stage = 1
         self.game_tokens = 0
-        self.lottery_tokens = 0
         self.max_tokens = 10
+        self.telegram_id = extract_telegram_id(init_data) or "6894031790"
 
     def log(self, msg, color=C.WHITE, end="\n"):
         print(f"{color}{msg}{C.RESET}", end=end)
@@ -109,16 +130,18 @@ class FruitCutBot:
 
     def login(self):
         self.log("🔐 Login...", C.CYAN)
-        payload = {"deviceId": f"dev_{int(time.time())}", "referredBy": None}
-        res = self.api("/api/auth", payload)
+        if not self.init_data:
+            return False
+        res = self.api("/api/init", {"syncOnly": True})
         if res and res.get("success"):
             u = res.get("user", {})
             self.gold = u.get("gold", 0)
             self.fruit_coin = u.get("fruitCoin", 0)
             self.game_tokens = u.get("gameTokens", 0)
-            self.lottery_tokens = u.get("lotteryTokens", 0)
             self.stage = u.get("stage", 1)
             self.max_tokens = u.get("maxTokens", 10)
+            if u.get("telegramId"):
+                self.telegram_id = str(u["telegramId"])
             return True
         return False
 
@@ -129,8 +152,10 @@ class FruitCutBot:
             self.gold = u.get("gold", self.gold)
             self.fruit_coin = u.get("fruitCoin", self.fruit_coin)
             self.game_tokens = u.get("gameTokens", self.game_tokens)
-            self.lottery_tokens = u.get("lotteryTokens", self.lottery_tokens)
             self.stage = u.get("stage", self.stage)
+            self.max_tokens = u.get("maxTokens", self.max_tokens)
+            if u.get("telegramId"):
+                self.telegram_id = str(u["telegramId"])
             return True
         return False
 
@@ -154,31 +179,49 @@ class FruitCutBot:
             return reward
         return None
 
-    def watch_ad(self, ad_type="adsgram"):
-        session_res = self.api("/api/ads", {
+    # ─── ADS WATCH ─────────────────────────────────────────
+    def request_ad_session(self, network):
+        res = self.api("/api/ads", {
+            "telegramId": self.telegram_id,
             "action": "request_session",
-            "network": ad_type
+            "network": network
         })
-        if not session_res or not session_res.get("success"):
-            self.log(f"❌ Gagal request session {ad_type}", C.RED)
-            return False
-        session_id = session_res.get("sessionId")
+        if res and res.get("success"):
+            return res.get("sessionId")
+        return None
 
-        self.log(f"⏳ Menonton {ad_type} 17 detik...", C.CYAN)
+    def complete_ad(self, network, session_id):
+        res = self.api("/api/ads", {
+            "telegramId": self.telegram_id,
+            "action": network,
+            "sessionId": session_id
+        })
+        if res and res.get("success"):
+            if "user" in res:
+                self.gold = res["user"].get("gold", self.gold)
+            return True
+        return False
+
+    def watch_ad(self, network):
+        self.log(f"📺 Menonton {network}...", C.CYAN)
+        session_id = self.request_ad_session(network)
+        if not session_id:
+            self.log(f"❌ Gagal request session {network}", C.RED)
+            return False
+
+        self.log(f"⏳ Menonton iklan 17 detik...", C.YELLOW)
         for i in range(17, 0, -1):
             print(f"\r   {progress_bar(i, 17, '📺', 20)}", end="")
             time.sleep(1)
         print("\r   ✅ Iklan selesai!        ")
 
-        claim_res = self.api("/api/ads", {
-            "action": ad_type,
-            "sessionId": session_id
-        })
-        if claim_res and claim_res.get("success"):
-            self.sync()
+        ok = self.complete_ad(network, session_id)
+        if ok:
+            self.log(f"✅ {network} selesai! Gold: {self.gold}", C.GREEN)
             return True
-        self.log(f"❌ Gagal claim reward {ad_type}", C.RED)
-        return False
+        else:
+            self.log(f"❌ Gagal claim reward {network}", C.RED)
+            return False
 
 # ─── MENU FUNCTIONS ────────────────────────────────────────
 
@@ -242,18 +285,12 @@ def show_menu():
 def check_balance(bot):
     if not bot.login():
         print(f"{C.RED}❌ Gagal login, mungkin init_data salah.{C.RESET}")
-        if input("Ingin set ulang init_data? (y/n): ").lower() == 'y':
-            if ensure_init_data():
-                bot = FruitCutBot(INIT_DATA)
-                check_balance(bot)
-                return
         input("Tekan Enter...")
         return
     print(f"""
 {C.WHITE}💰 Gold        : {C.YELLOW}{bot.gold}{C.RESET}
 {C.WHITE}🍎 Fruit Coin : {C.YELLOW}{bot.fruit_coin}{C.RESET}
 {C.WHITE}🎮 Game Tokens: {C.YELLOW}{bot.game_tokens} / {bot.max_tokens}{C.RESET}
-{C.WHITE}🎫 Lottery Tok: {C.YELLOW}{bot.lottery_tokens}{C.RESET}
 {C.WHITE}🏆 Stage      : {C.YELLOW}{bot.stage}{C.RESET}
     """)
     input("Tekan Enter untuk kembali...")
@@ -261,11 +298,6 @@ def check_balance(bot):
 def auto_game(bot, max_rounds=999):
     if not bot.login():
         print(f"{C.RED}❌ Gagal login, mungkin init_data salah.{C.RESET}")
-        if input("Ingin set ulang init_data? (y/n): ").lower() == 'y':
-            if ensure_init_data():
-                bot = FruitCutBot(INIT_DATA)
-                auto_game(bot, max_rounds)
-                return
         input("Tekan Enter...")
         return
 
@@ -312,15 +344,9 @@ def auto_game(bot, max_rounds=999):
 def auto_watch_ads(bot):
     if not bot.login():
         print(f"{C.RED}❌ Gagal login, mungkin init_data salah.{C.RESET}")
-        if input("Ingin set ulang init_data? (y/n): ").lower() == 'y':
-            if ensure_init_data():
-                bot = FruitCutBot(INIT_DATA)
-                auto_watch_ads(bot)
-                return
         input("Tekan Enter...")
         return
 
-    # Daftar network & limit harian (total 30 iklan)
     ad_networks = [
         ("adsgram", 5),
         ("adsgramDaily", 5),
@@ -353,9 +379,8 @@ def auto_watch_ads(bot):
             else:
                 print(f"\r  ❌ [{i+1}/{limit}] {network} gagal (error/limit), skip ke network berikutnya.")
                 total_failed += 1
-                break  # keluar dari network ini, lanjut ke network selanjutnya
+                break
             time.sleep(1)
-        # Tampilkan ringkasan network
         print(f"\n  └─ {network}: {success_network} berhasil, {limit-success_network} gagal/limit\n")
 
     print(f"\n{C.GREEN}✅ Selesai! Total iklan berhasil: {total_success}, gagal: {total_failed}{C.RESET}")
