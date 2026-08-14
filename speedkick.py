@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 SpeedKick 24/7 Automation — Ads + Mining + Withdraw + Menu
-Developer: ScriptyXSouu (Fixed by Kyriel)
+Developer: ScriptyXSouu (Fixed & Updated)
 """
 
 import os
@@ -40,15 +40,25 @@ DIM = "\033[2;37m"
 WHITE = "\033[1;37m"
 RESET = "\033[0m"
 
-# ==================== BANNER ====================
+# ==================== BANNER (UPDATED) ====================
 def banner():
     clear()
     print(f"""
 {PURPLE}╔══════════════════════════════════════════════════════════════╗
-║   {GOLD}⚡  SPEEDKICK AUTO BOT v3.2 — MENU MODE                {PURPLE}║
-║   {LIME}🌾 Auto Farming • 💸 Withdraw • 📊 Balance            {PURPLE}║
-║   {PINK}👑 Developer : ScriptyXSouu                          {PURPLE}║
-║   {CYAN}🤖 BOT : SPEEDKICKBOT                                {PURPLE}║
+║                                                                  ║
+║  {CYAN}███████╗██████╗ ███████╗██████╗ ███████╗██╗  ██╗██╗ ██████╗██╗  {RESET}{PURPLE}║
+║  {CYAN}██╔════╝██╔══██╗██╔════╝██╔══██╗██╔════╝██║ ██╔╝██║██╔════╝██║  {RESET}{PURPLE}║
+║  {CYAN}███████╗██████╔╝█████╗  ██████╔╝█████╗  █████╔╝ ██║██║     ██║  {RESET}{PURPLE}║
+║  {CYAN}╚════██║██╔═══╝ ██╔══╝  ██╔══██╗██╔══╝  ██╔═██╗ ██║██║     ██║  {RESET}{PURPLE}║
+║  {CYAN}███████║██║     ███████╗██║  ██║███████╗██║  ██╗██║╚██████╗███████╗{RESET}{PURPLE}║
+║  {CYAN}╚══════╝╚═╝     ╚══════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝ ╚═════╝╚══════╝{RESET}{PURPLE}║
+║                                                                  ║
+║            {GOLD}⚡  SPEEDKICK AUTO BOT v3.5  ⚡{PURPLE}                 ║
+║         {LIME}🌾 Auto Ads • ⛏️ Mining • 💸 Withdraw{PURPLE}            ║
+║                                                                  ║
+║  {PINK}👑 Developer : ScriptyXSouu                              {PURPLE}║
+║  {CYAN}🤖 Bot       : SPEEDKICKBOT                              {PURPLE}║
+║                                                                  ║
 ╚══════════════════════════════════════════════════════════════╝{RESET}
 """)
 
@@ -414,7 +424,8 @@ def main():
         
         balance = bot.get_balance()
         user = auth.get("user", {})
-        print(f"{GREEN}👤 {user.get('firstName', 'User')} | 💰 Balance: {balance} V{RESET}")
+        username = user.get('firstName', 'User')
+        print(f"{GREEN}👤 {username} | 💰 Balance: {balance} V{RESET}")
         
         print(f"""
 {CYAN}╔════════════════════════════════════════════════════╗
@@ -434,6 +445,7 @@ def main():
             sys.exit(0)
         elif choice == '1':
             bot.smart_loop()
+            input("Tekan Enter untuk kembali...")
             clear()
         elif choice == '2':
             try:
