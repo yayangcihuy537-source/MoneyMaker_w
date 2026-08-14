@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-MULTI-BOT: PepeFlow + Coinszon (Smart Dual Mode) - FIXED v5
-Hanya Lucky Wheel & Mystery Box + Auto Ad Watch untuk Double Reward
+MULTI-BOT: PepeFlow + Coinszon (Smart Dual Mode) - FIXED v6
+PepeFlow: Lucky Wheel + Mystery Box
+Coinszon: Lucky Wheel + Slots (sesuai screenshot)
 """
 
 import os, sys, time, json, random, re, requests
@@ -18,15 +19,18 @@ PEPE_URL = "https://pepeflow.com"
 COIN_URL = "https://coinszon.com"
 UA = "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.47 Mobile Safari/537.36 Telegram-Android/12.6.4"
 
+# ========== PEPEFLOW: Lucky Wheel + Mystery Box ==========
 PEPE_GAMES = ["lucky_wheel", "mystery_box"]
 PEPE_GAME_MAP = {
     "lucky_wheel": {"display": "SPIN", "icon": "🎡"},
     "mystery_box": {"display": "NEON", "icon": "🎁"},
 }
-COIN_GAMES = ["lucky_wheel", "mystery_box"]
+
+# ========== COINSZON: Lucky Wheel + Slots (sesuai screenshot) ==========
+COIN_GAMES = ["lucky_wheel", "slots"]
 COIN_GAME_MAP = {
     "lucky_wheel": {"display": "SPIN", "icon": "🎡"},
-    "mystery_box": {"display": "NEON", "icon": "🎁"},
+    "slots": {"display": "SLOTS", "icon": "🎰"},
 }
 
 class BaseConfig:
@@ -77,7 +81,6 @@ def safe_float(val, default=0.0):
 def safe_int(val, default=0):
     return int(safe_float(val, default))
 
-# Progress bar untuk nonton iklan
 def ad_progress(seconds=30, label="📺 Watching ad"):
     for i in range(seconds, 0, -1):
         bar_len = 20
@@ -272,24 +275,17 @@ class MiniAppBot:
             except: pass
         return None
 
-    # --- WATCH AD UNTUK DOUBLE REWARD ---
     def watch_ad_for_double(self, game):
-        """Menonton iklan untuk mengaktifkan double reward pada game tertentu."""
         print(f"{Y}📺 Menonton iklan untuk {self.game_map[game]['display']} double reward...{RESET}")
         ad_progress(30, f"📺 {self.name} ad")
-        # Setelah menonton, kita asumsikan double reward aktif.
         self.doubled_available[game] = True
         self.retry_doubled[game] = True
-        # Log
         self.log(f"{G}✅ Iklan selesai! Double reward aktif untuk {self.game_map[game]['display']}")
         return True
 
     def play_single(self, game):
-        # Cek apakah doubled available dan masih boleh dicoba
         if self.doubled_available.get(game, False) and self.retry_doubled.get(game, True):
-            # Nonton iklan dulu sebelum claim double
             self.watch_ad_for_double(game)
-            # Sekarang claim double
             base = random.randint(10, 30)
             result = self.play_game(game, doubled=True, base_reward=base)
             if result and result.get('status') == 'success':
@@ -309,9 +305,10 @@ class MiniAppBot:
         elif game == "mystery_box":
             pick = random.randint(0,7)
             return self.play_game("mystery_box", pick=pick)
+        elif game == "slots":
+            return self.play_game("slots", doubled=False)
         return None
 
-    # --- CLAIM DAILY BONUS (sudah ada) ---
     def claim_daily(self):
         if self.daily_claimed:
             self.log(f"{Y}⏹️ Daily sudah diklaim hari ini.{RESET}")
@@ -348,17 +345,14 @@ class MiniAppBot:
             self.log(f"{R}❌ Daily claim HTTP error: {resp.status_code if resp else 'No response'}")
             return False
 
-    # --- DASHBOARD DENGAN FORMAT RAPI ---
     def display_dashboard(self):
         os.system('clear')
         self.get_games_status()
-        # Header
         print(f"{GOLD}╔══════════════════════════════════════════════════════════╗")
         print(f"{GOLD}║{RESET}  {C}{self.name.upper()} AUTO-BOT{RESET}                              {GOLD}║")
         print(f"{GOLD}╠══════════════════════════════════════════════════════════╣")
         print(f"{GOLD}║{RESET}  Run/Loop : {C}{self.loop_counter}{RESET}      Balance : {G}{self.balance:.8f}{RESET}   {GOLD}║")
         print(f"{GOLD}╠══════════════════════════════════════════════════════════╣")
-        # Games
         for g in self.game_list:
             d = self.game_map[g]
             icon = d['icon']; disp = d['display']
@@ -369,10 +363,8 @@ class MiniAppBot:
             cd = self.fmt(self.cooldowns[g])
             sc = G if st == "Ready" else Y
             reward_str = f"{rwd:.8f}" if rwd < 0.001 else f"{rwd:.2f}"
-            # Format dengan lebar tetap
             line = f"{GOLD}║{RESET}  {icon} {disp:<6} {sc}{st:<8}{RESET}  {twox:<5} {ply:<5} {reward_str:<12} {cd:<6}{GOLD}║"
             print(line)
-        # Logs
         print(f"{GOLD}╠══════════════════════════════════════════════════════════╣")
         for log in list(self.logs)[-6:]:
             log_clean = log[:48] if len(log) > 48 else log
@@ -476,7 +468,7 @@ def main():
 ║   {PINK}Developer: @MoneyMaker_w                         {PURPLE}║
 ╠══════════════════════════════════════════════════════════╣
 ║   {G}[1]{RESET} 🐸 PepeFlow only (Lucky Wheel + Mystery Box) ║
-║   {C}[2]{RESET} 🪙 Coinszon only (Lucky Wheel + Mystery Box) ║
+║   {C}[2]{RESET} 🪙 Coinszon only (Lucky Wheel + Slots)     ║
 ║   {Y}[3]{RESET} 🔄 Smart Dual Mode (PepeFlow ⇄ Coinszon)   ║
 ║   {W}[4]{RESET} 📝 Set PHPSESSID + InitData for PepeFlow   ║
 ║   {W}[5]{RESET} 📝 Set PHPSESSID + InitData for Coinszon   ║
