@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
 ╔═══════════════════════════════════════════════════════════════════╗
-║  🐶 BABYDOGE TAP BOT v3.1 — Fixed Loop & Return to Menu         ║
+║  🐶 BABYDOGE TAP BOT v4.0 — Fixed 20 Taps per Request          ║
 ║  🔐 Login via InitData                                         ║
-║  👆 Auto Tap (batch mode - tap banyak sekaligus)              ║
+║  👆 Auto Tap (batch mode, 20 taps per request)                ║
 ║  🎯 Auto Claim (Streak + Spin + Tasks)                       ║
-║  🔄 Auto re-init jika token kosong/expired                   ║
+║  🔄 Auto re-init jika token expired                          ║
 ║  🔑 Auto update tapToken setiap tap                          ║
 ║  📊 Set Tap Limit & Batch Size                              ║
 ║  💸 Withdraw dengan input nominal & set address            ║
@@ -37,28 +37,23 @@ DIM = "\033[90m"
 WHITE = "\033[1;97m"
 RESET = "\033[0m"
 
-# ==================== BANNER ====================
+# ==================== BANNER (UPDATED) ====================
 BANNER = rf"""{CYAN}
-
-██████╗  █████╗ ██████╗ ██╗   ██╗
-██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝
-██████╔╝███████║██████╔╝ ╚████╔╝
-██╔══██╗██╔══██║██╔══██╗  ╚██╔╝
-██████╔╝██║  ██║██████╔╝   ██║
-╚═════╝ ╚═╝  ╚═╝╚═════╝    ╚═╝
-
-██████╗  ██████╗  ██████╗ ███████╗
-██╔══██╗██╔═══██╗██╔════╝ ██╔════╝
-██║  ██║██║   ██║██║  ███╗█████╗
-██║  ██║██║   ██║██║   ██║██╔══╝
-██████╔╝╚██████╔╝╚██████╔╝███████╗
-╚═════╝  ╚═════╝  ╚═════╝ ╚══════╝
-
-{WHITE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-{GREEN} 🤖 BOT        : @BabyDOGETapbot
-{YELLOW} 👨‍💻 DEVELOPER : ScriptyXSouu
-{CYAN} ⚡ SCRIPT     : AUTO TAP • AUTO TASK • AUTO CLAIM
-{WHITE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}
+╔═══════════════════════════════════════════════════════════════════╗
+║                                                                   ║
+║  {WHITE}██████╗  █████╗ ██████╗ ██╗   ██╗██████╗  ██████╗  ██████╗ ███████╗{CYAN}║
+║  {WHITE}██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝██╔══██╗██╔═══██╗██╔════╝ ██╔════╝{CYAN}║
+║  {WHITE}██████╔╝███████║██████╔╝ ╚████╔╝ ██████╔╝██║   ██║██║  ███╗█████╗  {CYAN}║
+║  {WHITE}██╔══██╗██╔══██║██╔══██╗  ╚██╔╝  ██╔══██╗██║   ██║██║   ██║██╔══╝  {CYAN}║
+║  {WHITE}██████╔╝██║  ██║██████╔╝   ██║   ██████╔╝╚██████╔╝╚██████╔╝███████╗{CYAN}║
+║  {WHITE}╚═════╝ ╚═╝  ╚═╝╚═════╝    ╚═╝   ╚═════╝  ╚═════╝  ╚═════╝ ╚══════╝{CYAN}║
+║                                                                   ║
+║            {GREEN}🐶 BABYDOGE AUTO TAP BOT v4.0 🐶{CYAN}                 ║
+║                                                                   ║
+║  {YELLOW}⚡ 20 Taps per Request  •  Batch Mode  •  Auto Claim{RESET}{CYAN}     ║
+║  {PINK}👑 Owner: ScriptyXSouu  •  📢 TG: @MoneyMaker_w{RESET}{CYAN}         ║
+║                                                                   ║
+╚═══════════════════════════════════════════════════════════════════╝{RESET}
 """
 
 # ==================== KONFIGURASI ====================
@@ -98,16 +93,6 @@ class Config:
                 'tap_batch_delay_min': self.tap_batch_delay_min,
                 'tap_batch_delay_max': self.tap_batch_delay_max
             }, f, indent=2)
-
-    def clear(self):
-        self.init_data = None
-        self.tap_limit = 0
-        self.withdraw_address = ""
-        self.tap_batch_size = 50
-        self.tap_batch_delay_min = 3
-        self.tap_batch_delay_max = 7
-        if os.path.exists(CONFIG_FILE):
-            os.remove(CONFIG_FILE)
 
 # ==================== UTILITY ====================
 def uuid4():
@@ -244,7 +229,6 @@ class BabyDogeBot:
             return False
 
     def ensure_token(self) -> bool:
-        """Pastikan token valid. Jika gagal, return False tanpa spam."""
         if not self.token or not self.tap_token:
             self.log("⚠️ Token missing, attempting init...", "WARNING")
             if not self.init():
@@ -255,8 +239,8 @@ class BabyDogeBot:
         self.log("🔄 Refresh tapToken...", "INFO")
         return self.init()
 
-    # ==================== TAP - FIXED ====================
-    def tap(self, taps: int = 10) -> bool:
+    # ==================== TAP - FIXED 20 TAPS ====================
+    def tap(self, taps: int = 20) -> bool:   # default 20
         if not self.ensure_token():
             return False
 
@@ -309,7 +293,7 @@ class BabyDogeBot:
                 self.log(f"❌ Tap failed: {error}", "ERROR")
                 return False
 
-    # ==================== TAP BATCH - FIXED ====================
+    # ==================== TAP BATCH - 20 PER REQUEST ====================
     def tap_batch(self):
         batch_size = self.batch_size
         if batch_size <= 0:
@@ -324,9 +308,10 @@ class BabyDogeBot:
                     return False
                 continue
 
-            t = random.randint(3, 7)
-            if taps_done_in_batch + t > batch_size:
-                t = batch_size - taps_done_in_batch
+            # ==== PERUBAHAN: setiap request = 20 tap (atau sisa) ====
+            t = min(20, batch_size - taps_done_in_batch)
+            if t <= 0:
+                break
 
             if not self.tap(t):
                 return False  # Jika tap gagal karena token invalid, hentikan batch
@@ -336,7 +321,7 @@ class BabyDogeBot:
                 jeda = random.uniform(1.5, 3.5)
                 time.sleep(jeda)
 
-        self.log(f"✅ Batch {batch_size} taps selesai", "SUCCESS")
+        self.log(f"✅ Batch {batch_size} taps selesai (total request: { (batch_size + 19)//20 } kali)", "SUCCESS")
         return True
 
     def claim_streak(self) -> bool:
@@ -690,7 +675,7 @@ def menu():
 {CYAN}╔════════════════════════════════════════════════════════════╗
 ║                      MAIN MENU                               ║
 ╠════════════════════════════════════════════════════════════╣
-║  {GREEN}[1]{RESET} 👆 Auto Tap (Batch Mode)                     ║
+║  {GREEN}[1]{RESET} 👆 Auto Tap (Batch Mode, 20 taps/req)           ║
 ║  {YELLOW}[2]{RESET} 🎯 Auto Claim (Streak + Spin + Tasks)       ║
 ║  {CYAN}[3]{RESET} 📝 Set InitData                               ║
 ║  {BLUE}[4]{RESET} 📊 Check Balance                              ║
