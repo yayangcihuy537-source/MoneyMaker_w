@@ -1,16 +1,10 @@
 #!/usr/bin/env python3
 """
-╔══════════════════════════════════════════════════════════════════════╗
-║  ███╗   ██╗███████╗██╗    ██╗████████╗██╗   ██╗██████╗ ███████╗    ║
-║  ████╗  ██║██╔════╝██║    ██║╚══██╔══╝██║   ██║██╔══██╗██╔════╝    ║
-║  ██╔██╗ ██║█████╗  ██║ █╗ ██║   ██║   ██║   ██║██████╔╝█████╗      ║
-║  ██║╚██╗██║██╔══╝  ██║███╗██║   ██║   ██║   ██║██╔══██╗██╔══╝      ║
-║  ██║ ╚████║███████╗╚███╔███╔╝   ██║   ╚██████╔╝██████╔╝███████╗    ║
-║  ╚═╝  ╚═══╝╚══════╝ ╚══╝╚══╝    ╚═╝    ╚═════╝ ╚═════╝ ╚══════╝    ║
-║                                                                    ║
-║           🤖 NEWTUBE TON AUTO WATCH ADS 🤖                      ║
-║              AUTO WATCH • AUTO CLAIM • AUTO REWARD             ║
-╚══════════════════════════════════════════════════════════════════════╝
+NEWTUBE TON AUTO WATCH - FIXED v2
+- Tanpa proxy (hapus semua proxy)
+- Handle error daily_limit_reached & invalid_network
+- Random fingerprint & user-agent
+- Skip network error & lanjut ke network berikutnya
 """
 
 import requests
@@ -19,6 +13,7 @@ import random
 import json
 import os
 import sys
+import hashlib
 from datetime import datetime
 
 # ============================================================
@@ -37,8 +32,8 @@ BANNER = f"""
 ║  ██║ ╚████║███████╗╚███╔███╔╝   ██║   ╚██████╔╝██████╔╝███████╗    ║
 ║  ╚═╝  ╚═══╝╚══════╝ ╚══╝╚══╝    ╚═╝    ╚═════╝ ╚═════╝ ╚══════╝    ║
 ║                                                                    ║
-║           {Y}🤖 NEWTUBE TON AUTO WATCH ADS 🤖{X}{CYAN}                      ║
-║              {G}AUTO WATCH • AUTO CLAIM • AUTO REWARD{X}{CYAN}             ║
+║           {Y}🤖 NEWTUBE TON AUTO WATCH (FIXED) 🤖{X}{CYAN}               ║
+║              {G}RANDOM FINGERPRINT • NO PROXY{X}{CYAN}                 ║
 ╚══════════════════════════════════════════════════════════════════════╝{X}
 """
 
@@ -50,7 +45,6 @@ MENU = f"""
 ║  {G}[1] 🚀 Start Auto Watch{X}{CYAN}                  ║
 ║  {Y}[2] 🔑 Set Init Data{X}{CYAN}                    ║
 ║  {B}[3] 💰 Check Balance{X}{CYAN}                    ║
-║                                              ║
 ║  {R}[0] ❌ Exit{X}{CYAN}                                ║
 ╚══════════════════════════════════════════════╝{X}
 """
@@ -60,12 +54,12 @@ MENU = f"""
 # ============================================================
 CONFIG_FILE = "newtube_config.json"
 BASE_URL = "https://newtube-ton.vercel.app"
-NETWORKS = ["adsgramDaily", "adsgramSpecial", "monetag", "giga"]
+# Network yang valid (dari observasi)
+VALID_NETWORKS = ["adsgramDaily", "adsgramSpecial", "monetag", "giga"]
 MIN_DURATION = 18
 MAX_DURATION = 21
-FINGERPRINT = "6b988b3392f1bf292427f2dd31a5bf182e2d506792c36a6cd5fec011135fd8ee"
 
-# Daftar User-Agent untuk rotasi
+# Daftar User-Agent
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
@@ -75,7 +69,6 @@ USER_AGENTS = [
     "Mozilla/5.0 (Linux; Android 13; SM-G998B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
     "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/119.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/119.0",
 ]
 
 # ============================================================
@@ -112,6 +105,11 @@ def random_delay(min_sec=1, max_sec=3):
 def random_ua():
     return random.choice(USER_AGENTS)
 
+def generate_fingerprint():
+    """Generate random fingerprint based on timestamp + random"""
+    raw = f"{time.time()}{random.randint(100000, 999999)}"
+    return hashlib.sha256(raw.encode()).hexdigest()
+
 def safe_json_response(resp):
     try:
         return resp.json()
@@ -128,6 +126,8 @@ class NewTubeBot:
     def __init__(self, init_data=None):
         self.init_data = init_data
         self.session = requests.Session()
+        # Generate fingerprint acak setiap instance
+        self.fingerprint = generate_fingerprint()
         self._update_headers()
 
     def _update_headers(self):
@@ -138,8 +138,8 @@ class NewTubeBot:
             "Accept-Language": "id,id-ID;q=0.9,en-US;q=0.8,en;q=0.7",
             "Accept-Encoding": "gzip, deflate, br, zstd",
             "X-Requested-With": "org.telegram.messenger.web",
-            "Origin": "https://newtube-ton.vercel.app",
-            "Referer": "https://newtube-ton.vercel.app/",
+            "Origin": BASE_URL,
+            "Referer": f"{BASE_URL}/",
             "Content-Type": "application/json",
             "Sec-Fetch-Site": "same-origin",
             "Sec-Fetch-Mode": "cors",
@@ -147,26 +147,41 @@ class NewTubeBot:
             "Sec-Ch-Ua": f'"Not;A=Brand";v="8", "Chromium";v="{random.randint(100,120)}", "Android WebView";v="{random.randint(100,120)}"',
             "Sec-Ch-Ua-Mobile": "?1",
             "Sec-Ch-Ua-Platform": '"Android"',
-            # X-Forwarded-For (hanya tipuan, tidak mengubah IP asli)
-            "X-Forwarded-For": f"{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}"
         })
 
     def _request(self, method, endpoint, data=None, params=None):
-        # Rotasi User-Agent setiap request
         self._update_headers()
         url = f"{BASE_URL}{endpoint}"
-        if method.upper() == "GET":
-            resp = self.session.get(url, params=params, timeout=15)
-        else:
-            resp = self.session.post(url, json=data, timeout=15)
-        if resp.status_code != 200:
-            raise Exception(f"HTTP {resp.status_code}: {resp.text[:200]}")
-        return safe_json_response(resp)
+        try:
+            if method.upper() == "GET":
+                resp = self.session.get(url, params=params, timeout=15)
+            else:
+                resp = self.session.post(url, json=data, timeout=15)
+            
+            # Handle 409 (conflict) - user already exists with different fingerprint/ip
+            if resp.status_code == 409:
+                # Coba parse error, jika "ip_in_use", kita anggap user sudah ada
+                try:
+                    err = resp.json()
+                    if err.get("error") == "ip_in_use":
+                        print(f"{Y}⚠️ IP/fingerprint sudah terdaftar, tetapi user mungkin sudah ada.{RESET}")
+                        # Return response yang menandakan sudah ada
+                        return {"ok": True, "alreadyExists": True}
+                except:
+                    pass
+                # Jika tidak bisa parse, tetap raise
+                raise Exception(f"HTTP 409: {resp.text[:200]}")
+            
+            if resp.status_code != 200:
+                raise Exception(f"HTTP {resp.status_code}: {resp.text[:200]}")
+            return safe_json_response(resp)
+        except Exception as e:
+            raise Exception(f"Request failed: {e}")
 
     def init_user(self):
         payload = {
             "action": "init",
-            "fingerprint": FINGERPRINT,
+            "fingerprint": self.fingerprint,
             "initData": self.init_data
         }
         return self._request("POST", "/api/user", data=payload)
@@ -197,10 +212,10 @@ class NewTubeBot:
         return self._request("POST", "/api/earn", data=payload)
 
     def watch_all(self):
-        print(f"{C}🔐 Initializing...{X}")
+        print(f"{C}🔐 Initializing with fingerprint: {self.fingerprint[:16]}...{X}")
         try:
             init_resp = self.init_user()
-            if init_resp.get("alreadyExists"):
+            if init_resp.get("alreadyExists") or init_resp.get("ok") and init_resp.get("alreadyExists"):
                 print(f"{G}✅ User already exists, lanjut...{X}")
             else:
                 print(f"{G}✅ Init successful{X}")
@@ -220,7 +235,7 @@ class NewTubeBot:
         except Exception as e:
             print(f"{Y}⚠️ Failed to get profile: {e}{X}")
 
-        for network in NETWORKS:
+        for network in VALID_NETWORKS:
             print(f"\n{CYAN}=== Processing {network} ==={X}")
             attempts = 0
             while True:
@@ -229,11 +244,17 @@ class NewTubeBot:
                     start_resp = self.ad_start(network)
                     if not start_resp.get("ok"):
                         msg = start_resp.get("message", "")
-                        if "limit" in msg.lower() or "daily" in msg.lower():
+                        error = start_resp.get("error", "")
+                        # Deteksi error spesifik
+                        if "daily_limit_reached" in error or "limit" in msg.lower():
                             print(f"{Y}⚠️ Daily limit reached for {network}{X}")
+                            break
+                        elif "invalid_network" in error:
+                            print(f"{Y}⚠️ Invalid network: {network} (skip){X}")
+                            break
                         else:
                             print(f"{Y}⚠️ Start failed: {start_resp}{X}")
-                        break
+                            break
                     start_time = start_resp.get("startTime")
                     signature = start_resp.get("signature")
                     if not start_time or not signature:
@@ -264,14 +285,31 @@ class NewTubeBot:
                             print(f"{Y}⚠️ Daily limit reached for {network}{X}")
                             break
                     else:
-                        print(f"{R}❌ Claim failed: {claim_resp}{X}")
-                        break
+                        error = claim_resp.get("error", "")
+                        msg = claim_resp.get("message", "")
+                        if "daily_limit_reached" in error or "limit" in msg.lower():
+                            print(f"{Y}⚠️ Daily limit reached for {network}{X}")
+                            break
+                        elif "invalid_network" in error:
+                            print(f"{Y}⚠️ Invalid network: {network} (skip){X}")
+                            break
+                        else:
+                            print(f"{R}❌ Claim failed: {claim_resp}{X}")
+                            break
 
                 except Exception as e:
-                    print(f"{R}❌ Error: {e}{X}")
-                    break
+                    err_str = str(e)
+                    if "daily_limit_reached" in err_str:
+                        print(f"{Y}⚠️ Daily limit reached for {network}{X}")
+                        break
+                    elif "invalid_network" in err_str:
+                        print(f"{Y}⚠️ Invalid network: {network} (skip){X}")
+                        break
+                    else:
+                        print(f"{R}❌ Error: {e}{X}")
+                        break
 
-                # Random delay antar request agar tidak terlalu cepat
+                # Random delay antar request
                 random_delay(2, 5)
 
         print(f"\n{G}✅ Selesai memproses semua network!{X}")
@@ -295,9 +333,10 @@ def set_init_data():
     save_config(config)
     if bot:
         bot.init_data = init_data
+        bot.fingerprint = generate_fingerprint()
     else:
         bot = NewTubeBot(init_data=init_data)
-    print(f"{G}✅ Init data disimpan!{X}")
+    print(f"{G}✅ Init data disimpan! Fingerprint baru dibuat.{X}")
     time.sleep(1.5)
 
 def start_auto_watch():
@@ -344,7 +383,7 @@ def main():
         init_data = config.get("init_data")
         if init_data:
             bot = NewTubeBot(init_data=init_data)
-            print(f"{G}🔑 Config ditemukan, init_data siap.{X}")
+            print(f"{G}🔑 Config ditemukan, init_data siap. Fingerprint: {bot.fingerprint[:16]}...{X}")
             time.sleep(1)
         else:
             bot = None
@@ -357,6 +396,8 @@ def main():
         print(MENU)
         status = "🟢 Siap" if bot and bot.init_data else "🔴 Belum set init_data"
         print(f"{DIM}Status: {status}{X}")
+        if bot:
+            print(f"{DIM}Fingerprint: {bot.fingerprint[:16]}...{X}")
 
         choice = input(f"\n{CYAN}Pilih Menu » {X}").strip()
 
