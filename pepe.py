@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-TRIPLE-BOT PARALLEL (PepeFlow + Coinszon + MiniGramX)
+TRIPLE-BOT PARALLEL (PepeFlow + Coinszon + MiniGramX) - FIXED
 - Cek semua bot secara parallel
 - Mainkan game dari bot yang ready
 - Live logs update tanpa refresh berlebihan
+- Error handling lebih baik
 """
 
 import os, sys, time, json, random, re, requests, urllib.parse
@@ -137,6 +138,7 @@ class BaseBot:
         self.retry_doubled = {g: True for g in game_list}
         self.daily_claimed = False
         self.game_index = 0
+        self.last_display = ""
 
     def fmt(self, sec):
         if sec <= 0: return "Ready"
@@ -268,8 +270,11 @@ class BaseBot:
         return None
 
     def has_ready_games(self):
-        self.get_games_status()
-        return any(cd <= 0 for cd in self.cooldowns.values())
+        try:
+            self.get_games_status()
+            return any(cd <= 0 for cd in self.cooldowns.values())
+        except:
+            return False
 
     # ---------- Play ----------
     def play_game(self, game, doubled=False, base_reward=None, pick=None, quiz_token=None, answer_index=None):
@@ -324,28 +329,33 @@ class BaseBot:
 
     # ---------- Display ----------
     def display_dashboard(self):
-        self.get_games_status()
-        print(f"{GOLD}╔══════════════════════════════════════════════════════════╗")
-        print(f"{GOLD}║{RESET}  {C}{self.name.upper()}{RESET}                                    {GOLD}║")
-        print(f"{GOLD}╠══════════════════════════════════════════════════════════╣")
-        print(f"{GOLD}║{RESET}  Loop : {C}{self.loop_counter}{RESET}        Balance : {G}{self.balance:.8f}{RESET}   {GOLD}║")
-        print(f"{GOLD}╠══════════════════════════════════════════════════════════╣")
-        for g in self.game_list:
-            icon = self.game_map[g]['icon']; disp = self.game_map[g]['display']
-            st = self.status[g]
-            twox = "2X" if self.doubled_available.get(g, False) and self.retry_doubled.get(g, True) else "-"
-            ply = self.play_counts[g]
-            rwd = self.rewards[g]
-            cd = self.fmt(self.cooldowns[g])
-            sc = G if st == "Ready" else Y
-            reward_str = f"{rwd:.8f}" if rwd < 0.001 else f"{rwd:.2f}"
-            line = f"{GOLD}║{RESET}  {icon} {disp:<6} {sc}{st:<8}{RESET}  {twox:<5} {ply:<5} {reward_str:<12} {cd:<6}{GOLD}║"
-            print(line)
-        print(f"{GOLD}╠══════════════════════════════════════════════════════════╣")
-        for log in list(self.logs)[-6:]:
-            log_clean = log[:48] if len(log) > 48 else log
-            print(f"{GOLD}║{RESET}  {log_clean}{' '*(50-len(log_clean))} {GOLD}║")
-        print(f"{GOLD}╚══════════════════════════════════════════════════════════╝")
+        try:
+            self.get_games_status()
+            lines = []
+            lines.append(f"{GOLD}╔══════════════════════════════════════════════════════════╗")
+            lines.append(f"{GOLD}║{RESET}  {C}{self.name.upper()}{RESET}                                    {GOLD}║")
+            lines.append(f"{GOLD}╠══════════════════════════════════════════════════════════╣")
+            lines.append(f"{GOLD}║{RESET}  Loop : {C}{self.loop_counter}{RESET}        Balance : {G}{self.balance:.8f}{RESET}   {GOLD}║")
+            lines.append(f"{GOLD}╠══════════════════════════════════════════════════════════╣")
+            for g in self.game_list:
+                icon = self.game_map[g]['icon']; disp = self.game_map[g]['display']
+                st = self.status[g]
+                twox = "2X" if self.doubled_available.get(g, False) and self.retry_doubled.get(g, True) else "-"
+                ply = self.play_counts[g]
+                rwd = self.rewards[g]
+                cd = self.fmt(self.cooldowns[g])
+                sc = G if st == "Ready" else Y
+                reward_str = f"{rwd:.8f}" if rwd < 0.001 else f"{rwd:.2f}"
+                line = f"{GOLD}║{RESET}  {icon} {disp:<6} {sc}{st:<8}{RESET}  {twox:<5} {ply:<5} {reward_str:<12} {cd:<6}{GOLD}║"
+                lines.append(line)
+            lines.append(f"{GOLD}╠══════════════════════════════════════════════════════════╣")
+            for log in list(self.logs)[-6:]:
+                log_clean = log[:48] if len(log) > 48 else log
+                lines.append(f"{GOLD}║{RESET}  {log_clean}{' '*(50-len(log_clean))} {GOLD}║")
+            lines.append(f"{GOLD}╚══════════════════════════════════════════════════════════╝")
+            return "\n".join(lines)
+        except Exception as e:
+            return f"{R}❌ Error display: {e}{RESET}"
 
     def process_one_game(self):
         """Mainkan satu game yang ready"""
@@ -476,29 +486,45 @@ class MiniBot(BaseBot):
 
 # ========== PARALLEL LOOP ==========
 def parallel_loop(bots):
+    # Claim daily untuk semua
+    print(f"{C}📅 Claiming daily bonuses...{RESET}")
+    for bot in bots:
+        bot.claim_daily()
+    
+    # Loop utama
+    last_display = ""
     while all(b.running for b in bots):
         any_played = False
         for bot in bots:
-            if bot.has_ready_games() and bot.running:
-                os.system('clear')
-                for b in bots:
-                    b.display_dashboard()
-                    print()
-                print(f"{C}▶️ {bot.name} ada game ready, mainkan...{RESET}")
-                bot.process_one_game()
-                any_played = True
-                time.sleep(0.5)
+            try:
+                if bot.has_ready_games() and bot.running:
+                    # Display hanya jika ada perubahan
+                    current_display = "\n".join([b.display_dashboard() for b in bots])
+                    if current_display != last_display:
+                        os.system('clear')
+                        print(current_display)
+                        last_display = current_display
+                    print(f"{C}▶️ {bot.name} ada game ready, mainkan...{RESET}")
+                    bot.process_one_game()
+                    any_played = True
+                    time.sleep(0.5)
+            except Exception as e:
+                print(f"{R}❌ Error pada {bot.name}: {e}{RESET}")
+                bot.running = False
         
         if not any_played:
+            # Cek cooldown terkecil
             all_cds = []
             for bot in bots:
                 all_cds.extend([cd for cd in bot.cooldowns.values() if cd > 0])
             if all_cds:
                 min_cd = min(all_cds)
-                os.system('clear')
-                for b in bots:
-                    b.display_dashboard()
-                    print()
+                # Display hanya jika ada perubahan
+                current_display = "\n".join([b.display_dashboard() for b in bots])
+                if current_display != last_display:
+                    os.system('clear')
+                    print(current_display)
+                    last_display = current_display
                 print(f"{Y}⏳ Semua bot cooldown. Menunggu {min_cd} detik...{RESET}")
                 # Tunggu 5 detik lalu re-check
                 time.sleep(5)
@@ -547,12 +573,12 @@ def main():
             if not mcfg.load() or not mcfg.phpsessid:
                 print(f"{R}❌ MiniGramX belum disetup{RESET}"); input("Enter..."); continue
             pbot = PepeBot(pcfg); cbot = CoinBot(ccfg); mbot = MiniBot(mcfg)
-            print(f"{C}📅 Claiming daily bonuses...{RESET}")
-            pbot.claim_daily(); cbot.claim_daily(); mbot.claim_daily()
             try:
                 parallel_loop([pbot, cbot, mbot])
             except KeyboardInterrupt:
-                pass
+                print(f"\n{Y}⏹ Dihentikan user{RESET}")
+            except Exception as e:
+                print(f"{R}❌ Error: {e}{RESET}")
             input("Enter...")
         elif choice == '2':
             cfg = BaseConfig(PEPE_CONFIG)
@@ -564,13 +590,13 @@ def main():
                 while bot.running:
                     if bot.has_ready_games():
                         os.system('clear')
-                        bot.display_dashboard()
+                        print(bot.display_dashboard())
                         bot.process_one_game()
                     else:
                         cds = [cd for cd in bot.cooldowns.values() if cd > 0]
                         if cds:
                             os.system('clear')
-                            bot.display_dashboard()
+                            print(bot.display_dashboard())
                             print(f"{Y}⏳ {bot.name} cooldown, tunggu {min(cds)} detik...{RESET}")
                             time.sleep(5)
                         else:
@@ -588,13 +614,13 @@ def main():
                 while bot.running:
                     if bot.has_ready_games():
                         os.system('clear')
-                        bot.display_dashboard()
+                        print(bot.display_dashboard())
                         bot.process_one_game()
                     else:
                         cds = [cd for cd in bot.cooldowns.values() if cd > 0]
                         if cds:
                             os.system('clear')
-                            bot.display_dashboard()
+                            print(bot.display_dashboard())
                             print(f"{Y}⏳ {bot.name} cooldown, tunggu {min(cds)} detik...{RESET}")
                             time.sleep(5)
                         else:
@@ -612,13 +638,13 @@ def main():
                 while bot.running:
                     if bot.has_ready_games():
                         os.system('clear')
-                        bot.display_dashboard()
+                        print(bot.display_dashboard())
                         bot.process_one_game()
                     else:
                         cds = [cd for cd in bot.cooldowns.values() if cd > 0]
                         if cds:
                             os.system('clear')
-                            bot.display_dashboard()
+                            print(bot.display_dashboard())
                             print(f"{Y}⏳ {bot.name} cooldown, tunggu {min(cds)} detik...{RESET}")
                             time.sleep(5)
                         else:
@@ -641,4 +667,3 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print(f"\n{R}👋 Keluar.{RESET}")
         sys.exit(0)
-
