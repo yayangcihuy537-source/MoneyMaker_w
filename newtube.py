@@ -19,6 +19,7 @@ import random
 import json
 import os
 import sys
+from datetime import datetime
 
 # ============================================================
 # WARNA
@@ -64,6 +65,19 @@ MIN_DURATION = 18
 MAX_DURATION = 21
 FINGERPRINT = "6b988b3392f1bf292427f2dd31a5bf182e2d506792c36a6cd5fec011135fd8ee"
 
+# Daftar User-Agent untuk rotasi
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (Linux; Android 13; SM-G998B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/119.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/119.0",
+]
+
 # ============================================================
 # FUNGSI UTILITY
 # ============================================================
@@ -95,6 +109,9 @@ def progress_bar(current, total, bar_len=20, fill='█', empty='░'):
 def random_delay(min_sec=1, max_sec=3):
     time.sleep(random.uniform(min_sec, max_sec))
 
+def random_ua():
+    return random.choice(USER_AGENTS)
+
 def safe_json_response(resp):
     try:
         return resp.json()
@@ -111,8 +128,12 @@ class NewTubeBot:
     def __init__(self, init_data=None):
         self.init_data = init_data
         self.session = requests.Session()
+        self._update_headers()
+
+    def _update_headers(self):
+        ua = random_ua()
         self.session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.181 Mobile Safari/537.36 Telegram-Android/12.9.1 (Samsung SM-A556E; Android 16; SDK 36; HIGH)",
+            "User-Agent": ua,
             "Accept": "application/json",
             "Accept-Language": "id,id-ID;q=0.9,en-US;q=0.8,en;q=0.7",
             "Accept-Encoding": "gzip, deflate, br, zstd",
@@ -123,12 +144,16 @@ class NewTubeBot:
             "Sec-Fetch-Site": "same-origin",
             "Sec-Fetch-Mode": "cors",
             "Sec-Fetch-Dest": "empty",
-            "Sec-Ch-Ua": '"Not;A=Brand";v="8", "Chromium";v="150", "Android WebView";v="150"',
+            "Sec-Ch-Ua": f'"Not;A=Brand";v="8", "Chromium";v="{random.randint(100,120)}", "Android WebView";v="{random.randint(100,120)}"',
             "Sec-Ch-Ua-Mobile": "?1",
             "Sec-Ch-Ua-Platform": '"Android"',
+            # X-Forwarded-For (hanya tipuan, tidak mengubah IP asli)
+            "X-Forwarded-For": f"{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}"
         })
 
     def _request(self, method, endpoint, data=None, params=None):
+        # Rotasi User-Agent setiap request
+        self._update_headers()
         url = f"{BASE_URL}{endpoint}"
         if method.upper() == "GET":
             resp = self.session.get(url, params=params, timeout=15)
@@ -191,6 +216,7 @@ class NewTubeBot:
             print(f"{G}💰 WTC Balance: {user.get('wtcBalance', 0)}{X}")
             print(f"{G}📈 Lifetime Earned: {user.get('lifetimeWtcEarned', 0)}{X}")
             print(f"{G}📺 Ads Watched Today: {user.get('adsWatchedToday', 0)}{X}")
+            print(f"{G}📊 Lifetime Ads: {user.get('lifetimeAdsWatched', 0)}{X}")
         except Exception as e:
             print(f"{Y}⚠️ Failed to get profile: {e}{X}")
 
@@ -245,7 +271,8 @@ class NewTubeBot:
                     print(f"{R}❌ Error: {e}{X}")
                     break
 
-                random_delay(1, 3)
+                # Random delay antar request agar tidak terlalu cepat
+                random_delay(2, 5)
 
         print(f"\n{G}✅ Selesai memproses semua network!{X}")
 
