@@ -19,18 +19,13 @@ import random
 import json
 import os
 import sys
-import re
-from datetime import datetime
 
 # ============================================================
 # WARNA
 # ============================================================
 R, G, Y, B, M, C, W, X = '\033[91m', '\033[92m', '\033[93m', '\033[94m', '\033[95m', '\033[96m', '\033[97m', '\033[0m'
 CYAN = '\033[1;96m'
-PINK = '\033[38;5;206m'
 DIM = '\033[2;37m'
-P = PINK
-RS = X
 
 BANNER = f"""
 {CYAN}╔══════════════════════════════════════════════════════════════════════╗
@@ -91,13 +86,6 @@ def clear_screen():
 def print_header():
     print(BANNER)
 
-def print_watch_banner(network, count, total):
-    print(f"\n{CYAN}╔══════════════════════════════════════════════╗")
-    print(f"║              {Y}📺 WATCHING ADS 📺{X}{CYAN}              ║")
-    print(f"║         {C}Network: {G}{network}{X}{CYAN}                 ║")
-    print(f"║         {C}Progress: {G}{count}/{total}{X}{CYAN}                 ║")
-    print(f"╚══════════════════════════════════════════════╝{X}\n")
-
 def progress_bar(current, total, bar_len=20, fill='█', empty='░'):
     pct = current / total
     filled_len = int(bar_len * pct)
@@ -108,19 +96,13 @@ def random_delay(min_sec=1, max_sec=3):
     time.sleep(random.uniform(min_sec, max_sec))
 
 def safe_json_response(resp):
-    """Mengatasi BOM dan encoding issue pada response"""
     try:
-        # Coba langsung parse JSON
         return resp.json()
-    except Exception as e:
-        # Jika gagal, ambil text dan strip BOM
+    except:
         text = resp.text
         if text.startswith('\ufeff'):
             text = text[1:]
-        try:
-            return json.loads(text)
-        except:
-            raise e
+        return json.loads(text)
 
 # ============================================================
 # CLASS NewTubeBot
@@ -129,8 +111,8 @@ class NewTubeBot:
     def __init__(self, init_data=None):
         self.init_data = init_data
         self.session = requests.Session()
-        self.headers = {
-            "User-Agent": "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.181 Mobile Safari/537.36 Telegram-Android/12.6.4 (Samsung SM-A556E; Android 16; SDK 36; HIGH)",
+        self.session.headers.update({
+            "User-Agent": "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.181 Mobile Safari/537.36 Telegram-Android/12.9.1 (Samsung SM-A556E; Android 16; SDK 36; HIGH)",
             "Accept": "application/json",
             "Accept-Language": "id,id-ID;q=0.9,en-US;q=0.8,en;q=0.7",
             "Accept-Encoding": "gzip, deflate, br, zstd",
@@ -144,8 +126,7 @@ class NewTubeBot:
             "Sec-Ch-Ua": '"Not;A=Brand";v="8", "Chromium";v="150", "Android WebView";v="150"',
             "Sec-Ch-Ua-Mobile": "?1",
             "Sec-Ch-Ua-Platform": '"Android"',
-        }
-        self.session.headers.update(self.headers)
+        })
 
     def _request(self, method, endpoint, data=None, params=None):
         url = f"{BASE_URL}{endpoint}"
@@ -154,7 +135,7 @@ class NewTubeBot:
         else:
             resp = self.session.post(url, json=data, timeout=15)
         if resp.status_code != 200:
-            raise Exception(f"HTTP {resp.status_code}: {resp.text}")
+            raise Exception(f"HTTP {resp.status_code}: {resp.text[:200]}")
         return safe_json_response(resp)
 
     def init_user(self):
@@ -194,7 +175,10 @@ class NewTubeBot:
         print(f"{C}🔐 Initializing...{X}")
         try:
             init_resp = self.init_user()
-            print(f"{G}✅ Init successful{X}")
+            if init_resp.get("alreadyExists"):
+                print(f"{G}✅ User already exists, lanjut...{X}")
+            else:
+                print(f"{G}✅ Init successful{X}")
         except Exception as e:
             print(f"{R}❌ Init failed: {e}{X}")
             return
@@ -203,14 +187,12 @@ class NewTubeBot:
         try:
             profile = self.get_profile()
             user = profile.get("user", {})
-            wtc = user.get("wtcBalance", 0)
-            lifetime = user.get("lifetimeWtcEarned", 0)
             print(f"{G}👤 User: {user.get('telegramUsername', 'N/A')}{X}")
-            print(f"{G}💰 WTC Balance: {wtc}{X}")
-            print(f"{G}📈 Lifetime Earned: {lifetime}{X}")
+            print(f"{G}💰 WTC Balance: {user.get('wtcBalance', 0)}{X}")
+            print(f"{G}📈 Lifetime Earned: {user.get('lifetimeWtcEarned', 0)}{X}")
+            print(f"{G}📺 Ads Watched Today: {user.get('adsWatchedToday', 0)}{X}")
         except Exception as e:
             print(f"{Y}⚠️ Failed to get profile: {e}{X}")
-            print(f"{Y}⚠️ Continuing anyway...{X}")
 
         for network in NETWORKS:
             print(f"\n{CYAN}=== Processing {network} ==={X}")
@@ -220,7 +202,11 @@ class NewTubeBot:
                 try:
                     start_resp = self.ad_start(network)
                     if not start_resp.get("ok"):
-                        print(f"{Y}⚠️ Start failed: {start_resp}{X}")
+                        msg = start_resp.get("message", "")
+                        if "limit" in msg.lower() or "daily" in msg.lower():
+                            print(f"{Y}⚠️ Daily limit reached for {network}{X}")
+                        else:
+                            print(f"{Y}⚠️ Start failed: {start_resp}{X}")
                         break
                     start_time = start_resp.get("startTime")
                     signature = start_resp.get("signature")
@@ -229,8 +215,11 @@ class NewTubeBot:
                         break
 
                     duration = random.randint(MIN_DURATION, MAX_DURATION)
-                    print_watch_banner(network, attempts, "∞")
-
+                    print(f"\n{CYAN}╔══════════════════════════════════════════════╗")
+                    print(f"║              {Y}📺 WATCHING ADS 📺{X}{CYAN}              ║")
+                    print(f"║         {C}Network: {G}{network}{X}{CYAN}                 ║")
+                    print(f"║         {C}Attempt: {G}{attempts}{X}{CYAN}                 ║")
+                    print(f"╚══════════════════════════════════════════════╝{X}\n")
                     print(f"{C}⏳ Watching for {duration}s...{X}")
                     for sec in range(duration):
                         time.sleep(1)
@@ -258,7 +247,7 @@ class NewTubeBot:
 
                 random_delay(1, 3)
 
-        print(f"\n{G}✅ All networks processed!{X}")
+        print(f"\n{G}✅ Selesai memproses semua network!{X}")
 
 # ============================================================
 # FUNGSI MENU
