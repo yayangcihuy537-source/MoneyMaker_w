@@ -1,299 +1,373 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-🍓 Fruit Cut Bot — ONLY ADS (Forever, Stop on Error/403)
-- Auto Watch Ads tanpa batas, loop bergantian network
-- Stop jika request/claim gagal atau 403
-- Log hijau jelas
+GRAM DROP - AUTO ADS ONLY
+- Auto watch ads (earn + monetag) sampai limit harian
+- Clean progress bar
+- Auto detect daily limit & cooldown
+- Kembali ke menu setelah semua iklan selesai
 """
 
-import requests
-import time
-import json
-import sys
-import os
-import urllib.parse
+import os, sys, time, json, random, uuid, requests, urllib.parse
+from datetime import datetime
 
-# ─── COLOR ─────────────────────────────────────────────────
-try:
-    from colorama import init, Fore, Style
-    init(autoreset=True)
-    C = Fore
-    S = Style
-except ImportError:
-    class C:
-        GREEN = '\033[92m'; YELLOW = '\033[93m'; RED = '\033[91m'
-        CYAN = '\033[96m'; MAGENTA = '\033[95m'; WHITE = '\033[97m'
-        BLUE = '\033[94m'; RESET = '\033[0m'
-    class S:
-        BRIGHT = '\033[1m'; RESET = '\033[0m'
+# ============================================================
+# WARNA
+# ============================================================
+C = '\033[96m'
+LC = '\033[1;96m'
+Y = '\033[93m'
+G = '\033[92m'
+R = '\033[91m'
+B = '\033[94m'
+W = '\033[97m'
+BLD = '\033[1m'
+RS = '\033[0m'
+DIM = '\033[2m'
 
-BASE_URL = "https://fruit-cut-eight.vercel.app"
-INIT_DATA = ""
-INIT_FILE = "init_data.txt"
-
-# ─── BANNER ────────────────────────────────────────────────
+# ============================================================
+# BANNER
+# ============================================================
 BANNER = f"""
-{C.YELLOW}╔══════════════════════════════════════════════════════════════╗
-║                 🍓  F R U I T   A D S   B O T              ║
-║              🔥 Auto Ads Forever — Stop on Error           ║
-╚══════════════════════════════════════════════════════════════╝{C.RESET}
+{C}╔══════════════════════════════════════════════════════════╗
+║   ██████╗ ██████╗  █████╗ ███╗   ███╗██████╗ ██████╗   ║
+║  ██╔════╝ ██╔══██╗██╔══██╗████╗ ████║██╔══██╗██╔══██╗  ║
+║  ██║  ███╗██████╔╝███████║██╔████╔██║██████╔╝██████╔╝  ║
+║  ██║   ██║██╔══██╗██╔══██║██║╚██╔╝██║██╔═══╝ ██╔══██╗  ║
+║  ╚██████╔╝██║  ██║██║  ██║██║ ╚═╝ ██║██║     ██║  ██║  ║
+║   ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝     ╚═╝  ╚═╝  ║
+╠══════════════════════════════════════════════════════════╣
+║                 {Y}☁️  GRAM DROP ☁️{RS}{C}                    ║
+║              {LC}AUTO ADS (NO GAMES){RS}{C}                 ║
+╚══════════════════════════════════════════════════════════╝{RS}
 """
 
-def clear():
-    os.system('cls' if os.name == 'nt' else 'clear')
+MENU = f"""
+{C}╔══════════════════════════════════════════════╗
+║              {Y}☁️ GRAM DROP ☁️{RS}{C}               ║
+║          {LC}AUTO WATCH ADS{RS}{C}                 ║
+╠══════════════════════════════════════════════╣
+║  {G}[1] 📺 Watch Ads (auto detect){RS}{C}           ║
+║  {Y}[2] 🔑 Set Init Data{RS}{C}                   ║
+║  {B}[3] 💰 Check Balance{RS}{C}                   ║
+║                                              ║
+║  {R}[0] ❌ Exit{RS}{C}                                ║
+╚══════════════════════════════════════════════╝{RS}
+"""
 
-def box(title, width=54):
-    print(f"{C.CYAN}╔{'═'*(width-2)}╗{C.RESET}")
-    print(f"{C.CYAN}║{title.center(width-2)}║{C.RESET}")
-    print(f"{C.CYAN}╠{'═'*(width-2)}╣{C.RESET}")
+CONFIG_FILE = "gramdrop_config.json"
+BASE_URL = "https://modapkam.shop"
 
-def box_end(width=54):
-    print(f"{C.CYAN}╚{'═'*(width-2)}╝{C.RESET}")
+ADS_NETWORKS = ["earn", "monetag"]
 
-def progress_bar(seconds, total, label="", width=20):
-    filled = int(round(width * seconds / total))
-    bar = '█' * filled + '░' * (width - filled)
-    return f"{label} [{C.GREEN}{bar}{C.RESET}] {seconds}/{total}s"
-
-def extract_telegram_id(init_data):
-    if not init_data: return None
-    parsed = urllib.parse.parse_qs(init_data)
-    user_str = parsed.get('user', [None])[0]
-    if user_str:
+# ============================================================
+# FUNGSI CONFIG
+# ============================================================
+def load_config():
+    if os.path.exists(CONFIG_FILE):
         try:
-            user_json = json.loads(urllib.parse.unquote(user_str))
-            return str(user_json.get('id'))
-        except: pass
+            with open(CONFIG_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            return None
     return None
 
-# ─── BOT CLASS ─────────────────────────────────────────────
-class FruitCutBot:
-    def __init__(self, init_data):
-        self.init_data = init_data
-        self.session = requests.Session()
-        self.session.headers.update({
-            "Content-Type": "application/json",
-            "x-telegram-init-data": init_data,
-            "User-Agent": "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36"
-        })
-        self.gold = 0
-        self.fruit_coin = 0
-        self.stage = 1
-        self.telegram_id = extract_telegram_id(init_data) or "6894031790"
+def save_config(data):
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(data, f, indent=4)
 
-    def log(self, msg, color=C.WHITE, end="\n"):
-        print(f"{color}{msg}{C.RESET}", end=end)
+# ============================================================
+# FUNGSI SET DATA
+# ============================================================
+def set_init_data():
+    global INIT_DATA, DEVICE_ID, HEADERS
+    os.system('cls' if os.name == 'nt' else 'clear')
+    print(BANNER)
+    print(f"\n{Y}🔑 SET INIT DATA{RS}")
+    print(f"{C}{'='*50}{RS}")
+    init_data = input(f"{LC}X-Telegram-Initdata (wajib): {RS}").strip()
+    if not init_data:
+        print(f"{R}❌ Init data tidak boleh kosong!{RS}")
+        time.sleep(2)
+        return False
 
-    def api(self, endpoint, data=None, retries=2):
-        url = f"{BASE_URL}{endpoint}"
-        for attempt in range(retries):
+    old_config = load_config() or {}
+    device_id = old_config.get("device_id")
+    if not device_id:
+        device_id = str(uuid.uuid4())[:22].replace('-', '')
+    
+    config = {
+        "init_data": init_data,
+        "device_id": device_id
+    }
+    save_config(config)
+    INIT_DATA = init_data
+    DEVICE_ID = device_id
+    HEADERS = build_headers(init_data, device_id)
+    print(f"{G}✅ Config disimpan!{RS}")
+    time.sleep(1.5)
+    return True
+
+def build_headers(init_data, device_id):
+    return {
+        "User-Agent": "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.181 Mobile Safari/537.36 Telegram-Android/12.9.1 (Samsung SM-A556E; Android 16; SDK 36; HIGH)",
+        "Accept": "*/*",
+        "Accept-Language": "id,id-ID;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "X-Requested-With": "org.telegram.messenger.web",
+        "Sec-Fetch-Site": "same-origin",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Dest": "empty",
+        "Origin": "https://modapkam.shop",
+        "Referer": "https://modapkam.shop/",
+        "Content-Type": "application/json",
+        "Sec-Ch-Ua": '"Not;A=Brand";v="8", "Chromium";v="150", "Android WebView";v="150"',
+        "Sec-Ch-Ua-Mobile": "?1",
+        "Sec-Ch-Ua-Platform": '"Android"',
+        "X-Device-Id": device_id,
+        "X-Telegram-Initdata": init_data,
+    }
+
+# ============================================================
+# FUNGSI REQUEST
+# ============================================================
+def make_request(method, endpoint, payload=None):
+    url = f"{BASE_URL}{endpoint}"
+    try:
+        if method.upper() == "GET":
+            resp = requests.get(url, headers=HEADERS, timeout=15)
+        else:
+            resp = requests.post(url, json=payload, headers=HEADERS, timeout=15)
+        if resp.status_code == 429:
             try:
-                resp = self.session.post(url, json=data or {}, timeout=10)
-                if resp.status_code == 403:
-                    self.log(f"🚫 403 Forbidden — Hentikan bot.", C.RED)
-                    sys.exit(1)
-                resp.raise_for_status()
-                return resp.json()
-            except requests.exceptions.HTTPError as e:
-                if resp.status_code == 403:
-                    self.log(f"🚫 403 Forbidden — Hentikan bot.", C.RED)
-                    sys.exit(1)
-                if attempt < retries - 1:
-                    self.log(f"⚠️ HTTP error, coba ulang {attempt+1}/{retries}...", C.YELLOW)
-                    time.sleep(2)
+                err = resp.json()
+                wait = err.get('waitSecs', 5)
+                print(f"{Y}⏳ Cooldown {wait}s, waiting...{RS}")
+                time.sleep(wait)
+                # Retry once
+                if method.upper() == "GET":
+                    resp = requests.get(url, headers=HEADERS, timeout=15)
                 else:
-                    self.log(f"❌ HTTP Error: {e}", C.RED)
+                    resp = requests.post(url, json=payload, headers=HEADERS, timeout=15)
+            except:
+                pass
+        if resp.status_code != 200:
+            # Check if it's daily limit error
+            try:
+                err = resp.json()
+                if "daily_limit" in str(err).lower() or "limit reached" in str(err).lower():
+                    print(f"{Y}⚠️ Daily limit reached{RS}")
                     return None
-            except Exception as e:
-                if attempt < retries - 1:
-                    time.sleep(2)
-                else:
-                    self.log(f"❌ API Error: {e}", C.RED)
-                    return None
+            except:
+                pass
+            print(f"{R}❌ HTTP {resp.status_code}: {resp.text[:200]}{RS}")
+            return None
+        return resp.json()
+    except Exception as e:
+        print(f"{R}❌ Request error: {e}{RS}")
         return None
 
-    def login(self):
-        self.log("🔐 Login...", C.CYAN)
-        if not self.init_data: return False
-        res = self.api("/api/init", {"syncOnly": True})
-        if res and res.get("success"):
-            u = res.get("user", {})
-            self.gold = u.get("gold", 0)
-            self.fruit_coin = u.get("fruitCoin", 0)
-            self.stage = u.get("stage", 1)
-            if u.get("telegramId"):
-                self.telegram_id = str(u["telegramId"])
-            return True
+def get_profile():
+    return make_request("GET", "/api/me")
+
+# ============================================================
+# FUNGSI ADS
+# ============================================================
+def watch_ad(purpose):
+    """Watch single ad with progress bar and return success"""
+    print(f"{LC}📺 Watching {purpose} ad...{RS}")
+    start_resp = make_request("POST", "/api/ads/start", {"purpose": purpose})
+    if not start_resp:
+        print(f"{R}❌ Failed to start ad{RS}")
+        return False
+    nonce = start_resp.get("nonce")
+    if not nonce:
+        print(f"{R}❌ No nonce{RS}")
         return False
 
-    def sync(self):
-        res = self.api("/api/init", {"syncOnly": True})
-        if res and res.get("success"):
-            u = res.get("user", {})
-            self.gold = u.get("gold", self.gold)
-            self.fruit_coin = u.get("fruitCoin", self.fruit_coin)
-            self.stage = u.get("stage", self.stage)
-            return True
+    # Durasi iklan 12-18 detik
+    duration = random.randint(12, 18)
+    print(f"{C}⏳ Watching for {duration}s...{RS}")
+    for i in range(duration):
+        time.sleep(1)
+        progress = "#" * (i+1) + " " * (duration - i - 1)
+        sys.stdout.write(f"\r  {G}[{progress}] {i+1}/{duration}s{RS}")
+        sys.stdout.flush()
+    print()
+
+    complete_resp = make_request("POST", "/api/ads/complete", {"nonce": nonce})
+    if not complete_resp:
+        print(f"{R}❌ Failed to complete ad{RS}")
         return False
 
-# ─── MENU FUNCTIONS ────────────────────────────────────────
-
-def get_init_data():
-    clear()
-    print(BANNER)
-    box("🔐 SET INIT DATA", 54)
-    print(f"{C.WHITE}║  Paste init_data, Enter 2x untuk selesai{C.RESET}")
-    box_end(54)
-    lines = []
-    while True:
-        line = input()
-        if line == "": break
-        lines.append(line)
-    data = "".join(lines).strip()
-    if data:
-        with open(INIT_FILE, "w") as f: f.write(data)
-        print(f"{C.GREEN}✅ Disimpan{C.RESET}")
-        return data
-    return None
-
-def load_init_data():
-    if os.path.exists(INIT_FILE):
-        with open(INIT_FILE, "r") as f:
-            data = f.read().strip()
-        if data: return data
-    return None
-
-def ensure_init_data():
-    global INIT_DATA
-    data = load_init_data()
-    if data:
-        INIT_DATA = data
+    if complete_resp.get("ok") or complete_resp.get("reward") is not None:
+        reward = complete_resp.get("reward", 0)
+        balance = complete_resp.get("balance", 0)
+        if reward:
+            print(f"{G}✅ {purpose} ad completed! +{reward} GD (Bal: {balance}){RS}")
+        else:
+            print(f"{G}✅ {purpose} ad completed! (no reward){RS}")
         return True
-    data = get_init_data()
-    if data:
-        INIT_DATA = data
-        return True
+    else:
+        print(f"{R}❌ Ad completion failed{RS}")
+        return False
+
+def is_ad_limited(network):
+    """Check if ad network is already daily limited"""
+    profile = get_profile()
+    if not profile:
+        return False
+    user = profile.get("user", {})
+    ad_counters = user.get("adCounters", {})
+    for key, val in ad_counters.items():
+        if network in key:
+            used = val.get("used", 0)
+            cap = val.get("cap", 999)
+            if used >= cap:
+                return True
     return False
 
-def show_menu():
-    clear()
-    print(BANNER)
-    box("🍓 FRUIT ADS BOT", 54)
-    print(f"{C.WHITE}║  {C.YELLOW}[1]{C.WHITE} 📺 Auto Watch Ads (Forever, stop on error){C.RESET}")
-    print(f"{C.WHITE}║  {C.CYAN}[2]{C.WHITE} 💰 Check Balance{C.RESET}")
-    print(f"{C.WHITE}║  {C.MAGENTA}[3]{C.WHITE} 🔐 Set InitData{C.RESET}")
-    print(f"{C.WHITE}║  {C.RED}[0]{C.WHITE} ❌ Exit{C.RESET}")
-    box_end(54)
-    return input(f"{C.CYAN}➜ Pilih : {C.RESET}").strip()
-
-def check_balance(bot):
-    if not bot.login():
-        print(f"{C.RED}❌ Gagal login.{C.RESET}")
-        input("Enter...")
-        return
-    print(f"""
-{C.WHITE}💰 Gold        : {C.YELLOW}{bot.gold}{C.RESET}
-{C.WHITE}🍎 Fruit Coin : {C.YELLOW}{bot.fruit_coin}{C.RESET}
-{C.WHITE}🏆 Stage      : {C.YELLOW}{bot.stage}{C.RESET}
-    """)
-    input("Enter...")
-
-def auto_watch_ads_forever(bot):
-    if not bot.login():
-        print(f"{C.RED}❌ Gagal login.{C.RESET}")
-        input("Enter...")
-        return
-
-    ad_count = 0
-    success_count = 0
-    networks = ["adsgram", "adsgramDaily", "monetag", "gigapub"]
-    network_index = 0
-
-    try:
-        while True:
-            network = networks[network_index % len(networks)]
-            network_index += 1
-            ad_count += 1
-
-            print(f"\n{C.CYAN}[{ad_count}] Menonton {network}...{C.RESET}")
-
-            # Request session
-            session_res = bot.api("/api/ads", {
-                "telegramId": bot.telegram_id,
-                "action": "request_session",
-                "network": network
-            })
-            if not session_res or not session_res.get("success"):
-                print(f"{C.RED}❌ Gagal request session, stop.{C.RESET}")
-                sys.exit(1)
-
-            sid = session_res.get("sessionId")
-            if not sid:
-                print(f"{C.RED}❌ Tidak dapat sessionId, stop.{C.RESET}")
-                sys.exit(1)
-
-            # Tunggu iklan 17 detik dengan progress bar hijau
-            print(f"   {C.GREEN}⏳ Menonton iklan{C.RESET}")
-            for i in range(17, 0, -1):
-                print(f"\r   {progress_bar(i, 17, '', 20)}", end="")
-                time.sleep(1)
-            print("\r   ✅ Iklan selesai!        ")
-
-            # Claim
-            claim_res = bot.api("/api/ads", {
-                "telegramId": bot.telegram_id,
-                "action": network,
-                "sessionId": sid
-            })
-            if not claim_res or not claim_res.get("success"):
-                print(f"{C.RED}❌ Gagal claim iklan, stop.{C.RESET}")
-                sys.exit(1)
-
-            # Update gold
-            if "user" in claim_res:
-                bot.gold = claim_res["user"].get("gold", bot.gold)
-            success_count += 1
-            print(f"{C.GREEN}✅ {network} selesai! Gold: {C.YELLOW}{bot.gold}{C.RESET}")
-            time.sleep(1)
-
-    except KeyboardInterrupt:
-        print(f"\n{C.YELLOW}⏹️ Berhenti. Total iklan: {ad_count}, Berhasil: {success_count}{C.RESET}")
-        input("Enter...")
-
-# ─── MAIN ──────────────────────────────────────────────────
-def main():
-    global INIT_DATA
-    INIT_DATA = load_init_data() or ""
-    bot = FruitCutBot(INIT_DATA) if INIT_DATA else None
+def watch_ads_phase():
+    """Auto watch ads until all networks done (limit reached)"""
+    done_networks = set()
+    cycle = 0
 
     while True:
-        choice = show_menu()
+        cycle += 1
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print(BANNER)
+        print(f"\n{C}--- ADS CYCLE {cycle} ---{RS}")
+        
+        # Check limit for each network
+        remaining = []
+        for net in ADS_NETWORKS:
+            if net in done_networks:
+                continue
+            if is_ad_limited(net):
+                print(f"{Y}⚠️ {net} daily limit reached, skipping.{RS}")
+                done_networks.add(net)
+            else:
+                remaining.append(net)
+        
+        if not remaining:
+            print(f"{G}✅ All ads completed! Returning to menu.{RS}")
+            time.sleep(2)
+            return
+        
+        print(f"{Y}Networks remaining: {', '.join(remaining)}{RS}\n")
+        
+        # Try to watch each remaining network
+        for net in remaining:
+            if net in done_networks:
+                continue
+            print(f"{LC}>>> Processing {net}{RS}")
+            success = False
+            attempts = 0
+            max_attempts = 2
+            while attempts < max_attempts and not success:
+                attempts += 1
+                try:
+                    if watch_ad(net):
+                        success = True
+                        # After success, check if limit reached
+                        if is_ad_limited(net):
+                            print(f"{Y}⚠️ {net} daily limit reached after watching.{RS}")
+                            done_networks.add(net)
+                    else:
+                        print(f"{Y}⚠️ Retry {net} in 5s...{RS}")
+                        time.sleep(5)
+                except Exception as e:
+                    print(f"{R}❌ Error: {e}{RS}")
+                    time.sleep(3)
+            if not success:
+                print(f"{Y}⚠️ {net} failed after attempts, marking as done to avoid loop.{RS}")
+                done_networks.add(net)
+        
+        # Check if all done
+        if len(done_networks) >= len(ADS_NETWORKS):
+            print(f"{G}✅ All ads completed! Returning to menu.{RS}")
+            time.sleep(2)
+            return
+        
+        # If there are remaining networks, wait a bit before next cycle
+        remaining_after = [n for n in ADS_NETWORKS if n not in done_networks]
+        if remaining_after:
+            print(f"{Y}⏳ Waiting 10s before retry: {', '.join(remaining_after)}{RS}")
+            time.sleep(10)
+
+# ============================================================
+# FUNGSI CEK BALANCE
+# ============================================================
+def check_balance():
+    os.system('cls' if os.name == 'nt' else 'clear')
+    print(BANNER)
+    if not HEADERS or not HEADERS.get("X-Telegram-Initdata"):
+        print(f"{R}❌ Init_Data belum diset! Silakan menu 2 dulu.{RS}")
+        time.sleep(2)
+        return
+
+    print(f"{B}💰 Mengecek Balance...{RS}\n")
+    profile = get_profile()
+    if not profile:
+        print(f"{R}❌ Gagal mengambil profil{RS}")
+        input(f"\n{C}Tekan Enter untuk kembali...{RS}")
+        return
+
+    user = profile.get("user", {})
+    print(f"{G}👤 User: {user.get('name', 'N/A')} (@{user.get('username', 'N/A')}){RS}")
+    print(f"{G}💰 Balance: {user.get('balance', 0)} GD{RS}")
+    print(f"{G}📺 Ads Today: {user.get('adsToday', 0)}/{user.get('adsTotal', 0)}{RS}")
+    ad_counters = user.get("adCounters", {})
+    for net, val in ad_counters.items():
+        print(f"{G}📊 {net}: {val.get('used', 0)}/{val.get('cap', '∞')}{RS}")
+    input(f"\n{C}Tekan Enter untuk kembali...{RS}")
+
+# ============================================================
+# MAIN
+# ============================================================
+def main():
+    global INIT_DATA, DEVICE_ID, HEADERS
+    config = load_config()
+    if config:
+        INIT_DATA = config.get("init_data", "")
+        DEVICE_ID = config.get("device_id", "")
+        if INIT_DATA and DEVICE_ID:
+            HEADERS = build_headers(INIT_DATA, DEVICE_ID)
+        else:
+            HEADERS = {}
+    else:
+        HEADERS = {}
+
+    while True:
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print(BANNER)
+        print(MENU)
+        if HEADERS and HEADERS.get("X-Telegram-Initdata"):
+            print(f"{G}🔑 Config: Aktif ✅ (Init_Data tersimpan){RS}")
+        else:
+            print(f"{R}🔑 Config: Belum diset ❌{RS}")
+
+        choice = input(f"\n{LC}Pilih Menu » {RS}").strip()
+
         if choice == "1":
-            if not ensure_init_data(): continue
-            bot = FruitCutBot(INIT_DATA)
-            auto_watch_ads_forever(bot)
+            if not HEADERS or not HEADERS.get("X-Telegram-Initdata"):
+                print(f"{R}❌ Set Init_Data dulu (menu 2){RS}")
+                time.sleep(2)
+                continue
+            watch_ads_phase()
         elif choice == "2":
-            if not ensure_init_data(): continue
-            bot = FruitCutBot(INIT_DATA)
-            check_balance(bot)
+            set_init_data()
         elif choice == "3":
-            new = get_init_data()
-            if new:
-                INIT_DATA = new
-                bot = FruitCutBot(INIT_DATA)
-                print(f"{C.GREEN}✅ InitData diperbarui{C.RESET}")
-            input("Enter...")
+            check_balance()
         elif choice == "0":
-            print(f"{C.YELLOW}👋 Sampai jumpa{C.RESET}")
+            print(f"\n{R}❌ Exit...{RS}")
             sys.exit(0)
         else:
-            print(f"{C.RED}❌ Pilihan salah{C.RESET}")
+            print(f"{R}❌ Pilihan tidak valid!{RS}")
             time.sleep(1)
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print(f"\n{C.YELLOW}👋 Bye{C.RESET}")
+        print(f"\n{Y}⏹ Dihentikan oleh user.{RS}")
         sys.exit(0)
