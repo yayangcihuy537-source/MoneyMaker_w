@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """
-TRIPLE-BOT PARALLEL (Pepe + Coin + Mini) - FIXED v2
-- Reauth tidak mematikan bot
-- Error handling lebih baik
-- Cek init_data sebelum claim daily
+TRIPLE-BOT PARALLEL (Pepe + Coin + Mini) - DETECT LIMIT PER BOT
+- Jika MiniGramX limit, MiniGramX stop, Pepe & Coinszon lanjut
 """
 
 import os, sys, time, json, random, re, requests, urllib.parse
@@ -134,6 +132,7 @@ class BaseBot:
         self.rewards = {g: 0 for g in game_list}
         self.logs = deque(maxlen=8)
         self.running = True
+        self.limited = False  # <-- TANDA LIMIT
         self.retry_doubled = {g: True for g in game_list}
         self.daily_claimed = False
         self.game_index = 0
@@ -147,10 +146,10 @@ class BaseBot:
     def log(self, msg):
         self.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
 
-    # ---------- REAUTH (TIDAK MATIKAN BOT) ----------
+    # ---------- REAUTH ----------
     def reauth(self):
         if not self.cfg.init_data:
-            self.log(f"{R}❌ Tidak ada init_data untuk {self.name}{RESET}")
+            self.log(f"{R}❌ Tidak ada init_data{RESET}")
             return False
 
         parsed = urllib.parse.parse_qs(self.cfg.init_data)
@@ -196,7 +195,7 @@ class BaseBot:
             self.log(f"{R}❌ Reauth error: {e}{RESET}")
             return False
 
-    # ---------- HTTP (TIDAK MATIKAN BOT) ----------
+    # ---------- HTTP ----------
     def _request(self, method, endpoint, **kwargs):
         if not self.running:
             return None
@@ -209,10 +208,9 @@ class BaseBot:
                     resp = self.session.request(method, url, **kwargs)
                     if "Not logged" in resp.text:
                         self.log(f"{R}❌ Session masih invalid{RESET}")
-                        # JANGAN matikan bot, biarkan loop lanjut
                         return None
                 else:
-                    self.log(f"{R}❌ Reauth gagal, lanjut tanpa session{RESET}")
+                    self.log(f"{R}❌ Reauth gagal{RESET}")
                     return None
             return resp
         except Exception as e:
@@ -301,9 +299,8 @@ class BaseBot:
     def claim_daily(self):
         if self.daily_claimed:
             return True
-        # Cek init_data sebelum claim
         if not self.cfg.init_data:
-            self.log(f"{R}❌ init_data kosong, tidak bisa claim daily{RESET}")
+            self.log(f"{R}❌ init_data kosong{RESET}")
             return False
         self.log(f"📅 Claim daily {self.name}...")
         if "pepeflow" in self.url or "coinszon" in self.url:
@@ -338,7 +335,8 @@ class BaseBot:
             self.get_games_status()
             lines = []
             lines.append(f"{GOLD}╔══════════════════════════════════════════════════════════╗")
-            lines.append(f"{GOLD}║{RESET}  {C}{self.name.upper()}{RESET}                                    {GOLD}║")
+            status_text = f"{R}🛑 LIMIT{RESET}" if self.limited else f"{G}🟢 RUNNING{RESET}"
+            lines.append(f"{GOLD}║{RESET}  {C}{self.name.upper()}{RESET} {status_text}                    {GOLD}║")
             lines.append(f"{GOLD}╠══════════════════════════════════════════════════════════╣")
             lines.append(f"{GOLD}║{RESET}  Loop : {C}{self.loop_counter}{RESET}        Balance : {G}{self.balance:.8f}{RESET}   {GOLD}║")
             lines.append(f"{GOLD}╠══════════════════════════════════════════════════════════╣")
@@ -350,6 +348,9 @@ class BaseBot:
                 rwd = self.rewards[g]
                 cd = self.fmt(self.cooldowns[g])
                 sc = G if st == "Ready" else Y
+                if self.limited:
+                    sc = R
+                    st = "LIMIT"
                 reward_str = f"{rwd:.8f}" if rwd < 0.001 else f"{rwd:.2f}"
                 line = f"{GOLD}║{RESET}  {icon} {disp:<6} {sc}{st:<8}{RESET}  {twox:<5} {ply:<5} {reward_str:<12} {cd:<6}{GOLD}║"
                 lines.append(line)
@@ -365,6 +366,8 @@ class BaseBot:
     def process_one_game(self):
         """Mainkan satu game yang ready"""
         try:
+            if self.limited:
+                return False
             self.get_games_status()
             ready = [g for g in self.game_list if self.cooldowns.get(g, 0) <= 0]
             if not ready:
@@ -389,8 +392,13 @@ class BaseBot:
                 self.log(f"{G}✔ {self.game_map[g]['display']} +{rwd:.8f} (Bal: {self.balance:.8f}){RESET}")
             elif result and result.get('status') == 'error':
                 err = result.get('message', '')
-                if 'not logged in' in err.lower():
-                    self.log(f"{Y}⚠️ Not logged in, coba reauth...{RESET}")
+                if 'daily limit' in err.lower() or 'limit reached' in err.lower():
+                    self.limited = True
+                    self.running = False
+                    self.log(f"{R}🛑 {self.name} DAILY LIMIT REACHED! Bot stopped.{RESET}")
+                    return False
+                elif 'not logged in' in err.lower():
+                    self.log(f"{Y}⚠️ Not logged in, reauth...{RESET}")
                     if self.reauth():
                         time.sleep(2)
                         result2 = self.play_single(g)
@@ -503,12 +511,15 @@ def parallel_loop(bots):
         bot.claim_daily()
     
     last_display = ""
-    while all(b.running for b in bots):
+    # Loop berjalan selama masih ada bot yang running
+    while any(b.running for b in bots):
         any_played = False
         for bot in bots:
+            if not bot.running:
+                continue
             try:
                 if bot.has_ready_games() and bot.running:
-                    current_display = "\n".join([b.display_dashboard() for b in bots])
+                    current_display = "\n".join([b.display_dashboard() for b in bots if b.running])
                     if current_display != last_display:
                         os.system('clear')
                         print(current_display)
@@ -524,16 +535,16 @@ def parallel_loop(bots):
         if not any_played:
             all_cds = []
             for bot in bots:
-                all_cds.extend([cd for cd in bot.cooldowns.values() if cd > 0])
+                if bot.running:
+                    all_cds.extend([cd for cd in bot.cooldowns.values() if cd > 0])
             if all_cds:
                 min_cd = min(all_cds)
-                current_display = "\n".join([b.display_dashboard() for b in bots])
+                current_display = "\n".join([b.display_dashboard() for b in bots if b.running])
                 if current_display != last_display:
                     os.system('clear')
                     print(current_display)
                     last_display = current_display
-                print(f"{Y}⏳ Semua bot cooldown. Menunggu {min_cd} detik...{RESET}")
-                # Tunggu 5 detik lalu re-check
+                print(f"{Y}⏳ Menunggu {min_cd} detik...{RESET}")
                 time.sleep(5)
             else:
                 time.sleep(1)
@@ -556,7 +567,8 @@ def main():
         os.system('clear')
         print(f"""
 {PURPLE}╔══════════════════════════════════════════════════════════╗
-║   {GOLD}🤖 TRIPLE-BOT PARALLEL (Pepe + Coin + Mini)        {PURPLE}║
+║   {GOLD}🤖 TRIPLE-BOT PARALLEL (Deteksi Limit per Bot)    {PURPLE}║
+║   {PINK}Developer: @MoneyMaker_w                         {PURPLE}║
 ╠══════════════════════════════════════════════════════════╣
 ║   {G}[1]{RESET} Jalankan Semua (parallel)                 ║
 ║   {G}[2]{RESET} PepeFlow only                           ║
