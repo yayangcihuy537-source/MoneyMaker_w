@@ -59,7 +59,7 @@
       "name": "Telegram",
       "items": {
         "1": {
-          "label": "FruitCutPlay",
+          "label": "Gdropappbot",
           "file": "fruit.py",
           "runner": "python3"
         },
