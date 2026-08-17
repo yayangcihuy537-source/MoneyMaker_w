@@ -10,6 +10,8 @@
 ║                                                             ║
 ║   🚀 MULTI-BOT: PEPEFLOW + COINSZON + MINIGRAMX + LITOSHI  ║
 ║   AUTO CLAIM • AUTO GAMES • AUTO DOUBLE • AUTO SKIP LIMIT  ║
+║   🔐 AUTH via init_data (NO PHPSESSID)                     ║
+║   🎲 FINGERPRINT RANDOM (acak tiap reauth)                 ║
 ╚═══════════════════════════════════════════════════════════════╝
 """
 
@@ -66,11 +68,10 @@ LITOSHI_GAME_MAP = {
     "treasure_dig": {"display": "DIG", "icon": "⛏️"},
 }
 
-# ========== Config ==========
+# ========== Config (only init_data) ==========
 class BaseConfig:
     def __init__(self, file):
         self.file = file
-        self.phpsessid = None
         self.init_data = None
         self.telegram_id = None
         self.telegram_username = None
@@ -79,7 +80,6 @@ class BaseConfig:
             try:
                 with open(self.file) as f:
                     d = json.load(f)
-                    self.phpsessid = d.get('phpsessid')
                     self.init_data = d.get('init_data')
                     self.telegram_id = d.get('telegram_id')
                     self.telegram_username = d.get('telegram_username')
@@ -90,7 +90,6 @@ class BaseConfig:
     def save(self):
         with open(self.file, 'w') as f:
             json.dump({
-                'phpsessid': self.phpsessid,
                 'init_data': self.init_data,
                 'telegram_id': self.telegram_id,
                 'telegram_username': self.telegram_username
@@ -156,9 +155,6 @@ class BaseBot:
             "sec-ch-ua-mobile": "?1",
             "sec-ch-ua-platform": '"Android"',
         })
-        if cfg.phpsessid:
-            domain = url.replace('https://', '').split('/')[0]
-            self.session.cookies.set("PHPSESSID", cfg.phpsessid, domain=domain, path='/')
         self.balance = 0.0
         self.cooldowns = {g: 0 for g in game_list}
         self.play_counts = {g: 0 for g in game_list}
@@ -172,9 +168,10 @@ class BaseBot:
         self.game_index = 0
         self.treasure_token = None
         self.limited = False
-        self.limited_games = set()  # Game yang sudah mencapai limit
+        self.limited_games = set()
         self.consecutive_errors = 0
         self.max_consecutive_errors = 5
+        self._initial_auth()
 
     def fmt(self, sec):
         if sec <= 0: return "Ready"
@@ -184,10 +181,17 @@ class BaseBot:
     def log(self, msg):
         self.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
 
-    # ---------- REAUTH ----------
+    # ---------- AUTH (only init_data) ----------
+    def _initial_auth(self):
+        if not self.cfg.init_data:
+            self.log(f"{R}❌ init_data kosong! Bot tidak bisa jalan{RESET}")
+            self.running = False
+            return False
+        return self.reauth()
+
     def reauth(self):
         if not self.cfg.init_data:
-            self.log(f"{R}❌ Tidak ada init_data{RESET}")
+            self.log(f"{R}❌ init_data tidak ada{RESET}")
             return False
         parsed = urllib.parse.parse_qs(self.cfg.init_data)
         user_str = parsed.get('user', [None])[0]
@@ -198,37 +202,30 @@ class BaseBot:
                 tid = str(u.get('id','0'))
                 tuname = u.get('username','')
             except: pass
+        self.cfg.telegram_id = tid
+        self.cfg.telegram_username = tuname
+        self.cfg.save()
+
+        # 🔥 FINGERPRINT RANDOM tiap kali reauth
+        fingerprint = os.urandom(16).hex()
+
         files = {
             "init_data": (None, self.cfg.init_data),
             "telegram_id": (None, tid),
             "telegram_username": (None, tuname),
             "auto_login": (None, "1"),
-            "fingerprint": (None, "de79799dd411d00634a2959334a5fcc1"),
+            "fingerprint": (None, fingerprint),
         }
         try:
             resp = self.session.post(f"{self.url}/actions/tg_auth.php", files=files)
             if resp.status_code == 200:
-                new_sid = None
-                for c in self.session.cookies:
-                    if c.name == "PHPSESSID":
-                        new_sid = c.value
-                        break
-                if not new_sid:
-                    set_cookie = resp.headers.get('Set-Cookie', '')
-                    if 'PHPSESSID' in set_cookie:
-                        match = re.search(r'PHPSESSID=([^;]+)', set_cookie)
-                        if match:
-                            new_sid = match.group(1)
-                if new_sid:
-                    domain = self.url.replace('https://', '').split('/')[0]
-                    self.session.cookies.set("PHPSESSID", new_sid, domain=domain, path='/')
-                    self.cfg.phpsessid = new_sid
-                    self.cfg.save()
-                    self.log(f"{G}✅ {self.name} reauth OK{RESET}")
-                    return True
-            return False
+                self.log(f"{G}✅ {self.name} auth OK (fingerprint: {fingerprint[:8]}...){RESET}")
+                return True
+            else:
+                self.log(f"{R}❌ Auth gagal, status {resp.status_code}{RESET}")
+                return False
         except Exception as e:
-            self.log(f"{R}❌ Reauth error: {e}{RESET}")
+            self.log(f"{R}❌ Auth error: {e}{RESET}")
             return False
 
     # ---------- HTTP ----------
@@ -239,7 +236,6 @@ class BaseBot:
         try:
             resp = self.session.request(method, url, **kwargs)
             
-            # Handle 429
             if resp.status_code == 429:
                 self.consecutive_errors += 1
                 self.log(f"{R}🚫 429 Too Many Requests! ({self.consecutive_errors}/{self.max_consecutive_errors}){RESET}")
@@ -395,7 +391,6 @@ class BaseBot:
             self.log(f"{Y}⏭️ {game} sudah limit, skip{RESET}")
             return None
             
-        # Double reward
         if self.doubled_available.get(game, False) and self.retry_doubled.get(game, True):
             ad_progress(30, f"📺 {self.game_map[game]['display']} double ad")
             base = random.uniform(1e-7, 5e-6)
@@ -408,7 +403,6 @@ class BaseBot:
             else:
                 return result
 
-        # Normal play
         if game == "lucky_wheel":
             return self.play_game(game, doubled=False)
         elif game == "slots":
@@ -482,7 +476,6 @@ class BaseBot:
                     rwd = self.rewards[g]
                     cd = self.fmt(self.cooldowns[g])
                     
-                    # Reward 0 tampilkan warna HIJAU dengan 8 desimal
                     if rwd <= 0.00000001:
                         reward_str = f"{G}0.00000000{RESET}"
                     else:
@@ -660,18 +653,25 @@ def sequential_mode(bots):
             live_timer(min_cd, f"⏳ Menunggu cooldown {min_cd}s")
 
 # ========== SETUP ==========
-def setup_config(file, label, need_init=True):
+def setup_config(file, label):
     print(f"{Y}📝 Setup {label}{RESET}")
-    sid = input("PHPSESSID: ").strip()
-    init = ""
-    if need_init:
-        init = input("init_data (WAJIB diisi untuk auth): ").strip()
-    if sid:
+    init_data = input("init_data (WAJIB diisi untuk auth): ").strip()
+    if init_data:
         cfg = BaseConfig(file)
-        cfg.phpsessid = sid
-        cfg.init_data = init if init else None
+        cfg.init_data = init_data
+        try:
+            parsed = urllib.parse.parse_qs(init_data)
+            user_str = parsed.get('user', [None])[0]
+            if user_str:
+                u = json.loads(urllib.parse.unquote(user_str))
+                cfg.telegram_id = str(u.get('id',''))
+                cfg.telegram_username = u.get('username','')
+        except:
+            pass
         cfg.save()
-        print(f"{G}✅ {label} tersimpan{RESET}")
+        print(f"{G}✅ {label} tersimpan (init_data only){RESET}")
+    else:
+        print(f"{R}❌ init_data kosong, setup dibatalkan{RESET}")
 
 # ========== MAIN ==========
 def main():
@@ -682,7 +682,8 @@ def main():
 ║   {GOLD}🚀 MULTI-BOT (4 BOT AKTIF)                         {PURPLE}║
 ║   {PINK}PepeFlow • Coinszon • MiniGramX • LitoshiPay      {PURPLE}║
 ║   {PINK}AUTO SKIP LIMIT • AUTO DOUBLE • AUTO CLAIM        {PURPLE}║
-║   {PINK}REWARD 0 TAMPIL HIJAU • SKIP 429                 {PURPLE}║
+║   {PINK}🔐 AUTH via init_data (NO PHPSESSID)              {PURPLE}║
+║   {PINK}🎲 FINGERPRINT RANDOM setiap reauth               {PURPLE}║
 ╠══════════════════════════════════════════════════════════╣
 ║   {G}[1]{RESET} 🔄 Parallel Mode (semua bot aktif)        ║
 ║   {G}[2]{RESET} 🔄 Sequential Mode (giliran)             ║
@@ -690,10 +691,10 @@ def main():
 ║   {G}[4]{RESET} 🪙 Coinszon only                         ║
 ║   {G}[5]{RESET} 🎮 MiniGramX only                        ║
 ║   {G}[6]{RESET} 💰 LitoshiPay only                       ║
-║   {Y}[7]{RESET} Setup PepeFlow                          ║
-║   {Y}[8]{RESET} Setup Coinszon                          ║
-║   {Y}[9]{RESET} Setup MiniGramX                         ║
-║   {Y}[10]{RESET} Setup LitoshiPay (WAJIB init_data)     ║
+║   {Y}[7]{RESET} Setup PepeFlow (init_data)              ║
+║   {Y}[8]{RESET} Setup Coinszon (init_data)              ║
+║   {Y}[9]{RESET} Setup MiniGramX (init_data)             ║
+║   {Y}[10]{RESET} Setup LitoshiPay (init_data)           ║
 ║   {R}[0]{RESET} Exit                                   ║
 ╚══════════════════════════════════════════════════════════╝{RESET}
 """)
@@ -702,16 +703,14 @@ def main():
             sys.exit(0)
         elif choice == '1':
             pcfg = BaseConfig(PEPE_CONFIG); ccfg = BaseConfig(COIN_CONFIG); mcfg = BaseConfig(MINI_CONFIG); lcfg = BaseConfig(LITOSHI_CONFIG)
-            if not pcfg.load() or not pcfg.phpsessid:
-                print(f"{R}❌ PepeFlow belum disetup{RESET}"); input("Enter..."); continue
-            if not ccfg.load() or not ccfg.phpsessid:
-                print(f"{R}❌ Coinszon belum disetup{RESET}"); input("Enter..."); continue
-            if not mcfg.load() or not mcfg.phpsessid:
-                print(f"{R}❌ MiniGramX belum disetup{RESET}"); input("Enter..."); continue
-            if not lcfg.load() or not lcfg.phpsessid:
-                print(f"{R}❌ LitoshiPay belum disetup{RESET}"); input("Enter..."); continue
-            if not lcfg.init_data:
-                print(f"{R}❌ LitoshiPay init_data kosong! Setup ulang (menu 10){RESET}"); input("Enter..."); continue
+            if not pcfg.load() or not pcfg.init_data:
+                print(f"{R}❌ PepeFlow init_data belum disetup{RESET}"); input("Enter..."); continue
+            if not ccfg.load() or not ccfg.init_data:
+                print(f"{R}❌ Coinszon init_data belum disetup{RESET}"); input("Enter..."); continue
+            if not mcfg.load() or not mcfg.init_data:
+                print(f"{R}❌ MiniGramX init_data belum disetup{RESET}"); input("Enter..."); continue
+            if not lcfg.load() or not lcfg.init_data:
+                print(f"{R}❌ LitoshiPay init_data belum disetup{RESET}"); input("Enter..."); continue
             pbot = PepeBot(pcfg); cbot = CoinBot(ccfg); mbot = MiniBot(mcfg); lbot = LitoshiBot(lcfg)
             try:
                 parallel_mode([pbot, cbot, mbot, lbot])
@@ -720,16 +719,14 @@ def main():
             input("Enter...")
         elif choice == '2':
             pcfg = BaseConfig(PEPE_CONFIG); ccfg = BaseConfig(COIN_CONFIG); mcfg = BaseConfig(MINI_CONFIG); lcfg = BaseConfig(LITOSHI_CONFIG)
-            if not pcfg.load() or not pcfg.phpsessid:
-                print(f"{R}❌ PepeFlow belum disetup{RESET}"); input("Enter..."); continue
-            if not ccfg.load() or not ccfg.phpsessid:
-                print(f"{R}❌ Coinszon belum disetup{RESET}"); input("Enter..."); continue
-            if not mcfg.load() or not mcfg.phpsessid:
-                print(f"{R}❌ MiniGramX belum disetup{RESET}"); input("Enter..."); continue
-            if not lcfg.load() or not lcfg.phpsessid:
-                print(f"{R}❌ LitoshiPay belum disetup{RESET}"); input("Enter..."); continue
-            if not lcfg.init_data:
-                print(f"{R}❌ LitoshiPay init_data kosong! Setup ulang (menu 10){RESET}"); input("Enter..."); continue
+            if not pcfg.load() or not pcfg.init_data:
+                print(f"{R}❌ PepeFlow init_data belum disetup{RESET}"); input("Enter..."); continue
+            if not ccfg.load() or not ccfg.init_data:
+                print(f"{R}❌ Coinszon init_data belum disetup{RESET}"); input("Enter..."); continue
+            if not mcfg.load() or not mcfg.init_data:
+                print(f"{R}❌ MiniGramX init_data belum disetup{RESET}"); input("Enter..."); continue
+            if not lcfg.load() or not lcfg.init_data:
+                print(f"{R}❌ LitoshiPay init_data belum disetup{RESET}"); input("Enter..."); continue
             pbot = PepeBot(pcfg); cbot = CoinBot(ccfg); mbot = MiniBot(mcfg); lbot = LitoshiBot(lcfg)
             try:
                 sequential_mode([pbot, cbot, mbot, lbot])
@@ -738,7 +735,7 @@ def main():
             input("Enter...")
         elif choice == '3':
             cfg = BaseConfig(PEPE_CONFIG)
-            if not cfg.load() or not cfg.phpsessid:
+            if not cfg.load() or not cfg.init_data:
                 print(f"{R}❌ Setup dulu (menu 7){RESET}"); input("Enter..."); continue
             bot = PepeBot(cfg)
             bot.claim_daily()
@@ -766,7 +763,7 @@ def main():
             input("Enter...")
         elif choice == '4':
             cfg = BaseConfig(COIN_CONFIG)
-            if not cfg.load() or not cfg.phpsessid:
+            if not cfg.load() or not cfg.init_data:
                 print(f"{R}❌ Setup dulu (menu 8){RESET}"); input("Enter..."); continue
             bot = CoinBot(cfg)
             bot.claim_daily()
@@ -794,7 +791,7 @@ def main():
             input("Enter...")
         elif choice == '5':
             cfg = BaseConfig(MINI_CONFIG)
-            if not cfg.load() or not cfg.phpsessid:
+            if not cfg.load() or not cfg.init_data:
                 print(f"{R}❌ Setup dulu (menu 9){RESET}"); input("Enter..."); continue
             bot = MiniBot(cfg)
             bot.claim_daily()
@@ -822,10 +819,8 @@ def main():
             input("Enter...")
         elif choice == '6':
             cfg = BaseConfig(LITOSHI_CONFIG)
-            if not cfg.load() or not cfg.phpsessid:
+            if not cfg.load() or not cfg.init_data:
                 print(f"{R}❌ Setup dulu (menu 10){RESET}"); input("Enter..."); continue
-            if not cfg.init_data:
-                print(f"{R}❌ LitoshiPay init_data kosong! Setup ulang (menu 10){RESET}"); input("Enter..."); continue
             bot = LitoshiBot(cfg)
             bot.claim_daily()
             try:
@@ -851,13 +846,13 @@ def main():
                 bot.running = False
             input("Enter...")
         elif choice == '7':
-            setup_config(PEPE_CONFIG, "PepeFlow", False); input("Enter...")
+            setup_config(PEPE_CONFIG, "PepeFlow"); input("Enter...")
         elif choice == '8':
-            setup_config(COIN_CONFIG, "Coinszon", False); input("Enter...")
+            setup_config(COIN_CONFIG, "Coinszon"); input("Enter...")
         elif choice == '9':
-            setup_config(MINI_CONFIG, "MiniGramX", False); input("Enter...")
+            setup_config(MINI_CONFIG, "MiniGramX"); input("Enter...")
         elif choice == '10':
-            setup_config(LITOSHI_CONFIG, "LitoshiPay", True); input("Enter...")
+            setup_config(LITOSHI_CONFIG, "LitoshiPay"); input("Enter...")
         else:
             print(f"{R}❌ Invalid{RESET}"); time.sleep(1)
 
