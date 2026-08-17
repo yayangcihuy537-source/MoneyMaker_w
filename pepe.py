@@ -173,6 +173,8 @@ class BaseBot:
         self.treasure_token = None
         self.limited = False
         self.limited_games = set()  # Game yang sudah mencapai limit
+        self.consecutive_errors = 0
+        self.max_consecutive_errors = 5
 
     def fmt(self, sec):
         if sec <= 0: return "Ready"
@@ -236,6 +238,18 @@ class BaseBot:
         url = f"{self.url}{endpoint}"
         try:
             resp = self.session.request(method, url, **kwargs)
+            
+            # Handle 429
+            if resp.status_code == 429:
+                self.consecutive_errors += 1
+                self.log(f"{R}🚫 429 Too Many Requests! ({self.consecutive_errors}/{self.max_consecutive_errors}){RESET}")
+                if self.consecutive_errors >= self.max_consecutive_errors:
+                    self.log(f"{R}🛑 {self.name} terlalu banyak 429! Bot di-stop{RESET}")
+                    self.running = False
+                return None
+            else:
+                self.consecutive_errors = 0
+            
             if resp.status_code in [401,403] or (resp.status_code==200 and "Not logged" in resp.text):
                 self.log(f"{Y}⚠️ Session expired, reauth...{RESET}")
                 if self.reauth():
@@ -249,6 +263,10 @@ class BaseBot:
             return resp
         except Exception as e:
             self.log(f"{R}❌ Request error: {e}{RESET}")
+            self.consecutive_errors += 1
+            if self.consecutive_errors >= self.max_consecutive_errors:
+                self.log(f"{R}🛑 {self.name} terlalu banyak error! Bot di-stop{RESET}")
+                self.running = False
             return None
 
     def get(self, endpoint):
@@ -294,7 +312,6 @@ class BaseBot:
                             self.cooldowns[g] = cd
                             self.status[g] = self.fmt(cd) if cd > 0 else "Ready"
                             self.doubled_available[g] = bool(info.get('doubled', False))
-                            # Cek limit
                             if info.get('limit_reached', False) or info.get('daily_remaining', 999) <= 0:
                                 self.limited_games.add(g)
                             else:
@@ -314,7 +331,6 @@ class BaseBot:
             return False
         try:
             self.get_games_status()
-            # Skip game yang sudah limit
             ready = [g for g in self.game_list if g not in self.limited_games and self.cooldowns.get(g, 0) <= 0]
             return len(ready) > 0
         except:
@@ -328,6 +344,11 @@ class BaseBot:
             return [g for g in self.game_list if g not in self.limited_games and self.cooldowns.get(g, 0) <= 0]
         except:
             return []
+
+    def is_all_limited(self):
+        if not self.game_list:
+            return False
+        return all(g in self.limited_games for g in self.game_list)
 
     # ---------- Play game ----------
     def play_game(self, game, doubled=False, base_reward=None, pick=None, quiz_token=None, answer_index=None, double_token=None):
@@ -449,7 +470,6 @@ class BaseBot:
                 lines.append(f"{GOLD}╠══════════════════════════════════════════════════════════╣")
                 for g in self.game_list:
                     icon = self.game_map[g]['icon']; disp = self.game_map[g]['display']
-                    # Cek limit
                     if g in self.limited_games:
                         st = "LIMIT 🚫"
                         sc = R
@@ -462,13 +482,13 @@ class BaseBot:
                     rwd = self.rewards[g]
                     cd = self.fmt(self.cooldowns[g])
                     
-                    # Jika reward 0 atau < 0.00000001, tampilkan "[ No Reward ]" warna kuning
+                    # Reward 0 tampilkan warna HIJAU dengan 8 desimal
                     if rwd <= 0.00000001:
-                        reward_str = f"{Y}[ No Reward ]{RESET}"
+                        reward_str = f"{G}0.00000000{RESET}"
                     else:
-                        reward_str = f"{rwd:.8f}" if rwd < 0.001 else f"{rwd:.2f}"
+                        reward_str = f"{G}{rwd:.8f}{RESET}" if rwd < 0.001 else f"{G}{rwd:.2f}{RESET}"
                     
-                    line = f"{GOLD}║{RESET}  {icon} {disp:<6} {sc}{st:<10}{RESET}  {twox:<5} {ply:<5} {reward_str:<12} {cd:<6}{GOLD}║"
+                    line = f"{GOLD}║{RESET}  {icon} {disp:<6} {sc}{st:<10}{RESET}  {twox:<5} {ply:<5} {reward_str:<16} {cd:<6}{GOLD}║"
                     lines.append(line)
             lines.append(f"{GOLD}╠══════════════════════════════════════════════════════════╣")
             for log in list(self.logs)[-6:]:
@@ -480,21 +500,16 @@ class BaseBot:
             return f"{R}❌ Error display: {e}{RESET}"
 
     def process_one_game(self):
-        """Mainkan satu game yang ready (skip jika limit)"""
         if not self.game_list:
             return False
         try:
-            # Ambil daftar game yang ready (belum limit & cooldown 0)
             ready = self.get_ready_games()
             if not ready:
-                # Cek apakah semua game limit
-                all_limited = all(g in self.limited_games for g in self.game_list)
-                if all_limited:
+                if self.is_all_limited():
                     self.log(f"{R}🛑 {self.name} SEMUA GAME LIMIT! Bot di-skip{RESET}")
                     self.running = False
                 return False
             
-            # Round-robin
             for i in range(len(self.game_list)):
                 idx = (self.game_index + i) % len(self.game_list)
                 g = self.game_list[idx]
@@ -516,7 +531,7 @@ class BaseBot:
                 if rwd > 0:
                     self.log(f"{G}✔ {self.game_map[g]['display']} +{rwd:.8f} (Bal: {self.balance:.8f}){RESET}")
                 else:
-                    self.log(f"{Y}⚠️ {self.game_map[g]['display']} [ No Reward ]{RESET}")
+                    self.log(f"{G}✔ {self.game_map[g]['display']} +0.00000000 (Bal: {self.balance:.8f}){RESET}")
             elif result and result.get('status') == 'error':
                 err = result.get('message', '')
                 if 'not logged in' in err.lower():
@@ -577,7 +592,6 @@ def parallel_mode(bots):
         for bot in bots:
             if not bot.running:
                 continue
-            # Cek apakah bot masih punya game ready (belum limit)
             if bot.has_ready_games():
                 os.system('clear')
                 for b in bots:
@@ -588,11 +602,6 @@ def parallel_mode(bots):
                 bot.process_one_game()
                 any_played = True
                 time.sleep(0.5)
-            else:
-                # Jika semua game limit, matikan bot
-                if bot.game_list and all(g in bot.limited_games for g in bot.game_list):
-                    bot.running = False
-                    bot.log(f"{R}🛑 {bot.name} SEMUA GAME LIMIT! Bot di-skip{RESET}")
         
         if not any_played:
             all_cds = []
@@ -607,7 +616,7 @@ def parallel_mode(bots):
                         print(b.display_dashboard())
                         print()
                 print(f"{Y}⏳ Semua bot cooldown. Menunggu {min_cd} detik...{RESET}")
-                time.sleep(5)
+                live_timer(min_cd, f"⏳ Menunggu cooldown {min_cd}s")
             else:
                 time.sleep(1)
 
@@ -633,13 +642,12 @@ def sequential_mode(bots):
                 print(f"\n{Y}▶️ {bot.name} masih ada game ready{RESET}")
                 time.sleep(0.5)
             
-            # Cek apakah bot mati karena limit
-            if not bot.running and bot.game_list and all(g in bot.limited_games for g in bot.game_list):
+            if not bot.running and bot.is_all_limited():
                 print(f"{R}🛑 {bot.name} SEMUA GAME LIMIT! Bot di-skip{RESET}")
             elif played:
                 print(f"{G}✅ {bot.name} selesai, semua cooldown.{RESET}")
             else:
-                print(f"{Y}⏸️ {bot.name} tidak ada game ready (mungkin limit).{RESET}")
+                print(f"{Y}⏸️ {bot.name} tidak ada game ready.{RESET}")
             time.sleep(2)
         
         all_cds = []
@@ -649,7 +657,7 @@ def sequential_mode(bots):
         if all_cds:
             min_cd = min(all_cds)
             print(f"{Y}⏳ Semua bot cooldown. Menunggu {min_cd} detik...{RESET}")
-            time.sleep(min(5, min_cd))
+            live_timer(min_cd, f"⏳ Menunggu cooldown {min_cd}s")
 
 # ========== SETUP ==========
 def setup_config(file, label, need_init=True):
@@ -674,6 +682,7 @@ def main():
 ║   {GOLD}🚀 MULTI-BOT (4 BOT AKTIF)                         {PURPLE}║
 ║   {PINK}PepeFlow • Coinszon • MiniGramX • LitoshiPay      {PURPLE}║
 ║   {PINK}AUTO SKIP LIMIT • AUTO DOUBLE • AUTO CLAIM        {PURPLE}║
+║   {PINK}REWARD 0 TAMPIL HIJAU • SKIP 429                 {PURPLE}║
 ╠══════════════════════════════════════════════════════════╣
 ║   {G}[1]{RESET} 🔄 Parallel Mode (semua bot aktif)        ║
 ║   {G}[2]{RESET} 🔄 Sequential Mode (giliran)             ║
@@ -740,16 +749,16 @@ def main():
                         print(bot.display_dashboard())
                         bot.process_one_game()
                     else:
-                        # Cek apakah semua game limit
-                        if bot.game_list and all(g in bot.limited_games for g in bot.game_list):
+                        if bot.is_all_limited():
                             print(f"{R}🛑 {bot.name} SEMUA GAME LIMIT! Bot berhenti{RESET}")
                             break
                         cds = [cd for cd in bot.cooldowns.values() if cd > 0]
                         if cds:
                             os.system('clear')
                             print(bot.display_dashboard())
-                            print(f"{Y}⏳ {bot.name} cooldown, tunggu {min(cds)} detik...{RESET}")
-                            time.sleep(5)
+                            min_cd = min(cds)
+                            print(f"{Y}⏳ {bot.name} cooldown, tunggu {min_cd} detik...{RESET}")
+                            live_timer(min_cd, f"⏳ Menunggu cooldown {min_cd}s")
                         else:
                             time.sleep(1)
             except KeyboardInterrupt:
@@ -768,15 +777,16 @@ def main():
                         print(bot.display_dashboard())
                         bot.process_one_game()
                     else:
-                        if bot.game_list and all(g in bot.limited_games for g in bot.game_list):
+                        if bot.is_all_limited():
                             print(f"{R}🛑 {bot.name} SEMUA GAME LIMIT! Bot berhenti{RESET}")
                             break
                         cds = [cd for cd in bot.cooldowns.values() if cd > 0]
                         if cds:
                             os.system('clear')
                             print(bot.display_dashboard())
-                            print(f"{Y}⏳ {bot.name} cooldown, tunggu {min(cds)} detik...{RESET}")
-                            time.sleep(5)
+                            min_cd = min(cds)
+                            print(f"{Y}⏳ {bot.name} cooldown, tunggu {min_cd} detik...{RESET}")
+                            live_timer(min_cd, f"⏳ Menunggu cooldown {min_cd}s")
                         else:
                             time.sleep(1)
             except KeyboardInterrupt:
@@ -795,15 +805,16 @@ def main():
                         print(bot.display_dashboard())
                         bot.process_one_game()
                     else:
-                        if bot.game_list and all(g in bot.limited_games for g in bot.game_list):
+                        if bot.is_all_limited():
                             print(f"{R}🛑 {bot.name} SEMUA GAME LIMIT! Bot berhenti{RESET}")
                             break
                         cds = [cd for cd in bot.cooldowns.values() if cd > 0]
                         if cds:
                             os.system('clear')
                             print(bot.display_dashboard())
-                            print(f"{Y}⏳ {bot.name} cooldown, tunggu {min(cds)} detik...{RESET}")
-                            time.sleep(5)
+                            min_cd = min(cds)
+                            print(f"{Y}⏳ {bot.name} cooldown, tunggu {min_cd} detik...{RESET}")
+                            live_timer(min_cd, f"⏳ Menunggu cooldown {min_cd}s")
                         else:
                             time.sleep(1)
             except KeyboardInterrupt:
@@ -824,15 +835,16 @@ def main():
                         print(bot.display_dashboard())
                         bot.process_one_game()
                     else:
-                        if bot.game_list and all(g in bot.limited_games for g in bot.game_list):
+                        if bot.is_all_limited():
                             print(f"{R}🛑 {bot.name} SEMUA GAME LIMIT! Bot berhenti{RESET}")
                             break
                         cds = [cd for cd in bot.cooldowns.values() if cd > 0]
                         if cds:
                             os.system('clear')
                             print(bot.display_dashboard())
-                            print(f"{Y}⏳ {bot.name} cooldown, tunggu {min(cds)} detik...{RESET}")
-                            time.sleep(5)
+                            min_cd = min(cds)
+                            print(f"{Y}⏳ {bot.name} cooldown, tunggu {min_cd} detik...{RESET}")
+                            live_timer(min_cd, f"⏳ Menunggu cooldown {min_cd}s")
                         else:
                             time.sleep(1)
             except KeyboardInterrupt:
@@ -855,4 +867,3 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print(f"\n{R}👋 Keluar.{RESET}")
         sys.exit(0)
-
