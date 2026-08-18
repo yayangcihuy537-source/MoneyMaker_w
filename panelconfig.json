@@ -32,6 +32,11 @@
           "label": "RenderCoins",
           "file": "Render.py",
           "runner": "python3"
+        },
+        "7": {
+          "label": "DogeMiner [Reward is too small] ",
+          "file": "Doge.py",
+          "runner": "python3"
         }
       }
     },
