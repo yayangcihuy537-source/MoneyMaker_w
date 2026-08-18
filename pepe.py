@@ -12,6 +12,8 @@
 ║   AUTO CLAIM • AUTO GAMES • AUTO DOUBLE • AUTO SKIP LIMIT  ║
 ║   🔐 AUTH via init_data (NO PHPSESSID)                     ║
 ║   🎲 FINGERPRINT RANDOM (acak tiap reauth)                 ║
+║   🔄 RETRY 2x jika gagal, lalu skip game                   ║
+║   ⏭️  Jika semua game gagal, bot skip ke bot lain          ║
 ╚═══════════════════════════════════════════════════════════════╝
 """
 
@@ -133,13 +135,14 @@ def ad_progress(seconds=30, label="📺 Watching ad"):
 
 # ========== Base Bot ==========
 class BaseBot:
-    def __init__(self, url, cfg, game_list, game_map, name, currency="PEPE"):
+    def __init__(self, url, cfg, game_list, game_map, name, currency="PEPE", auto_stop_if_all_blocked=True):
         self.url = url
         self.cfg = cfg
         self.game_list = game_list
         self.game_map = game_map
         self.name = name
         self.currency = currency
+        self.auto_stop_if_all_blocked = auto_stop_if_all_blocked
         self.session = requests.Session()
         self.session.headers.update({
             "User-Agent": UA,
@@ -167,8 +170,8 @@ class BaseBot:
         self.daily_claimed = False
         self.game_index = 0
         self.treasure_token = None
-        self.limited = False
         self.limited_games = set()
+        self.blocked_games = set()   # game yang kena 403/blocked
         self.consecutive_errors = 0
         self.max_consecutive_errors = 5
         self._initial_auth()
@@ -206,7 +209,6 @@ class BaseBot:
         self.cfg.telegram_username = tuname
         self.cfg.save()
 
-        # 🔥 FINGERPRINT RANDOM tiap kali reauth
         fingerprint = os.urandom(16).hex()
 
         files = {
@@ -315,6 +317,8 @@ class BaseBot:
                     return data
                 except: pass
             for g in self.game_list:
+                if re.search(rf'{g}.*?(limit|blocked)', html, re.IGNORECASE):
+                    self.limited_games.add(g)
                 pattern = rf'{g}.*?cooldown.*?(\d+)'
                 match = re.search(pattern, html, re.IGNORECASE | re.DOTALL)
                 if match:
@@ -327,7 +331,7 @@ class BaseBot:
             return False
         try:
             self.get_games_status()
-            ready = [g for g in self.game_list if g not in self.limited_games and self.cooldowns.get(g, 0) <= 0]
+            ready = [g for g in self.game_list if g not in self.limited_games and g not in self.blocked_games and self.cooldowns.get(g, 0) <= 0]
             return len(ready) > 0
         except:
             return False
@@ -337,14 +341,16 @@ class BaseBot:
             return []
         try:
             self.get_games_status()
-            return [g for g in self.game_list if g not in self.limited_games and self.cooldowns.get(g, 0) <= 0]
+            return [g for g in self.game_list if g not in self.limited_games and g not in self.blocked_games and self.cooldowns.get(g, 0) <= 0]
         except:
             return []
 
-    def is_all_limited(self):
+    def is_all_limited_or_blocked(self):
         if not self.game_list:
             return False
-        return all(g in self.limited_games for g in self.game_list)
+        all_games = set(self.game_list)
+        blocked_or_limited = self.limited_games.union(self.blocked_games)
+        return all_games.issubset(blocked_or_limited)
 
     # ---------- Play game ----------
     def play_game(self, game, doubled=False, base_reward=None, pick=None, quiz_token=None, answer_index=None, double_token=None):
@@ -352,6 +358,9 @@ class BaseBot:
             return None
         if game in self.limited_games:
             self.log(f"{Y}⏭️ {game} sudah limit, skip{RESET}")
+            return None
+        if game in self.blocked_games:
+            self.log(f"{Y}⏭️ {game} blocked, skip{RESET}")
             return None
         files = {"action": (None, "play"), "game": (None, game),
                  "doubled": (None, "1" if doubled else "0")}
@@ -367,8 +376,20 @@ class BaseBot:
             files["answer_index"] = (None, str(answer_index))
         resp = self.post("/actions/mini_games.php", files=files)
         if resp and resp.status_code == 200:
-            try: return resp.json()
-            except: pass
+            try:
+                data = resp.json()
+                # Deteksi 403/blocked dari response
+                if data.get('status') == 'error' and ('blocked' in data.get('message','').lower() or '403' in data.get('message','')):
+                    self.blocked_games.add(game)
+                    self.log(f"{R}🚫 {game} BLOCKED! Masuk daftar blacklist{RESET}")
+                    return None
+                return data
+            except:
+                pass
+        elif resp and resp.status_code in [401, 403]:
+            self.blocked_games.add(game)
+            self.log(f"{R}🚫 {game} BLOCKED (HTTP {resp.status_code})! Masuk daftar blacklist{RESET}")
+            return None
         return None
 
     def start_treasure_dig(self):
@@ -390,7 +411,10 @@ class BaseBot:
         if game in self.limited_games:
             self.log(f"{Y}⏭️ {game} sudah limit, skip{RESET}")
             return None
-            
+        if game in self.blocked_games:
+            self.log(f"{Y}⏭️ {game} blocked, skip{RESET}")
+            return None
+
         if self.doubled_available.get(game, False) and self.retry_doubled.get(game, True):
             ad_progress(30, f"📺 {self.game_map[game]['display']} double ad")
             base = random.uniform(1e-7, 5e-6)
@@ -467,6 +491,9 @@ class BaseBot:
                     if g in self.limited_games:
                         st = "LIMIT 🚫"
                         sc = R
+                    elif g in self.blocked_games:
+                        st = "BLOCKED 🚫"
+                        sc = R
                     else:
                         st = self.status[g]
                         sc = G if st == "Ready" else Y
@@ -498,11 +525,12 @@ class BaseBot:
         try:
             ready = self.get_ready_games()
             if not ready:
-                if self.is_all_limited():
-                    self.log(f"{R}🛑 {self.name} SEMUA GAME LIMIT! Bot di-skip{RESET}")
+                if self.is_all_limited_or_blocked() and self.auto_stop_if_all_blocked:
+                    self.log(f"{R}🛑 {self.name} SEMUA GAME LIMIT/BLOCKED! Bot di-stop{RESET}")
                     self.running = False
                 return False
             
+            # Pilih game dengan round-robin
             for i in range(len(self.game_list)):
                 idx = (self.game_index + i) % len(self.game_list)
                 g = self.game_list[idx]
@@ -513,7 +541,19 @@ class BaseBot:
                 return False
 
             print(f"{C}🎮 {self.name} {self.game_map[g]['display']}...{RESET}")
-            result = self.play_single(g)
+            
+            # RETRY 3 kali (1 initial + 2 retry)
+            max_attempts = 3
+            attempt = 0
+            result = None
+            while attempt < max_attempts and result is None:
+                attempt += 1
+                if attempt > 1:
+                    self.log(f"{Y}🔄 Retry {attempt-1}/{max_attempts-1} untuk {g}{RESET}")
+                    time.sleep(2)
+                result = self.play_single(g)
+            
+            # Proses hasil akhir
             if result and result.get('status') == 'success':
                 rwd = safe_float(result.get('reward', 0))
                 if rwd == 0:
@@ -525,31 +565,46 @@ class BaseBot:
                     self.log(f"{G}✔ {self.game_map[g]['display']} +{rwd:.8f} (Bal: {self.balance:.8f}){RESET}")
                 else:
                     self.log(f"{G}✔ {self.game_map[g]['display']} +0.00000000 (Bal: {self.balance:.8f}){RESET}")
-            elif result and result.get('status') == 'error':
-                err = result.get('message', '')
-                if 'not logged in' in err.lower():
-                    self.log(f"{Y}⚠️ Not logged in, reauth...{RESET}")
-                    if self.reauth():
-                        time.sleep(2)
-                        result2 = self.play_single(g)
-                        if result2 and result2.get('status') == 'success':
-                            rwd = safe_float(result2.get('reward', 0))
-                            self.balance = safe_float(result2.get('new_balance', self.balance))
-                            self.rewards[g] = rwd
-                            self.play_counts[g] += 1
-                            self.log(f"{G}✔ {self.game_map[g]['display']} +{rwd:.8f} [retry OK]{RESET}")
-                        else:
-                            self.log(f"{R}✖ {self.game_map[g]['display']} FAIL [retry]{RESET}")
-                    else:
-                        self.log(f"{R}✖ Reauth gagal, skip{RESET}")
-                elif 'daily_limit' in err.lower() or 'limit reached' in err.lower():
-                    self.limited_games.add(g)
-                    self.log(f"{Y}⏭️ {self.game_map[g]['display']} LIMIT REACHED, skip{RESET}")
-                else:
-                    self.log(f"{R}✖ {self.game_map[g]['display']} FAIL: {err}{RESET}")
             else:
-                err = result.get('message','No resp') if result else 'No resp'
-                self.log(f"{R}✖ {self.game_map[g]['display']} FAIL: {err}{RESET}")
+                # Semua percobaan gagal
+                if result and result.get('status') == 'error':
+                    err = result.get('message', '')
+                    if 'not logged in' in err.lower():
+                        self.log(f"{Y}⚠️ Not logged in, reauth...{RESET}")
+                        if self.reauth():
+                            time.sleep(2)
+                            # coba sekali lagi setelah reauth
+                            result2 = self.play_single(g)
+                            if result2 and result2.get('status') == 'success':
+                                rwd = safe_float(result2.get('reward', 0))
+                                self.balance = safe_float(result2.get('new_balance', self.balance))
+                                self.rewards[g] = rwd
+                                self.play_counts[g] += 1
+                                self.log(f"{G}✔ {self.game_map[g]['display']} +{rwd:.8f} [reauth OK]{RESET}")
+                                time.sleep(random.uniform(1, 3))
+                                self.get_dashboard()
+                                return True
+                            else:
+                                self.log(f"{R}✖ {self.game_map[g]['display']} FAIL setelah reauth, skip{RESET}")
+                                self.limited_games.add(g)  # anggap limit/block
+                        else:
+                            self.log(f"{R}✖ Reauth gagal, skip{RESET}")
+                    elif 'daily_limit' in err.lower() or 'limit reached' in err.lower():
+                        self.limited_games.add(g)
+                        self.log(f"{Y}⏭️ {self.game_map[g]['display']} LIMIT REACHED, skip{RESET}")
+                    elif 'blocked' in err.lower() or '403' in err:
+                        self.blocked_games.add(g)
+                        self.log(f"{R}🚫 {self.game_map[g]['display']} BLOCKED! Masuk blacklist{RESET}")
+                    else:
+                        self.log(f"{R}✖ {self.game_map[g]['display']} FAIL: {err} (setelah {attempt} percobaan){RESET}")
+                        # Jika error tidak jelas, tetap masukkan ke limited supaya tidak dicoba terus
+                        self.limited_games.add(g)
+                else:
+                    self.log(f"{R}✖ {self.game_map[g]['display']} FAIL (tidak ada response, setelah {attempt} percobaan){RESET}")
+                    self.limited_games.add(g)
+                time.sleep(random.uniform(1, 3))
+                self.get_dashboard()
+                return True
             time.sleep(random.uniform(1, 3))
             self.get_dashboard()
             return True
@@ -560,19 +615,19 @@ class BaseBot:
 # ========== BOT CLASSES ==========
 class PepeBot(BaseBot):
     def __init__(self, cfg):
-        super().__init__(PEPE_URL, cfg, PEPE_GAMES, PEPE_GAME_MAP, "PepeFlow", "PEPE")
+        super().__init__(PEPE_URL, cfg, PEPE_GAMES, PEPE_GAME_MAP, "PepeFlow", "PEPE", auto_stop_if_all_blocked=True)
 
 class CoinBot(BaseBot):
     def __init__(self, cfg):
-        super().__init__(COIN_URL, cfg, COIN_GAMES, COIN_GAME_MAP, "Coinszon", "COIN")
+        super().__init__(COIN_URL, cfg, COIN_GAMES, COIN_GAME_MAP, "Coinszon", "COIN", auto_stop_if_all_blocked=False)
 
 class MiniBot(BaseBot):
     def __init__(self, cfg):
-        super().__init__(MINI_URL, cfg, MINI_GAMES, MINI_GAME_MAP, "MiniGramX", "GRAM")
+        super().__init__(MINI_URL, cfg, MINI_GAMES, MINI_GAME_MAP, "MiniGramX", "GRAM", auto_stop_if_all_blocked=True)
 
 class LitoshiBot(BaseBot):
     def __init__(self, cfg):
-        super().__init__(LITOSHI_URL, cfg, LITOSHI_GAMES, LITOSHI_GAME_MAP, "LitoshiPay", "LTC")
+        super().__init__(LITOSHI_URL, cfg, LITOSHI_GAMES, LITOSHI_GAME_MAP, "LitoshiPay", "LTC", auto_stop_if_all_blocked=True)
 
 # ========== MODE PARALLEL ==========
 def parallel_mode(bots):
@@ -635,8 +690,8 @@ def sequential_mode(bots):
                 print(f"\n{Y}▶️ {bot.name} masih ada game ready{RESET}")
                 time.sleep(0.5)
             
-            if not bot.running and bot.is_all_limited():
-                print(f"{R}🛑 {bot.name} SEMUA GAME LIMIT! Bot di-skip{RESET}")
+            if not bot.running and bot.is_all_limited_or_blocked() and bot.auto_stop_if_all_blocked:
+                print(f"{R}🛑 {bot.name} SEMUA GAME LIMIT/BLOCKED! Bot di-stop{RESET}")
             elif played:
                 print(f"{G}✅ {bot.name} selesai, semua cooldown.{RESET}")
             else:
@@ -684,6 +739,8 @@ def main():
 ║   {PINK}AUTO SKIP LIMIT • AUTO DOUBLE • AUTO CLAIM        {PURPLE}║
 ║   {PINK}🔐 AUTH via init_data (NO PHPSESSID)              {PURPLE}║
 ║   {PINK}🎲 FINGERPRINT RANDOM setiap reauth               {PURPLE}║
+║   {PINK}🔄 RETRY 2x jika gagal → skip game                {PURPLE}║
+║   {PINK}⏭️  Jika semua game gagal → skip ke bot lain      {PURPLE}║
 ╠══════════════════════════════════════════════════════════╣
 ║   {G}[1]{RESET} 🔄 Parallel Mode (semua bot aktif)        ║
 ║   {G}[2]{RESET} 🔄 Sequential Mode (giliran)             ║
@@ -746,8 +803,8 @@ def main():
                         print(bot.display_dashboard())
                         bot.process_one_game()
                     else:
-                        if bot.is_all_limited():
-                            print(f"{R}🛑 {bot.name} SEMUA GAME LIMIT! Bot berhenti{RESET}")
+                        if bot.is_all_limited_or_blocked() and bot.auto_stop_if_all_blocked:
+                            print(f"{R}🛑 {bot.name} SEMUA GAME LIMIT/BLOCKED! Bot berhenti{RESET}")
                             break
                         cds = [cd for cd in bot.cooldowns.values() if cd > 0]
                         if cds:
@@ -774,9 +831,7 @@ def main():
                         print(bot.display_dashboard())
                         bot.process_one_game()
                     else:
-                        if bot.is_all_limited():
-                            print(f"{R}🛑 {bot.name} SEMUA GAME LIMIT! Bot berhenti{RESET}")
-                            break
+                        # Coinszon tidak stop meskipun semua limit/blocked
                         cds = [cd for cd in bot.cooldowns.values() if cd > 0]
                         if cds:
                             os.system('clear')
@@ -802,8 +857,8 @@ def main():
                         print(bot.display_dashboard())
                         bot.process_one_game()
                     else:
-                        if bot.is_all_limited():
-                            print(f"{R}🛑 {bot.name} SEMUA GAME LIMIT! Bot berhenti{RESET}")
+                        if bot.is_all_limited_or_blocked() and bot.auto_stop_if_all_blocked:
+                            print(f"{R}🛑 {bot.name} SEMUA GAME LIMIT/BLOCKED! Bot berhenti{RESET}")
                             break
                         cds = [cd for cd in bot.cooldowns.values() if cd > 0]
                         if cds:
@@ -830,8 +885,8 @@ def main():
                         print(bot.display_dashboard())
                         bot.process_one_game()
                     else:
-                        if bot.is_all_limited():
-                            print(f"{R}🛑 {bot.name} SEMUA GAME LIMIT! Bot berhenti{RESET}")
+                        if bot.is_all_limited_or_blocked() and bot.auto_stop_if_all_blocked:
+                            print(f"{R}🛑 {bot.name} SEMUA GAME LIMIT/BLOCKED! Bot berhenti{RESET}")
                             break
                         cds = [cd for cd in bot.cooldowns.values() if cd > 0]
                         if cds:
