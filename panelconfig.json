@@ -117,6 +117,16 @@
           "label": "OpenEarnApp",
           "file": "OpenEarnApp.py",
           "runner": "python3"
+        },
+        "12": {
+          "label": "Coming Soon",
+          "file": "",
+          "runner": "python3"
+        },
+        "13": {
+          "label": "Coming Soon",
+          "file": "",
+          "runner": "python3"
         }
       }
     },
