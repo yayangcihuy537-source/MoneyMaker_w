@@ -12,6 +12,7 @@
 ║   AUTO CLAIM • AUTO GAMES • AUTO DOUBLE • AUTO SKIP LIMIT  ║
 ║   🔐 AUTH via init_data (NO PHPSESSID)                     ║
 ║   🎲 FINGERPRINT RANDOM (acak tiap reauth)                 ║
+║   📋 MENU: 1) PEPE+COINS  2) MINI+LITOSHI                 ║
 ╚═══════════════════════════════════════════════════════════════╝
 """
 
@@ -60,12 +61,12 @@ MINI_GAME_MAP = {
     "treasure_dig": {"display": "DIG", "icon": "⛏️"},
 }
 
-LITOSHI_GAMES = ["lucky_wheel", "slots", "scratch", "treasure_dig"]
+LITOSHI_GAMES = ["lucky_wheel", "treasure_dig", "coin_catch", "flappy_coin"]
 LITOSHI_GAME_MAP = {
     "lucky_wheel": {"display": "SPIN", "icon": "🎡"},
-    "slots": {"display": "SLOTS", "icon": "🎰"},
-    "scratch": {"display": "SCRATCH", "icon": "🎫"},
     "treasure_dig": {"display": "DIG", "icon": "⛏️"},
+    "coin_catch": {"display": "CATCH", "icon": "🪙"},
+    "flappy_coin": {"display": "FLAPPY", "icon": "🐦"},
 }
 
 # ========== Config (only init_data) ==========
@@ -308,12 +309,22 @@ class BaseBot:
                             self.cooldowns[g] = cd
                             self.status[g] = self.fmt(cd) if cd > 0 else "Ready"
                             self.doubled_available[g] = bool(info.get('doubled', False))
-                            if info.get('limit_reached', False) or info.get('daily_remaining', 999) <= 0:
-                                self.limited_games.add(g)
+                            # Perbaikan limit: cek daily_limit, kalo 0 => unlimited
+                            daily_limit = info.get('daily_limit', None)
+                            limit_reached = info.get('limit_reached', False)
+                            daily_remaining = info.get('daily_remaining', 999)
+                            # Hanya mark limited kalo daily_limit > 0 dan (limit_reached atau daily_remaining <= 0)
+                            if daily_limit is not None and daily_limit > 0:
+                                if limit_reached or daily_remaining <= 0:
+                                    self.limited_games.add(g)
+                                else:
+                                    self.limited_games.discard(g)
                             else:
+                                # daily_limit 0 atau None => unlimited, jangan mark
                                 self.limited_games.discard(g)
                     return data
                 except: pass
+            # Fallback: scan HTML
             for g in self.game_list:
                 pattern = rf'{g}.*?cooldown.*?(\d+)'
                 match = re.search(pattern, html, re.IGNORECASE | re.DOTALL)
@@ -347,7 +358,7 @@ class BaseBot:
         return all(g in self.limited_games for g in self.game_list)
 
     # ---------- Play game ----------
-    def play_game(self, game, doubled=False, base_reward=None, pick=None, quiz_token=None, answer_index=None, double_token=None):
+    def play_game(self, game, doubled=False, base_reward=None, pick=None, quiz_token=None, answer_index=None, double_token=None, score=None, bombed=None, diamonds=None, survived=None):
         if not self.game_list:
             return None
         if game in self.limited_games:
@@ -365,6 +376,14 @@ class BaseBot:
             files["quiz_token"] = (None, str(quiz_token))
         if answer_index is not None:
             files["answer_index"] = (None, str(answer_index))
+        if score is not None:
+            files["score"] = (None, str(score))
+        if bombed is not None:
+            files["bombed"] = (None, "1" if bombed else "0")
+        if diamonds is not None:
+            files["diamonds"] = (None, str(diamonds))
+        if survived is not None:
+            files["survived"] = (None, "1" if survived else "0")
         resp = self.post("/actions/mini_games.php", files=files)
         if resp and resp.status_code == 200:
             try: return resp.json()
@@ -418,6 +437,23 @@ class BaseBot:
                 self.log(f"{R}❌ Gagal ambil token treasure_dig{RESET}")
                 self.cooldowns["treasure_dig"] = 30
                 return None
+        elif game == "coin_catch":
+            score = random.randint(0, 5)
+            bombed = False
+            if random.random() < 0.2:
+                bombed = True
+                score = 0
+            diamonds = random.randint(0, 1) if not bombed else 0
+            return self.play_game(game, score=score, bombed=bombed, diamonds=diamonds)
+        elif game == "flappy_coin":
+            score = random.randint(0, 8)
+            survived = score >= 3
+            bombed = False
+            if random.random() < 0.3:
+                bombed = True
+                score = 0
+                survived = False
+            return self.play_game(game, score=score, bombed=bombed, survived=survived)
         return None
 
     # ---------- Claim Daily ----------
@@ -499,7 +535,7 @@ class BaseBot:
             ready = self.get_ready_games()
             if not ready:
                 if self.is_all_limited():
-                    self.log(f"{R}🛑 {self.name} SEMUA GAME LIMIT! Bot di-skip{RESET}")
+                    self.log(f"{R}🛑 {self.name} SEMUA GAME LIMIT! Bot di-stop{RESET}")
                     self.running = False
                 return False
             
@@ -525,6 +561,22 @@ class BaseBot:
                     self.log(f"{G}✔ {self.game_map[g]['display']} +{rwd:.8f} (Bal: {self.balance:.8f}){RESET}")
                 else:
                     self.log(f"{G}✔ {self.game_map[g]['display']} +0.00000000 (Bal: {self.balance:.8f}){RESET}")
+
+                # Cek daily limit dari response (hanya jika daily_limit > 0)
+                daily_played = result.get('daily_played')
+                daily_limit = result.get('daily_limit')
+                if daily_played is not None and daily_limit is not None and daily_limit > 0 and daily_played >= daily_limit:
+                    self.limited_games.add(g)
+                    self.log(f"{Y}⏭️ {self.game_map[g]['display']} daily limit reached ({daily_played}/{daily_limit}){RESET}")
+
+                # Cek global limit (hanya jika global_limit > 0)
+                global_played = result.get('global_played')
+                global_limit = result.get('global_limit')
+                if global_played is not None and global_limit is not None and global_limit > 0 and global_played >= global_limit:
+                    self.log(f"{Y}🌍 Global limit reached ({global_played}/{global_limit}) — all games stop{RESET}")
+                    for game in self.game_list:
+                        self.limited_games.add(game)
+
             elif result and result.get('status') == 'error':
                 err = result.get('message', '')
                 if 'not logged in' in err.lower():
@@ -574,8 +626,8 @@ class LitoshiBot(BaseBot):
     def __init__(self, cfg):
         super().__init__(LITOSHI_URL, cfg, LITOSHI_GAMES, LITOSHI_GAME_MAP, "LitoshiPay", "LTC")
 
-# ========== MODE PARALLEL ==========
-def parallel_mode(bots):
+# ========== MODE PARALLEL (untuk 2 bot) ==========
+def parallel_pair(bots):
     for bot in bots:
         if hasattr(bot, 'claim_daily'):
             bot.claim_daily()
@@ -613,65 +665,44 @@ def parallel_mode(bots):
             else:
                 time.sleep(1)
 
-# ========== MODE SEQUENTIAL ==========
-def sequential_mode(bots):
-    for bot in bots:
-        if hasattr(bot, 'claim_daily'):
-            bot.claim_daily()
-    
-    while any(b.running for b in bots):
-        for bot in bots:
-            if not bot.running:
-                continue
-            os.system('clear')
-            print(bot.display_dashboard())
-            print(f"\n{Y}▶️ Giliran {bot.name} (Ctrl+C untuk berhenti){RESET}")
-            played = False
-            while bot.has_ready_games() and bot.running:
-                bot.process_one_game()
-                played = True
-                os.system('clear')
-                print(bot.display_dashboard())
-                print(f"\n{Y}▶️ {bot.name} masih ada game ready{RESET}")
-                time.sleep(0.5)
-            
-            if not bot.running and bot.is_all_limited():
-                print(f"{R}🛑 {bot.name} SEMUA GAME LIMIT! Bot di-skip{RESET}")
-            elif played:
-                print(f"{G}✅ {bot.name} selesai, semua cooldown.{RESET}")
-            else:
-                print(f"{Y}⏸️ {bot.name} tidak ada game ready.{RESET}")
-            time.sleep(2)
-        
-        all_cds = []
-        for bot in bots:
-            if bot.running:
-                all_cds.extend([cd for cd in bot.cooldowns.values() if cd > 0])
-        if all_cds:
-            min_cd = min(all_cds)
-            print(f"{Y}⏳ Semua bot cooldown. Menunggu {min_cd} detik...{RESET}")
-            live_timer(min_cd, f"⏳ Menunggu cooldown {min_cd}s")
-
-# ========== SETUP ==========
-def setup_config(file, label):
-    print(f"{Y}📝 Setup {label}{RESET}")
-    init_data = input("init_data (WAJIB diisi untuk auth): ").strip()
-    if init_data:
-        cfg = BaseConfig(file)
-        cfg.init_data = init_data
+# ========== SETUP PAIR ==========
+def setup_pair(label1, file1, label2, file2):
+    print(f"{Y}📝 Setup {label1} dan {label2}{RESET}")
+    init1 = input(f"Masukkan init_data untuk {label1}: ").strip()
+    if init1:
+        cfg1 = BaseConfig(file1)
+        cfg1.init_data = init1
         try:
-            parsed = urllib.parse.parse_qs(init_data)
+            parsed = urllib.parse.parse_qs(init1)
             user_str = parsed.get('user', [None])[0]
             if user_str:
                 u = json.loads(urllib.parse.unquote(user_str))
-                cfg.telegram_id = str(u.get('id',''))
-                cfg.telegram_username = u.get('username','')
+                cfg1.telegram_id = str(u.get('id',''))
+                cfg1.telegram_username = u.get('username','')
         except:
             pass
-        cfg.save()
-        print(f"{G}✅ {label} tersimpan (init_data only){RESET}")
+        cfg1.save()
+        print(f"{G}✅ {label1} tersimpan{RESET}")
     else:
-        print(f"{R}❌ init_data kosong, setup dibatalkan{RESET}")
+        print(f"{R}❌ {label1} kosong, dilewati{RESET}")
+    
+    init2 = input(f"Masukkan init_data untuk {label2}: ").strip()
+    if init2:
+        cfg2 = BaseConfig(file2)
+        cfg2.init_data = init2
+        try:
+            parsed = urllib.parse.parse_qs(init2)
+            user_str = parsed.get('user', [None])[0]
+            if user_str:
+                u = json.loads(urllib.parse.unquote(user_str))
+                cfg2.telegram_id = str(u.get('id',''))
+                cfg2.telegram_username = u.get('username','')
+        except:
+            pass
+        cfg2.save()
+        print(f"{G}✅ {label2} tersimpan{RESET}")
+    else:
+        print(f"{R}❌ {label2} kosong, dilewati{RESET}")
 
 # ========== MAIN ==========
 def main():
@@ -679,182 +710,66 @@ def main():
         os.system('clear')
         print(f"""
 {PURPLE}╔══════════════════════════════════════════════════════════╗
-║   {GOLD}🚀 MULTI-BOT (4 BOT AKTIF)                         {PURPLE}║
-║   {PINK}PepeFlow • Coinszon • MiniGramX • LitoshiPay      {PURPLE}║
-║   {PINK}AUTO SKIP LIMIT • AUTO DOUBLE • AUTO CLAIM        {PURPLE}║
+║   {GOLD}🚀 MULTI-BOT (PEPE+COINS / MINI+LITOSHI)          {PURPLE}║
 ║   {PINK}🔐 AUTH via init_data (NO PHPSESSID)              {PURPLE}║
 ║   {PINK}🎲 FINGERPRINT RANDOM setiap reauth               {PURPLE}║
+║   {PINK}🚫 AUTO SKIP LIMIT (daily + global)               {PURPLE}║
 ╠══════════════════════════════════════════════════════════╣
-║   {G}[1]{RESET} 🔄 Parallel Mode (semua bot aktif)        ║
-║   {G}[2]{RESET} 🔄 Sequential Mode (giliran)             ║
-║   {G}[3]{RESET} 🐸 PepeFlow only                         ║
-║   {G}[4]{RESET} 🪙 Coinszon only                         ║
-║   {G}[5]{RESET} 🎮 MiniGramX only                        ║
-║   {G}[6]{RESET} 💰 LitoshiPay only                       ║
-║   {Y}[7]{RESET} Setup PepeFlow (init_data)              ║
-║   {Y}[8]{RESET} Setup Coinszon (init_data)              ║
-║   {Y}[9]{RESET} Setup MiniGramX (init_data)             ║
-║   {Y}[10]{RESET} Setup LitoshiPay (init_data)           ║
-║   {R}[0]{RESET} Exit                                   ║
+║   {G}[1]{RESET} 🔄 Start PepeFlow X CoinsZons (parallel)  ║
+║   {G}[2]{RESET} 🔄 Start LitoshiPay X MiniGramX (parallel)║
+║   {Y}[3]{RESET} Setup initdata PepeFlow X CoinsZon       ║
+║   {Y}[4]{RESET} Setup initdata LitoshiPay X MiniGramX    ║
+║   {R}[0]{RESET} Exit                                     ║
 ╚══════════════════════════════════════════════════════════╝{RESET}
 """)
         choice = input(f"{PURPLE}❯ Pilih: {RESET}").strip()
         if choice == '0':
             sys.exit(0)
         elif choice == '1':
-            pcfg = BaseConfig(PEPE_CONFIG); ccfg = BaseConfig(COIN_CONFIG); mcfg = BaseConfig(MINI_CONFIG); lcfg = BaseConfig(LITOSHI_CONFIG)
+            pcfg = BaseConfig(PEPE_CONFIG)
+            ccfg = BaseConfig(COIN_CONFIG)
             if not pcfg.load() or not pcfg.init_data:
-                print(f"{R}❌ PepeFlow init_data belum disetup{RESET}"); input("Enter..."); continue
+                print(f"{R}❌ PepeFlow init_data belum disetup (menu 3){RESET}")
+                input("Enter...")
+                continue
             if not ccfg.load() or not ccfg.init_data:
-                print(f"{R}❌ Coinszon init_data belum disetup{RESET}"); input("Enter..."); continue
-            if not mcfg.load() or not mcfg.init_data:
-                print(f"{R}❌ MiniGramX init_data belum disetup{RESET}"); input("Enter..."); continue
-            if not lcfg.load() or not lcfg.init_data:
-                print(f"{R}❌ LitoshiPay init_data belum disetup{RESET}"); input("Enter..."); continue
-            pbot = PepeBot(pcfg); cbot = CoinBot(ccfg); mbot = MiniBot(mcfg); lbot = LitoshiBot(lcfg)
+                print(f"{R}❌ Coinszon init_data belum disetup (menu 3){RESET}")
+                input("Enter...")
+                continue
+            pbot = PepeBot(pcfg)
+            cbot = CoinBot(ccfg)
             try:
-                parallel_mode([pbot, cbot, mbot, lbot])
+                parallel_pair([pbot, cbot])
             except KeyboardInterrupt:
                 pass
             input("Enter...")
         elif choice == '2':
-            pcfg = BaseConfig(PEPE_CONFIG); ccfg = BaseConfig(COIN_CONFIG); mcfg = BaseConfig(MINI_CONFIG); lcfg = BaseConfig(LITOSHI_CONFIG)
-            if not pcfg.load() or not pcfg.init_data:
-                print(f"{R}❌ PepeFlow init_data belum disetup{RESET}"); input("Enter..."); continue
-            if not ccfg.load() or not ccfg.init_data:
-                print(f"{R}❌ Coinszon init_data belum disetup{RESET}"); input("Enter..."); continue
-            if not mcfg.load() or not mcfg.init_data:
-                print(f"{R}❌ MiniGramX init_data belum disetup{RESET}"); input("Enter..."); continue
+            lcfg = BaseConfig(LITOSHI_CONFIG)
+            mcfg = BaseConfig(MINI_CONFIG)
             if not lcfg.load() or not lcfg.init_data:
-                print(f"{R}❌ LitoshiPay init_data belum disetup{RESET}"); input("Enter..."); continue
-            pbot = PepeBot(pcfg); cbot = CoinBot(ccfg); mbot = MiniBot(mcfg); lbot = LitoshiBot(lcfg)
+                print(f"{R}❌ LitoshiPay init_data belum disetup (menu 4){RESET}")
+                input("Enter...")
+                continue
+            if not mcfg.load() or not mcfg.init_data:
+                print(f"{R}❌ MiniGramX init_data belum disetup (menu 4){RESET}")
+                input("Enter...")
+                continue
+            lbot = LitoshiBot(lcfg)
+            mbot = MiniBot(mcfg)
             try:
-                sequential_mode([pbot, cbot, mbot, lbot])
+                parallel_pair([lbot, mbot])
             except KeyboardInterrupt:
                 pass
             input("Enter...")
         elif choice == '3':
-            cfg = BaseConfig(PEPE_CONFIG)
-            if not cfg.load() or not cfg.init_data:
-                print(f"{R}❌ Setup dulu (menu 7){RESET}"); input("Enter..."); continue
-            bot = PepeBot(cfg)
-            bot.claim_daily()
-            try:
-                while bot.running:
-                    if bot.has_ready_games():
-                        os.system('clear')
-                        print(bot.display_dashboard())
-                        bot.process_one_game()
-                    else:
-                        if bot.is_all_limited():
-                            print(f"{R}🛑 {bot.name} SEMUA GAME LIMIT! Bot berhenti{RESET}")
-                            break
-                        cds = [cd for cd in bot.cooldowns.values() if cd > 0]
-                        if cds:
-                            os.system('clear')
-                            print(bot.display_dashboard())
-                            min_cd = min(cds)
-                            print(f"{Y}⏳ {bot.name} cooldown, tunggu {min_cd} detik...{RESET}")
-                            live_timer(min_cd, f"⏳ Menunggu cooldown {min_cd}s")
-                        else:
-                            time.sleep(1)
-            except KeyboardInterrupt:
-                bot.running = False
+            setup_pair("PepeFlow", PEPE_CONFIG, "Coinszon", COIN_CONFIG)
             input("Enter...")
         elif choice == '4':
-            cfg = BaseConfig(COIN_CONFIG)
-            if not cfg.load() or not cfg.init_data:
-                print(f"{R}❌ Setup dulu (menu 8){RESET}"); input("Enter..."); continue
-            bot = CoinBot(cfg)
-            bot.claim_daily()
-            try:
-                while bot.running:
-                    if bot.has_ready_games():
-                        os.system('clear')
-                        print(bot.display_dashboard())
-                        bot.process_one_game()
-                    else:
-                        if bot.is_all_limited():
-                            print(f"{R}🛑 {bot.name} SEMUA GAME LIMIT! Bot berhenti{RESET}")
-                            break
-                        cds = [cd for cd in bot.cooldowns.values() if cd > 0]
-                        if cds:
-                            os.system('clear')
-                            print(bot.display_dashboard())
-                            min_cd = min(cds)
-                            print(f"{Y}⏳ {bot.name} cooldown, tunggu {min_cd} detik...{RESET}")
-                            live_timer(min_cd, f"⏳ Menunggu cooldown {min_cd}s")
-                        else:
-                            time.sleep(1)
-            except KeyboardInterrupt:
-                bot.running = False
+            setup_pair("LitoshiPay", LITOSHI_CONFIG, "MiniGramX", MINI_CONFIG)
             input("Enter...")
-        elif choice == '5':
-            cfg = BaseConfig(MINI_CONFIG)
-            if not cfg.load() or not cfg.init_data:
-                print(f"{R}❌ Setup dulu (menu 9){RESET}"); input("Enter..."); continue
-            bot = MiniBot(cfg)
-            bot.claim_daily()
-            try:
-                while bot.running:
-                    if bot.has_ready_games():
-                        os.system('clear')
-                        print(bot.display_dashboard())
-                        bot.process_one_game()
-                    else:
-                        if bot.is_all_limited():
-                            print(f"{R}🛑 {bot.name} SEMUA GAME LIMIT! Bot berhenti{RESET}")
-                            break
-                        cds = [cd for cd in bot.cooldowns.values() if cd > 0]
-                        if cds:
-                            os.system('clear')
-                            print(bot.display_dashboard())
-                            min_cd = min(cds)
-                            print(f"{Y}⏳ {bot.name} cooldown, tunggu {min_cd} detik...{RESET}")
-                            live_timer(min_cd, f"⏳ Menunggu cooldown {min_cd}s")
-                        else:
-                            time.sleep(1)
-            except KeyboardInterrupt:
-                bot.running = False
-            input("Enter...")
-        elif choice == '6':
-            cfg = BaseConfig(LITOSHI_CONFIG)
-            if not cfg.load() or not cfg.init_data:
-                print(f"{R}❌ Setup dulu (menu 10){RESET}"); input("Enter..."); continue
-            bot = LitoshiBot(cfg)
-            bot.claim_daily()
-            try:
-                while bot.running:
-                    if bot.has_ready_games():
-                        os.system('clear')
-                        print(bot.display_dashboard())
-                        bot.process_one_game()
-                    else:
-                        if bot.is_all_limited():
-                            print(f"{R}🛑 {bot.name} SEMUA GAME LIMIT! Bot berhenti{RESET}")
-                            break
-                        cds = [cd for cd in bot.cooldowns.values() if cd > 0]
-                        if cds:
-                            os.system('clear')
-                            print(bot.display_dashboard())
-                            min_cd = min(cds)
-                            print(f"{Y}⏳ {bot.name} cooldown, tunggu {min_cd} detik...{RESET}")
-                            live_timer(min_cd, f"⏳ Menunggu cooldown {min_cd}s")
-                        else:
-                            time.sleep(1)
-            except KeyboardInterrupt:
-                bot.running = False
-            input("Enter...")
-        elif choice == '7':
-            setup_config(PEPE_CONFIG, "PepeFlow"); input("Enter...")
-        elif choice == '8':
-            setup_config(COIN_CONFIG, "Coinszon"); input("Enter...")
-        elif choice == '9':
-            setup_config(MINI_CONFIG, "MiniGramX"); input("Enter...")
-        elif choice == '10':
-            setup_config(LITOSHI_CONFIG, "LitoshiPay"); input("Enter...")
         else:
-            print(f"{R}❌ Invalid{RESET}"); time.sleep(1)
+            print(f"{R}❌ Invalid{RESET}")
+            time.sleep(1)
 
 if __name__ == "__main__":
     try:
