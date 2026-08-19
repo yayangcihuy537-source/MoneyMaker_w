@@ -29,13 +29,13 @@
           "runner": "python3"
         },
         "6": {
-          "label": "RenderCoins",
-          "file": "Render.py",
+          "label": "DogeMiner [Reward is too small]",
+          "file": "Doge.py",
           "runner": "python3"
         },
         "7": {
-          "label": "DogeMiner [Reward is too small] ",
-          "file": "Doge.py",
+          "label": "Coming Soon",
+          "file": "",
           "runner": "python3"
         }
       }
@@ -114,9 +114,9 @@
           "runner": "python3"
         },
         "11": {
-          "label": "Coming Soon",
-          "file": "",
-          "runner": ""
+          "label": "OpenEarnApp",
+          "file": "OpenEarnApp.py",
+          "runner": "python3"
         }
       }
     },
