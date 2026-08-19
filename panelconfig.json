@@ -34,8 +34,8 @@
           "runner": "python3"
         },
         "7": {
-          "label": "Coming Soon",
-          "file": "",
+          "label": "Skyfreecoins",
+          "file": "sky.py",
           "runner": "python3"
         }
       }
