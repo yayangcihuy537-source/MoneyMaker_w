@@ -127,6 +127,26 @@
           "label": "LtcMiner",
           "file": "LtcMiner.py",
           "runner": "python3"
+        },
+        "14": {
+          "label": "AuctionAstrabot",
+          "file": "AuctionAstra.py",
+          "runner": "python3"
+        },
+        "15": {
+          "label": "Coming Soon",
+          "file": "",
+          "runner": ""
+        },
+        "16": {
+          "label": "Coming Soon",
+          "file": "",
+          "runner": ""
+        },
+        "17": {
+          "label": "Coming Soon",
+          "file": "",
+          "runner": ""
         }
       }
     },
