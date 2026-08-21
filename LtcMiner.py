@@ -41,7 +41,7 @@ BANNER = f"""
 ║  {Colors.HEADER}███████╗   ██║   ╚██████╗   ██║   ██║  ██║███████╗   ██║   ║
 ║  {Colors.HEADER}╚══════╝   ╚═╝    ╚═════╝   ╚═╝   ╚═╝  ╚═╝╚══════╝   ╚═╝   ║
 ║                                                                          ║
-║  {Colors.PINK}🔥 LTC MINER BOT   {Colors.CYAN}│ {Colors.GREEN}v2.0 {Colors.CYAN}│ {Colors.YELLOW}Telegram Mini App ║
+║  {Colors.PINK}🔥 LTC MINER BOT   {Colors.CYAN}│ {Colors.GREEN}v2.1 {Colors.CYAN}│ {Colors.YELLOW}Telegram Mini App ║
 ║                                                                          ║
 ╚════════════════════════════════════════════════════════════════════════════╝{Colors.END}
 """
@@ -83,6 +83,7 @@ class LTCMinerBot:
         self.running = False
         self.ads_watched = 0
         self.ads_claimed = 0
+        self.total_gain = 0
         
         self.logs = []
         
@@ -279,7 +280,7 @@ class LTCMinerBot:
         return False
 
     def watch_short_ad(self):
-        """Nonton short ad + trigger reward"""
+        """Nonton short ad + trigger reward + refresh balance"""
         if self.daily_ad_count >= self.daily_ad_limit:
             return False
         
@@ -297,13 +298,18 @@ class LTCMinerBot:
         # Trigger reward
         success = self._send_ad_reward_trigger()
         
-        # Refresh balance
+        # WAJIB: Refresh balance setelah trigger (tunggu 2 detik biar reward masuk)
+        time.sleep(2)
         self.login()
         
-        if success or self.daily_ad_count < self.daily_ad_limit:
+        # Hitung gain
+        old_balance = self.balance
+        if self.daily_ad_count < self.daily_ad_limit:
             self.daily_ad_count += 1
             self.ads_watched += 1
-            print(f"   {Colors.GREEN}💰 Reward claimed! Balance: {self.balance:.8f} LTC{Colors.END}")
+            gain = self.balance - old_balance
+            self.total_gain += gain
+            print(f"   {Colors.GREEN}💰 +{gain:.8f} LTC (Balance: {self.balance:.8f}){Colors.END}")
             return True
         else:
             print(f"   {Colors.RED}❌ Gagal claim reward{Colors.END}")
@@ -352,13 +358,14 @@ class LTCMinerBot:
                 if data.get('ok'):
                     reward = data.get('reward', 0)
                     self.balance += reward
+                    self.total_gain += reward
                     return reward
             return 0
         except:
             return 0
 
     def watch_pop_ad(self):
-        """Nonton Pop-up + claim"""
+        """Nonton Pop-up + claim + refresh balance"""
         if self.daily_ad_count >= self.daily_ad_limit:
             return False
         
@@ -433,13 +440,14 @@ class LTCMinerBot:
                 if data.get('ok'):
                     reward = data.get('reward', 0)
                     self.balance += reward
+                    self.total_gain += reward
                     return reward
             return 0
         except:
             return 0
 
     def watch_mega_pop_ad(self):
-        """Nonton Mega Pop-up + claim"""
+        """Nonton Mega Pop-up + claim + refresh balance"""
         if self.daily_ad_count >= self.daily_ad_limit:
             return False
         
@@ -510,6 +518,7 @@ class LTCMinerBot:
             return
         
         self.ads_watched = 0
+        self.total_gain = 0
         cycle = 0
         
         print(f"\n{Colors.GREEN}{Colors.BOLD}🚀 START AUTO CLAIM{Colors.END}")
@@ -538,6 +547,7 @@ class LTCMinerBot:
         
         print(f"\n{Colors.GREEN}{Colors.BOLD}✅ SELESAI!{Colors.END}")
         print(f"{Colors.CYAN}📊 Total ads ditonton: {self.ads_watched}{Colors.END}")
+        print(f"{Colors.YELLOW}💰 Total gain: {self.total_gain:.8f} LTC{Colors.END}")
         print(f"{Colors.YELLOW}💰 Balance akhir: {self.balance:.8f} LTC{Colors.END}")
         print(f"{Colors.CYAN}{'═' * 50}{Colors.END}")
 
