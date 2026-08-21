@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FarmVerse Auto Bot - Daily, Farm, Ads
+FarmVerse Auto Bot - Daily + Ads Only (No Farm)
 ScriptMaker : ScriptyXSou
 Channel : t.me/ScriptyXSouu
 """
@@ -14,29 +14,20 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List
 
 # ============================================================
-# WARNA GLOBAL (LENGKAP)
+# WARNA
 # ============================================================
-R = '\033[91m'      # RED
-G = '\033[92m'      # GREEN
-Y = '\033[93m'      # YELLOW
-B = '\033[94m'      # BLUE
-M = '\033[95m'      # MAGENTA
-C = '\033[96m'      # CYAN
-W = '\033[97m'      # WHITE
-X = '\033[0m'       # RESET (sama dengan RESET)
-
-# Tambahan alias untuk kemudahan
-RED = R
-GREEN = G
-YELLOW = Y
-CYAN = C
+R, G, Y, B, M, C, W, X = '\033[91m', '\033[92m', '\033[93m', '\033[94m', '\033[95m', '\033[96m', '\033[97m', '\033[0m'
+CYAN = '\033[1;96m'
 PINK = '\033[38;5;206m'
 GOLD = '\033[38;5;220m'
 DIM = '\033[2;37m'
 BLD = '\033[1m'
 RS = X
 RESET = X
-WHITE = W   # <-- ini yang tadi kurang
+RED = R
+GREEN = G
+YELLOW = Y
+WHITE = W
 
 class FarmverseBot:
     def __init__(self, init_data: str = ""):
@@ -60,11 +51,11 @@ class FarmverseBot:
         self.coins = 0
         self.total_earned = 0
         self.daily_status = {}
-        self.farm_status = {}
         self.ads_status = {}
         self.logs: List[str] = []
         self.running = False
         self.total_gain = 0
+        self.fail_count = 0  # counter gagal berturut-turut
 
     def _log(self, msg: str, level: str = "INFO"):
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -75,7 +66,7 @@ class FarmverseBot:
             "INFO": CYAN,
             "ACTION": PINK,
         }
-        color = color_map.get(level, WHITE)  # WHITE sekarang sudah defined
+        color = color_map.get(level, WHITE)
         entry = f"{color}[{timestamp}] {msg}{RESET}"
         self.logs.append(entry)
         if len(self.logs) > 6:
@@ -105,7 +96,6 @@ class FarmverseBot:
         if not self.init_data:
             self._log("InitData kosong!", "ERROR")
             return False
-
         payload = {
             "deviceId": self.device_id,
             "fingerprint": self.fingerprint,
@@ -140,13 +130,6 @@ class FarmverseBot:
             return True
         return False
 
-    def get_farm_status(self) -> bool:
-        result = self._request("GET", "/api/farm")
-        if result:
-            self.farm_status = result
-            return True
-        return False
-
     def get_ads_status(self) -> bool:
         result = self._request("GET", "/api/ads/status")
         if result:
@@ -155,7 +138,6 @@ class FarmverseBot:
         return False
 
     def _watch_ad(self, duration: int = 25) -> bool:
-        """Progress bar untuk nonton iklan, return True selalu"""
         for i in range(1, duration+1):
             bar = f"[{'█'*i}{'░'*(duration-i)}] {int(i/duration*100)}%"
             sys.stdout.write(f"\r{DIM}{bar} {i}s/{duration}s{RS}")
@@ -164,17 +146,37 @@ class FarmverseBot:
         print()
         return True
 
-    def start_daily_ad(self) -> Optional[str]:
-        result = self._request("POST", "/api/daily/start", data={"provider": "adsgram"})
+    def _wait_30(self, msg: str = "Waiting 30s"):
+        self._log(msg, "INFO")
+        for i in range(30, 0, -1):
+            sys.stdout.write(f"\r{DIM}⏳ {i}s{RS}")
+            sys.stdout.flush()
+            time.sleep(1)
+        print()
+
+    def start_ads(self, provider: str = "adsgram") -> Optional[str]:
+        result = self._request("POST", "/api/ads/start", data={"provider": provider})
         if result and "token" in result:
             return result["token"]
         return None
 
     def click_ad(self, token: str) -> bool:
         result = self._request("POST", "/api/ads/click", data={"token": token})
+        return result and result.get("ok")
+
+    def claim_ad(self) -> bool:
+        result = self._request("POST", "/api/ads/claim", data={"clicked": True})
         if result and result.get("ok"):
+            reward = result.get("reward", 0)
+            coins = result.get("coins", 0)
+            self.coins = coins
+            self.total_gain += reward
+            self._log(f"Ad claimed! +{reward} coins (total: {coins})", "SUCCESS")
             return True
         return False
+
+    def start_daily_ad(self) -> Optional[str]:
+        return self.start_ads("adsgram")
 
     def claim_daily_reward(self, token: str) -> bool:
         result = self._request("POST", "/api/daily/claim", data={"token": token, "clicked": True})
@@ -187,102 +189,34 @@ class FarmverseBot:
             return True
         return False
 
-    def start_farm_ad(self, phase: str = "claim") -> Optional[str]:
-        payload = {"provider": "adsgram", "phase": phase}
-        result = self._request("POST", "/api/farm/ad/start", data=payload)
-        if result and "token" in result:
-            return result["token"]
-        return None
-
-    def claim_farm(self, token: str) -> bool:
-        result = self._request("POST", "/api/farm/claim", data={"tokens": [token], "clicked": True})
-        if result and result.get("ok"):
-            reward = result.get("reward", 0)
-            coins = result.get("coins", 0)
-            self.coins = coins
-            self.total_gain += reward
-            self._log(f"Farm claimed! +{reward} coins (total: {coins})", "SUCCESS")
-            return True
-        return False
-
     def claim_daily(self) -> bool:
         self.get_daily_status()
         if self.daily_status.get("cooldownLeft", 0) > 0:
             self._log(f"Daily cooldown {self.daily_status['cooldownLeft']}s, skip", "WARNING")
             return False
-
         watched = self.daily_status.get("watchedToday", 0)
         limit = self.daily_status.get("dailyLimit", 30)
         if watched >= limit:
             self._log(f"Daily limit reached ({watched}/{limit})", "WARNING")
             return False
 
-        self._log("Starting daily claim...", "ACTION")
+        self._log("Claim daily...", "ACTION")
         token = self.start_daily_ad()
         if not token:
-            self._log("Failed to start daily ad", "ERROR")
+            self._log("Gagal start daily ad", "ERROR")
             return False
-
         self._watch_ad(25)
-
         if not self.click_ad(token):
-            self._log("Failed to click ad", "ERROR")
+            self._log("Gagal klik ad", "ERROR")
             return False
-
         if not self.claim_daily_reward(token):
-            self._log("Failed to claim daily reward", "ERROR")
+            self._log("Gagal claim daily", "ERROR")
             return False
-
         self.get_me()
         return True
 
-    def process_farm_claim(self) -> bool:
-        self.get_farm_status()
-        status = self.farm_status.get("status", "idle")
-        seconds_left = self.farm_status.get("secondsLeft", 0)
-
-        if status == "farming":
-            if seconds_left > 0:
-                self._log(f"Farming in progress, {seconds_left}s left", "INFO")
-                return False
-            else:
-                self._log("Farming ready to claim, watching ad...", "ACTION")
-                token = self.start_farm_ad("claim")
-                if not token:
-                    self._log("Failed to start claim ad", "ERROR")
-                    return False
-                self._watch_ad(25)
-                if not self.click_ad(token):
-                    self._log("Failed to click", "ERROR")
-                    return False
-                if not self.claim_farm(token):
-                    self._log("Failed to claim farm", "ERROR")
-                    return False
-                self.get_me()
-                return True
-        elif status == "idle":
-            self._log("Farming idle, need to start farming first...", "ACTION")
-            token = self.start_farm_ad("start")
-            if not token:
-                self._log("Failed to start farm ad", "ERROR")
-                return False
-            self._watch_ad(25)
-            if not self.click_ad(token):
-                self._log("Failed to click", "ERROR")
-                return False
-            self.get_farm_status()
-            if self.farm_status.get("status") == "farming":
-                self._log("Farming started! Waiting for 60 minutes.", "SUCCESS")
-                return True
-            else:
-                self._log("Farming status not changed, maybe need additional step", "WARNING")
-                return False
-        else:
-            self._log(f"Unknown farm status: {status}", "WARNING")
-            return False
-
-    def watch_ads(self, count: int = 10) -> bool:
-        """Watch ads count times (each ad: start -> watch 25s -> click -> claim)"""
+    def watch_ads(self, count: int = 30) -> bool:
+        """Watch ads sampai limit, stop jika gagal 2x berturut-turut"""
         self.get_ads_status()
         watched = self.ads_status.get("watchedToday", 0)
         limit = self.ads_status.get("dailyLimit", 30)
@@ -293,44 +227,54 @@ class FarmverseBot:
         available = limit - watched
         to_watch = min(count, available)
         if to_watch <= 0:
-            self._log("No ads available to watch", "WARNING")
+            self._log("No ads available", "WARNING")
             return False
 
-        self._log(f"Watching {to_watch} ads...", "ACTION")
+        self._log(f"Watch {to_watch} ads...", "ACTION")
         success = 0
-        for i in range(1, to_watch+1):
-            self._log(f"Ad {i}/{to_watch}", "INFO")
-            # Start ad
-            token = self._request("POST", "/api/ads/start", data={"provider": "adsgram"})
-            if not token or not token.get("token"):
-                self._log(f"Failed to start ad {i}", "ERROR")
-                continue
-            token = token["token"]
-            self._watch_ad(25)
-            if not self.click_ad(token):
-                self._log(f"Failed to click ad {i}", "ERROR")
-                continue
-            # Claim reward
-            claim_res = self._request("POST", "/api/ads/claim", data={"clicked": True})
-            if claim_res and claim_res.get("ok"):
-                reward = claim_res.get("reward", 0)
-                coins = claim_res.get("coins", 0)
-                self.coins = coins
-                self.total_gain += reward
-                self._log(f"Ad {i} claimed! +{reward} coins", "SUCCESS")
-                success += 1
-            else:
-                self._log(f"Failed to claim ad {i}", "ERROR")
-            # Tunggu 30 detik setelah setiap ad (kecuali terakhir)
-            if i < to_watch:
-                self._log(f"Waiting 30s before next ad...", "INFO")
-                for j in range(30, 0, -1):
-                    sys.stdout.write(f"\r{DIM}⏳ {j}s{RS}")
-                    sys.stdout.flush()
-                    time.sleep(1)
-                print()
+        self.fail_count = 0  # reset fail counter
 
-        self._log(f"Watched {success}/{to_watch} ads successfully", "INFO")
+        for i in range(1, to_watch+1):
+            self._log(f"Ad {i}/{to_watch} (remaining: {to_watch - i + 1})", "INFO")
+            
+            token = self.start_ads("adsgram")
+            if not token:
+                self._log(f"Gagal start ad {i}", "ERROR")
+                self.fail_count += 1
+                if self.fail_count >= 2:
+                    self._log("❌ Gagal 2x berturut-turut! Bot berhenti.", "ERROR")
+                    return False
+                continue
+            self._watch_ad(25)
+            
+            if not self.click_ad(token):
+                self._log(f"Gagal klik ad {i}", "ERROR")
+                self.fail_count += 1
+                if self.fail_count >= 2:
+                    self._log("❌ Gagal 2x berturut-turut! Bot berhenti.", "ERROR")
+                    return False
+                continue
+            
+            if not self.claim_ad():
+                self._log(f"Gagal claim ad {i}", "ERROR")
+                self.fail_count += 1
+                if self.fail_count >= 2:
+                    self._log("❌ Gagal 2x berturut-turut! Bot berhenti.", "ERROR")
+                    return False
+                continue
+            
+            # Sukses
+            self.fail_count = 0
+            success += 1
+            self.get_ads_status()
+            remaining = self.ads_status.get("dailyLimit", 30) - self.ads_status.get("watchedToday", 0)
+            self._log(f"Sisa ads hari ini: {remaining}", "INFO")
+            
+            if i < to_watch:
+                self._wait_30(f"Waiting 30s before next ad ({i+1}/{to_watch})")
+            self._render_box()
+
+        self._log(f"Berhasil nonton {success}/{to_watch} ads", "INFO")
         self.get_me()
         return success > 0
 
@@ -339,23 +283,18 @@ class FarmverseBot:
         width = 58
         border = "═" * width
         print(f"{PINK}╔{border}╗{RESET}")
-        print(f"{PINK}║{RESET}  {BLD}FARMVERSE BOT{RESET}  {PINK}⚡{RESET}  {YELLOW}(FARM){RESET}  {PINK}║{RESET}".ljust(width+3))
+        print(f"{PINK}║{RESET}  {BLD}FARMVERSE BOT{RESET}  {PINK}⚡{RESET}  {YELLOW}(DAILY+ADS){RESET}  {PINK}║{RESET}".ljust(width+3))
         print(f"{PINK}╠{border}╣{RESET}")
         bal_line = f"  Coins : {self.coins}  |  Total Earned : {self.total_earned}"
         print(f"{PINK}║{RESET} {bal_line:<{width-2}} {PINK}║{RESET}")
         print(f"{PINK}╠{border}╣{RESET}")
 
+        daily_claimed = "✅" if self.daily_status.get("claimedToday", False) else "❌"
         daily_watched = self.daily_status.get("watchedToday", 0)
         daily_limit = self.daily_status.get("dailyLimit", 30)
         daily_cd = self.daily_status.get("cooldownLeft", 0)
-        daily_line = f"  📅 Daily  {daily_watched}/{daily_limit}  cooldown: {daily_cd}s"
+        daily_line = f"  📅 Daily  {daily_claimed}  {daily_watched}/{daily_limit}  cooldown: {daily_cd}s"
         print(f"{PINK}║{RESET} {daily_line:<{width-2}} {PINK}║{RESET}")
-
-        farm_status = self.farm_status.get("status", "idle")
-        farm_seconds = self.farm_status.get("secondsLeft", 0)
-        farm_pending = self.farm_status.get("pending", 0)
-        farm_line = f"  🌾 Farm   {farm_status}  {farm_seconds}s left  pending:{farm_pending}"
-        print(f"{PINK}║{RESET} {farm_line:<{width-2}} {PINK}║{RESET}")
 
         ads_watched = self.ads_status.get("watchedToday", 0)
         ads_limit = self.ads_status.get("dailyLimit", 30)
@@ -363,12 +302,14 @@ class FarmverseBot:
         ads_line = f"  📺 ADS    {ads_watched}/{ads_limit}  cooldown: {ads_cd}s"
         print(f"{PINK}║{RESET} {ads_line:<{width-2}} {PINK}║{RESET}")
 
-        print(f"{PINK}╠{border}╣{RESET}")
+        if self.fail_count > 0:
+            fail_line = f"  ⚠️ Fail count: {self.fail_count}/2"
+            print(f"{PINK}║{RESET} {fail_line:<{width-2}} {PINK}║{RESET}")
 
+        print(f"{PINK}╠{border}╣{RESET}")
         log_lines = self.logs[-6:]
         for line in log_lines:
             print(f"{PINK}║{RESET} {line:<{width-2}} {PINK}║{RESET}")
-
         print(f"{PINK}╚{border}╝{RESET}")
         print(f"{PINK}  {YELLOW}Total gain this session: +{self.total_gain} coins{RESET}")
 
@@ -380,92 +321,34 @@ class FarmverseBot:
 
         self.running = True
         self.total_gain = 0
+        self.fail_count = 0
         self.logs.clear()
         self._log("Mulai eksekusi...", "ACTION")
         self._render_box()
 
-        # Update status awal
         self.get_daily_status()
-        self.get_farm_status()
         self.get_ads_status()
         self._render_box()
 
-        # ALUR:
-        # 1. Claim daily 1x (jika belum)
-        # 2. Tunggu 30 detik
-        # 3. Claim farm 1x (jika siap)
-        # 4. Tunggu 30 detik
-        # 5. Watch ads 10x (masing-masing dengan jeda 30 detik)
-        # 6. Ulangi dari awal (cek daily & farm lagi, watch ads lagi jika masih ada limit)
-
-        while self.running:
-            # --- DAILY ---
-            self.get_daily_status()
-            if not self.daily_status.get("claimedToday", False):
-                self._log("Claim daily (1x)...", "ACTION")
-                self.claim_daily()
-                self._render_box()
-                # Tunggu 30 detik
-                self._log("Waiting 30s after daily...", "INFO")
-                for i in range(30, 0, -1):
-                    sys.stdout.write(f"\r{DIM}⏳ {i}s{RS}")
-                    sys.stdout.flush()
-                    time.sleep(1)
-                print()
-            else:
-                self._log("Daily already claimed today", "INFO")
-
-            # --- FARM ---
-            self.get_farm_status()
-            if self.farm_status.get("status") == "idle" or self.farm_status.get("secondsLeft", 0) <= 0:
-                self._log("Claim farm (1x)...", "ACTION")
-                self.process_farm_claim()
-                self._render_box()
-                # Tunggu 30 detik
-                self._log("Waiting 30s after farm...", "INFO")
-                for i in range(30, 0, -1):
-                    sys.stdout.write(f"\r{DIM}⏳ {i}s{RS}")
-                    sys.stdout.flush()
-                    time.sleep(1)
-                print()
-            else:
-                self._log("Farming still in progress, skip claim", "INFO")
-
-            # --- ADS ---
-            self.get_ads_status()
-            watched = self.ads_status.get("watchedToday", 0)
-            limit = self.ads_status.get("dailyLimit", 30)
-            if watched < limit:
-                self._log("Watch ads 10x...", "ACTION")
-                self.watch_ads(10)
-                self._render_box()
-                # Tunggu 30 detik setelah watch ads (opsional)
-                self._log("Waiting 30s after ads...", "INFO")
-                for i in range(30, 0, -1):
-                    sys.stdout.write(f"\r{DIM}⏳ {i}s{RS}")
-                    sys.stdout.flush()
-                    time.sleep(1)
-                print()
-            else:
-                self._log("ADS limit reached, no more ads today", "WARNING")
-                # Jika daily sudah claim dan farm idle/tidak bisa claim, dan ads habis, kita stop
-                if self.daily_status.get("claimedToday", False) and (self.farm_status.get("status") == "idle" or self.farm_status.get("secondsLeft", 0) <= 0):
-                    self._log("All tasks done for now. Exiting...", "SUCCESS")
-                    self.running = False
-                    break
-
-            # Cek jika semua limit habis, stop
-            self.get_ads_status()
-            if self.ads_status.get("watchedToday", 0) >= self.ads_status.get("dailyLimit", 30):
-                if self.daily_status.get("claimedToday", False):
-                    self._log("Daily claimed, ads limit reached. Bot will stop.", "INFO")
-                    self.running = False
-                    break
-
-            # Tunggu sebentar sebelum loop lagi (opsional)
-            self._log("Menunggu 5 detik sebelum siklus berikutnya...", "INFO")
-            time.sleep(5)
+        # STEP 1: CLAIM DAILY (1x)
+        self.get_daily_status()
+        if not self.daily_status.get("claimedToday", False):
+            self._log("Claim daily (1x)...", "ACTION")
+            self.claim_daily()
             self._render_box()
+            self._wait_30("Waiting 30s after daily")
+        else:
+            self._log("Daily already claimed today", "INFO")
+
+        # STEP 2: WATCH ADS SAMPAI LIMIT
+        self.get_ads_status()
+        if self.ads_status.get("watchedToday", 0) < self.ads_status.get("dailyLimit", 30):
+            self._log("Watch ads until limit...", "ACTION")
+            result = self.watch_ads(30)
+            if not result:
+                self._log("Ads stopped early (maybe fail 2x or limit reached)", "WARNING")
+        else:
+            self._log("ADS limit already reached", "INFO")
 
         self._log("Bot berhenti.", "INFO")
         self._render_box()
@@ -497,7 +380,7 @@ def print_banner():
    ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀ 
     """
     print(f"{PINK}{banner}{RESET}")
-    print(f"{PINK}{BLD}        FarmVerse Auto Bot - Daily + Farm + Ads{RESET}")
+    print(f"{PINK}{BLD}        FarmVerse Auto Bot - Daily + Ads Only{RESET}")
     print(f"{PINK}{BLD}        ScriptMaker : ScriptyXSou{RESET}")
     print(f"{PINK}{BLD}        Channel : t.me/ScriptyXSouu{RESET}\n")
 
