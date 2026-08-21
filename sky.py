@@ -5,6 +5,7 @@ import os
 import re
 import sys
 import time
+import random
 import requests
 from bs4 import BeautifulSoup
 
@@ -16,6 +17,7 @@ class Color:
     RED = '\033[91m'
     BOLD = '\033[1m'
     RESET = '\033[0m'
+    DIM = '\033[2;37m'
 
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -30,6 +32,12 @@ def parse_cookie_string(cookie_str):
             cookies[key] = val
     return cookies
 
+def random_delay(min_sec=7, max_sec=12):
+    """Delay acak 7-12 detik seperti human"""
+    delay = random.uniform(min_sec, max_sec)
+    print(f"{Color.DIM}⏳ Jeda {delay:.1f} detik...{Color.RESET}")
+    time.sleep(delay)
+
 # ====================== Main Worker ======================
 def worker(cookie_raw, user_agent):
     acc_prefix = f"[{Color.BOLD}{Color.CYAN}AKUN{Color.RESET}]"
@@ -37,23 +45,36 @@ def worker(cookie_raw, user_agent):
     session = requests.Session()
     session.cookies.update(parse_cookie_string(cookie_raw))
 
+    # Header lengkap anti detected bot
     headers = {
         "User-Agent": user_agent,
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
         "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
         "Cache-Control": "max-age=0",
         "Upgrade-Insecure-Requests": "1",
+        "Sec-Ch-Ua": '"Chromium";v="127", "Not)A;Brand";v="99", "Microsoft Edge Simulate";v="127", "Lemur";v="127"',
         "Sec-Ch-Ua-Mobile": "?1",
         "Sec-Ch-Ua-Platform": '"Android"',
+        "Sec-Fetch-Site": "same-origin",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-User": "?1",
+        "Sec-Fetch-Dest": "document",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
     }
 
     get_url = "https://skyfreecoins.top/app/faucet"
     post_url = "https://skyfreecoins.top/app/faucet/verify"
 
     print(f"{acc_prefix} {Color.CYAN}[*] Memulai auto claim...{Color.RESET}")
+    print(f"{Color.YELLOW}[!] Delay 7-12 detik per siklus (human-like){Color.RESET}\n")
+
+    total_claim = 0
 
     while True:
         try:
+            # Human-like delay sebelum request
+            random_delay(7, 12)
+
             # 1. GET halaman faucet
             res_get = session.get(get_url, headers=headers, timeout=30)
 
@@ -64,7 +85,6 @@ def worker(cookie_raw, user_agent):
 
             if res_get.status_code != 200:
                 print(f"{acc_prefix} {Color.RED}[-] HTTP {res_get.status_code}{Color.RESET}")
-                time.sleep(10)
                 continue
 
             soup = BeautifulSoup(res_get.text, 'html.parser')
@@ -136,7 +156,7 @@ def worker(cookie_raw, user_agent):
 
             print(f"{acc_prefix} {Color.CYAN}[*] Captcha: {raw_captcha} → {result}{Color.RESET}")
 
-            # 5. Delay 5 detik sebelum POST
+            # 5. Delay 5 detik sebelum POST (human-like)
             time.sleep(5)
 
             # 6. POST claim
@@ -169,14 +189,26 @@ def worker(cookie_raw, user_agent):
                 if alert:
                     msg = alert.get_text(strip=True)
 
-            rem_claims = claims_left - 1
-            print(
-                f"{acc_prefix} {Color.GREEN}[✓] {msg}{Color.RESET} "
-                f"{Color.YELLOW}||{Color.RESET} {Color.CYAN}Sisa {rem_claims}/{total_claims}{Color.RESET}"
-            )
+            # Cek reward dari response
+            reward_match = re.search(r'([\d.]+)\s*USD', res_post.text)
+            if reward_match:
+                reward = reward_match.group(1)
+                total_claim += 1
+                print(
+                    f"{acc_prefix} {Color.GREEN}[✓] {msg} +{reward} USD{Color.RESET} "
+                    f"{Color.YELLOW}||{Color.RESET} {Color.CYAN}Claim #{total_claim}{Color.RESET}"
+                )
+            else:
+                print(
+                    f"{acc_prefix} {Color.GREEN}[✓] {msg}{Color.RESET} "
+                    f"{Color.YELLOW}||{Color.RESET} {Color.CYAN}Claim #{total_claim}{Color.RESET}"
+                )
 
-            # 8. Tunggu 10 detik sebelum putaran berikutnya
-            time.sleep(10)
+            # Update total claim
+            total_claim += 1
+
+            # 8. Tunggu 7-12 detik sebelum putaran berikutnya
+            print(f"{Color.DIM}⏳ Menunggu siklus berikutnya...{Color.RESET}")
 
         except KeyboardInterrupt:
             print(f"\n{Color.YELLOW}[!] Dihentikan oleh user.{Color.RESET}")
@@ -201,6 +233,7 @@ def main():
 
     clear_screen()
     print(f"{Color.BOLD}{Color.CYAN}===== MENJALANKAN AUTO CLAIM ====={Color.RESET}\n")
+    print(f"{Color.YELLOW}[!] Delay acak 7-12 detik per siklus{Color.RESET}")
     print(f"{Color.YELLOW}[!] Tekan Ctrl+C untuk berhenti{Color.RESET}\n")
 
     worker(cookie, ua)
@@ -211,4 +244,3 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print(f"\n{Color.YELLOW}Program dihentikan.{Color.RESET}")
         sys.exit(0)
-
