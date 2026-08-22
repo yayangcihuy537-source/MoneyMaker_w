@@ -21,7 +21,7 @@ define('BOLD', "\033[1m");
 define('BASE_URL', 'https://99faucet.com');
 define('SOLVER_BASE', 'https://bypassallshortlinks.space');
 define('CONFIG_FILE', 'config_99.json');
-define('SUCCESS_INTERVAL', 300);
+define('SUCCESS_INTERVAL', 20);
 define('FAIL_INTERVAL', 11);
 
 // ========== COOKIE JAR CLASS ==========
