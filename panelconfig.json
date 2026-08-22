@@ -26,7 +26,7 @@
         "5": {
           "label": "CryptoFuturev2",
           "file": "Future.php",
-          "runner": "python3"
+          "runner": "php"
         },
         "6": {
           "label": "DogeMiner [Reward is too small]",
