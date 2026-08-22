@@ -49,9 +49,9 @@
           "runner": "python3"
         },
         "2": {
-          "label": "Coming Soon",
-          "file": "",
-          "runner": ""
+          "label": "altcryp",
+          "file": "altcryp.py",
+          "runner": "python3"
         },
         "3": {
           "label": "Coming Soon",
