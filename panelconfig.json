@@ -24,8 +24,8 @@
           "runner": "php"
         },
         "5": {
-          "label": "CryptoFuture",
-          "file": "Future.py",
+          "label": "CryptoFuturev2",
+          "file": "Future.php",
           "runner": "python3"
         },
         "6": {
