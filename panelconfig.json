@@ -44,8 +44,8 @@
       "name": "Apikey",
       "items": {
         "1": {
-          "label": "Coming Soon",
-          "file": "gamefaucet.py",
+          "label": "99faucet",
+          "file": "99faucet.py",
           "runner": "python3"
         },
         "2": {
@@ -134,9 +134,9 @@
           "runner": "python3"
         },
         "15": {
-          "label": "Coming Soon",
-          "file": "",
-          "runner": ""
+          "label": "ATFMiner",
+          "file": "atf.py",
+          "runner": "python3"
         },
         "16": {
           "label": "Coming Soon",
