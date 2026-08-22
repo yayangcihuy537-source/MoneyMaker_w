@@ -122,7 +122,7 @@ function get_login_choice() {
     echo CYAN . "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" . RESET . "\n";
     echo PUTIH . "Pilih metode login:\n";
     echo HIJAU . "  [1] " . PUTIH . "Pakai Cookie (langsung jalan)\n";
-    echo HIJAU . "  [2] " . PUTIH . "Pakai Email + Password (auto login)\n";
+    echo HIJAU . "  [2] " . PUTIH . "Pakai Email + buat pw enter aja\n";
     echo PUTIH . "Pilihan (1/2): " . KUNING;
     $choice = trim(fgets(STDIN));
     echo RESET;
