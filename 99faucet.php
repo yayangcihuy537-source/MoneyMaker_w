@@ -1,13 +1,12 @@
 <?php
 // ============================================================
 // 99FAUCET AUTO BOT - PHP + Login Choice
-// STOP jika redirect ke shortlink (tanpa auto solve)
+// Deteksi shortlink berdasarkan ada/tidaknya form claim
 // ============================================================
 
 error_reporting(0);
 date_default_timezone_set('Asia/Jakarta');
 
-// ========== WARNA ==========
 define('MERAH', "\033[0;31m");
 define('HIJAU', "\033[0;32m");
 define('KUNING', "\033[0;33m");
@@ -17,14 +16,12 @@ define('RESET', "\033[0m");
 define('DIM', "\033[2m");
 define('BOLD', "\033[1m");
 
-// ========== KONFIGURASI ==========
 define('BASE_URL', 'https://99faucet.com');
 define('SOLVER_BASE', 'https://bypassallshortlinks.space');
 define('CONFIG_FILE', 'config_99.json');
 define('SUCCESS_INTERVAL', 20);
 define('FAIL_INTERVAL', 11);
 
-// ========== COOKIE JAR CLASS ==========
 class CookieJar {
     private $cookies = [];
     
@@ -72,7 +69,6 @@ class CookieJar {
     }
 }
 
-// ========== FUNGSI ==========
 function clear() {
     system('clear');
 }
@@ -122,7 +118,7 @@ function get_login_choice() {
     echo CYAN . "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" . RESET . "\n";
     echo PUTIH . "Pilih metode login:\n";
     echo HIJAU . "  [1] " . PUTIH . "Pakai Cookie (langsung jalan)\n";
-    echo HIJAU . "  [2] " . PUTIH . "Pakai Email + buat pw enter aja\n";
+    echo HIJAU . "  [2] " . PUTIH . "Pakai Email + Password (auto login)\n";
     echo PUTIH . "Pilihan (1/2): " . KUNING;
     $choice = trim(fgets(STDIN));
     echo RESET;
@@ -343,20 +339,36 @@ function get_coins(CookieJar &$jar) {
     return [];
 }
 
-// ===== CEK SHORTLINK TANPA AUTO SOLVE =====
+// ===== DETEKSI SHORTLINK BERDASARKAN FORM =====
+function is_shortlink_page($html) {
+    // Jika ada input token atau name="token", berarti halaman faucet
+    if (strpos($html, 'name="token"') !== false || strpos($html, 'id="token"') !== false) {
+        return false;
+    }
+    // Jika ada tombol "Click To Visit", berarti shortlink
+    if (strpos($html, 'Click To Visit') !== false) {
+        return true;
+    }
+    // Jika redirect ke /links/... jelas shortlink
+    return false;
+}
+
 function get_faucet_page(CookieJar &$jar, $coin, &$finalUrl = null) {
     $url = BASE_URL . "/faucet/$coin";
     $result = http_request($url, 'GET', [], [], $jar, $finalUrl);
     if (!$result) return null;
     
-    // Jika redirect ke /links/... atau halaman berisi shortlink, stop
+    // Jika redirect ke /links/... -> shortlink
     if ($finalUrl && strpos($finalUrl, '/links/') !== false) {
         return ['status' => 'shortlink', 'url' => $finalUrl];
     }
-    if (strpos($result, 'Shortlinks') !== false || strpos($result, 'Click To Visit') !== false) {
+    
+    // Cek apakah halaman ini adalah shortlink atau faucet
+    if (is_shortlink_page($result)) {
         return ['status' => 'shortlink', 'url' => $url];
     }
     
+    // Ambil token dan cooldown
     preg_match('/name="token"\s+value="([^"]+)"/', $result, $token_match);
     $token = isset($token_match[1]) ? $token_match[1] : null;
     
@@ -380,7 +392,7 @@ function wait_for_cooldown(CookieJar &$jar, $coin) {
         $page = get_faucet_page($jar, $coin);
         if (!$page) break;
         if ($page['status'] === 'shortlink') {
-            echo MERAH . "[!] Redirect ke shortlink terdeteksi. Bot berhenti." . RESET . "\n";
+            echo MERAH . "[!] Shortlink terdeteksi (tidak ada form claim). Bot berhenti." . RESET . "\n";
             return 'SHORTLINK';
         }
         $wait = $page['wait_time'] ?? 0;
@@ -408,8 +420,8 @@ function claim_faucet(CookieJar &$jar, $coin, $apikey) {
     }
     
     if ($page['status'] === 'shortlink') {
-        echo MERAH . "[!] Redirect ke shortlinks: " . $page['url'] . RESET . "\n";
-        echo MERAH . "[!] Bot berhenti karena membutuhkan shortlink manual." . RESET . "\n";
+        echo MERAH . "[!] Halaman shortlink terdeteksi (tidak ada form token)." . RESET . "\n";
+        echo MERAH . "[!] Selesaikan shortlink manual lalu jalankan ulang bot." . RESET . "\n";
         return 'SHORTLINK';
     }
     
@@ -612,6 +624,7 @@ while (true) {
     
     if ($result === 'SHORTLINK') {
         echo MERAH . "[!] Shortlink terdeteksi. Bot berhenti." . RESET . "\n";
+        echo KUNING . "[*] Selesaikan shortlink manual, lalu jalankan ulang bot." . RESET . "\n";
         break;
     }
     
