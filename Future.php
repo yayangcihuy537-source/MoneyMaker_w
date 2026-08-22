@@ -128,8 +128,8 @@ function generate_smart_token() {
 }
 
 function generate_fp_hash() {
-    $ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36";
-    $raw = "fp-" . $ua . "384832";
+    $ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36';
+    $raw = 'fp-' . $ua . '384832';
     return hash('sha256', $raw);
 }
 
@@ -168,8 +168,6 @@ function http_request($url, $method = 'GET', $data = [], $headers = [], CookieJa
     
     curl_setopt_array($ch, $options);
     $response = curl_exec($ch);
-    $info = curl_getinfo($ch);
-    $error = curl_error($ch);
     
     if ($response === false) {
         curl_close($ch);
@@ -195,54 +193,46 @@ function is_logged_in($jar) {
 }
 
 function get_faucet_data($jar) {
-    // Gunakan /earn karena dari trace itu yang dipake
+    // Gunakan /earn karena dari trace
     $html = http_request(BASE_URL . '/earn', 'GET', [], [], $jar);
     if (!$html) {
-        // Fallback ke /faucet/earn
         $html = http_request(BASE_URL . '/faucet/earn', 'GET', [], [], $jar);
     }
     if (!$html) return null;
     
-    // Debug: simpan HTML untuk inspection
-    // file_put_contents("debug_faucet.html", $html);
-    
-    // Ekstrak form fields dengan berbagai pattern
+    // Ekstrak dengan regex sederhana
     $csrf = '';
     $token = '';
     $earn_ticket = '';
     $wallet = '';
     
-    // Pattern 1: name="csrf_token_name" value="xxx"
-    preg_match('/name="csrf_token_name"\s+value="([^"]+)"/', $html, $m);
-    if (!empty($m[1])) $csrf = $m[1];
-    preg_match('/name="token"\s+value="([^"]+)"/', $html, $m);
-    if (!empty($m[1])) $token = $m[1];
-    preg_match('/name="earn_ticket"\s+value="([^"]+)"/', $html, $m);
-    if (!empty($m[1])) $earn_ticket = $m[1];
-    preg_match('/name="wallet"\s+value="([^"]+)"/', $html, $m);
-    if (!empty($m[1])) $wallet = $m[1];
-    
-    // Pattern 2: tanpa spasi (csrf_token_name" value="xxx")
-    if (empty($csrf)) {
-        preg_match('/csrf_token_name"\s*value="([^"]+)"/', $html, $m);
-        if (!empty($m[1])) $csrf = $m[1];
-    }
-    if (empty($token)) {
-        preg_match('/token"\s*value="([^"]+)"/', $html, $m);
-        if (!empty($m[1])) $token = $m[1];
-    }
-    if (empty($earn_ticket)) {
-        preg_match('/earn_ticket"\s*value="([^"]+)"/', $html, $m);
-        if (!empty($m[1])) $earn_ticket = $m[1];
-    }
-    if (empty($wallet)) {
-        preg_match('/wallet"\s*value="([^"]+)"/', $html, $m);
-        if (!empty($m[1])) $wallet = $m[1];
+    // Cari dengan pattern yang lebih aman
+    if (preg_match('/name="csrf_token_name"\s+value="([^"]+)"/', $html, $m)) {
+        $csrf = $m[1];
+    } else if (preg_match('/csrf_token_name"\s*value="([^"]+)"/', $html, $m)) {
+        $csrf = $m[1];
     }
     
-    // Jika masih kosong, coba cari di hidden input dengan regex lebih longgar
+    if (preg_match('/name="token"\s+value="([^"]+)"/', $html, $m)) {
+        $token = $m[1];
+    } else if (preg_match('/token"\s*value="([^"]+)"/', $html, $m)) {
+        $token = $m[1];
+    }
+    
+    if (preg_match('/name="earn_ticket"\s+value="([^"]+)"/', $html, $m)) {
+        $earn_ticket = $m[1];
+    } else if (preg_match('/earn_ticket"\s*value="([^"]+)"/', $html, $m)) {
+        $earn_ticket = $m[1];
+    }
+    
+    if (preg_match('/name="wallet"\s+value="([^"]+)"/', $html, $m)) {
+        $wallet = $m[1];
+    } else if (preg_match('/wallet"\s*value="([^"]+)"/', $html, $m)) {
+        $wallet = $m[1];
+    }
+    
+    // Jika masih kosong, coba dari hidden input di form
     if (empty($csrf) || empty($token) || empty($earn_ticket)) {
-        // Coba cari dari form
         preg_match('/<form[^>]*>.*?csrf_token_name.*?value="([^"]+)"/s', $html, $m);
         if (!empty($m[1])) $csrf = $m[1];
         preg_match('/<form[^>]*>.*?token.*?value="([^"]+)"/s', $html, $m);
@@ -253,17 +243,12 @@ function get_faucet_data($jar) {
         if (!empty($m[1])) $wallet = $m[1];
     }
     
-    // Cek apakah redirect ke login
+    // Cek redirect ke login
     if (strpos($html, 'login') !== false && strlen($html) < 500) {
         return 'EXPIRED';
     }
     
     if (empty($csrf) || empty($token) || empty($earn_ticket)) {
-        // Coba cek apakah kita di halaman dengan SweetAlert "Login Success"
-        if (strpos($html, 'Login Success') !== false) {
-            // Berarti baru login, coba ambil lagi
-            return 'REDIRECT';
-        }
         return null;
     }
     
@@ -277,35 +262,35 @@ function get_faucet_data($jar) {
 }
 
 function extract_timer($html) {
-    preg_match('/Next claim available in:\s*<span[^>]*>(\d+)<\/span>m\s*<span[^>]*>(\d+)<\/span>s/', $html, $match);
-    if (!empty($match[1]) && !empty($match[2])) {
-        return (int)$match[1] * 60 + (int)$match[2];
+    if (preg_match('/Next claim available in:\s*<span[^>]*>(\d+)<\/span>m\s*<span[^>]*>(\d+)<\/span>s/', $html, $m)) {
+        return (int)$m[1] * 60 + (int)$m[2];
     }
-    preg_match('/Next claim available in:\s*<span[^>]*>(\d+)<\/span>s/', $html, $match);
-    if (!empty($match[1])) {
-        return (int)$match[1];
+    if (preg_match('/Next claim available in:\s*<span[^>]*>(\d+)<\/span>s/', $html, $m)) {
+        return (int)$m[1];
     }
-    preg_match('/id="minute">(\d+)/', $html, $min);
-    preg_match('/id="second">(\d+)/', $html, $sec);
-    if (!empty($min[1]) && !empty($sec[1])) {
+    if (preg_match('/id="minute">(\d+)/', $html, $min) && preg_match('/id="second">(\d+)/', $html, $sec)) {
         return (int)$min[1] * 60 + (int)$sec[1];
     }
     return 0;
 }
 
 function extract_reward($html) {
-    preg_match('/(\d+)\s*Coins\s*has been added/', $html, $match);
-    if (!empty($match[1])) return (int)$match[1];
-    preg_match('/\+\s*(\d+)\s*Coins/', $html, $match);
-    if (!empty($match[1])) return (int)$match[1];
+    if (preg_match('/(\d+)\s*Coins\s*has been added/', $html, $m)) {
+        return (int)$m[1];
+    }
+    if (preg_match('/\+\s*(\d+)\s*Coins/', $html, $m)) {
+        return (int)$m[1];
+    }
     return 10;
 }
 
 function extract_balance($html) {
-    preg_match('/balance-amount[^>]*>.*?(\d+)\s*<span/', $html, $match);
-    if (!empty($match[1])) return (int)$match[1];
-    preg_match('/TOTAL BALANCE.*?(\d+)\s*Coins/', $html, $match);
-    if (!empty($match[1])) return (int)$match[1];
+    if (preg_match('/balance-amount[^>]*>.*?(\d+)\s*<span/', $html, $m)) {
+        return (int)$m[1];
+    }
+    if (preg_match('/TOTAL BALANCE.*?(\d+)\s*Coins/', $html, $m)) {
+        return (int)$m[1];
+    }
     return null;
 }
 
@@ -366,12 +351,12 @@ function claim_faucet($jar, $faucet_data) {
     
     // Cek "Failed!" retry
     if (strpos($html, 'Failed!') !== false || strpos($html, 'Please try again') !== false) {
-        echo KUNING . "[!] Got 'Failed!', refresh form..." . RESET . "\n";
+        echo KUNING . "[!] Got Failed, refresh form..." . RESET . "\n";
         return false;
     }
     
     echo MERAH . "[?] Claim tidak jelas." . RESET . "\n";
-    file_put_contents("claim_debug_cf.html", $html);
+    file_put_contents('claim_debug_cf.html', $html);
     return false;
 }
 
@@ -386,7 +371,7 @@ $config = get_config();
 $cookie_str = $config['cookie'] ?? '';
 
 if (empty($cookie_str)) {
-    echo MERAH . "[!] Cookie tidak ditemukan di config." . RESET . "\n";
+    echo MERAH . "[!] Cookie tidak ditemukan." . RESET . "\n";
     exit(1);
 }
 
@@ -407,9 +392,9 @@ file_put_contents(CONFIG_FILE, json_encode($config, JSON_PRETTY_PRINT));
 
 // Ambil data faucet
 $faucet_data = get_faucet_data($jar);
-if (!$faucet_data || $faucet_data === 'EXPIRED' || $faucet_data === 'REDIRECT') {
+if (!$faucet_data || $faucet_data === 'EXPIRED') {
     echo MERAH . "[!] Gagal ambil data faucet." . RESET . "\n";
-    if ($faucet_data === 'REDIRECT' || $faucet_data === 'EXPIRED') {
+    if ($faucet_data === 'EXPIRED') {
         echo KUNING . "[*] Cookie mungkin perlu refresh. Ambil cookie baru." . RESET . "\n";
     }
     exit(1);
@@ -430,7 +415,7 @@ while (true) {
         sleep(5);
         continue;
     }
-    if ($faucet_data === 'EXPIRED' || $faucet_data === 'REDIRECT') {
+    if ($faucet_data === 'EXPIRED') {
         echo MERAH . "[!] Session expired. Ambil cookie baru." . RESET . "\n";
         break;
     }
