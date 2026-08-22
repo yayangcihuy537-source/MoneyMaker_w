@@ -41,7 +41,7 @@ BANNER = f"""
 ║  {Colors.HEADER}███████╗   ██║   ╚██████╗   ██║   ██║  ██║███████╗   ██║   ║
 ║  {Colors.HEADER}╚══════╝   ╚═╝    ╚═════╝   ╚═╝   ╚═╝  ╚═╝╚══════╝   ╚═╝   ║
 ║                                                                          ║
-║  {Colors.PINK}🔥 LTC MINER BOT   {Colors.CYAN}│ {Colors.GREEN}v2.1 {Colors.CYAN}│ {Colors.YELLOW}Telegram Mini App ║
+║  {Colors.PINK}🔥 LTC MINER BOT   {Colors.CYAN}│ {Colors.GREEN}v2.2 {Colors.CYAN}│ {Colors.YELLOW}Telegram Mini App ║
 ║                                                                          ║
 ╚════════════════════════════════════════════════════════════════════════════╝{Colors.END}
 """
@@ -259,12 +259,14 @@ class LTCMinerBot:
             return True
         return False
 
-    def _send_ad_reward_trigger(self):
-        """Trigger reward setelah nonton short ad"""
-        url = f"{self.api_url}/richads-bot-ad-trigger"
+    # ==================== FIX: SHORT AD ====================
+    
+    def _send_ad_reward(self):
+        """Trigger reward via user-operations dengan action ad_watch_reward"""
+        url = f"{self.api_url}/user-operations"
         payload = {
+            "action": "ad_watch_reward",
             "telegram_id": self.telegram_id,
-            "event": "watch_ad_reward",
             "_init_data": self.init_data,
             "_ts": int(time.time() * 1000)
         }
@@ -272,15 +274,20 @@ class LTCMinerBot:
             response = self.session.post(url, json=payload)
             if response.status_code == 200:
                 data = response.json()
-                if data.get('skipped') == 'no_fill':
-                    return False
-                return True
+                if data.get('success'):
+                    # Update balance dari response user
+                    user = data.get('user', {})
+                    self.balance = user.get('balance', self.balance)
+                    self.xp = user.get('xp', self.xp)
+                    self.level = user.get('level', self.level)
+                    self.daily_ad_count = user.get('daily_ad_count', self.daily_ad_count)
+                    return True, data.get('reward', 0)
+            return False, 0
         except:
-            pass
-        return False
+            return False, 0
 
     def watch_short_ad(self):
-        """Nonton short ad + trigger reward + refresh balance"""
+        """Nonton short ad + trigger reward via user-operations"""
         if self.daily_ad_count >= self.daily_ad_limit:
             return False
         
@@ -295,24 +302,19 @@ class LTCMinerBot:
             time.sleep(1)
         print()
         
-        # Trigger reward
-        success = self._send_ad_reward_trigger()
+        # Trigger reward via user-operations
+        success, reward = self._send_ad_reward()
         
-        # WAJIB: Refresh balance setelah trigger (tunggu 2 detik biar reward masuk)
-        time.sleep(2)
-        self.login()
-        
-        # Hitung gain
-        old_balance = self.balance
-        if self.daily_ad_count < self.daily_ad_limit:
+        if success and reward > 0:
             self.daily_ad_count += 1
             self.ads_watched += 1
-            gain = self.balance - old_balance
-            self.total_gain += gain
-            print(f"   {Colors.GREEN}💰 +{gain:.8f} LTC (Balance: {self.balance:.8f}){Colors.END}")
+            self.total_gain += reward
+            print(f"   {Colors.GREEN}💰 +{reward:.8f} LTC (Balance: {self.balance:.8f}){Colors.END}")
             return True
         else:
             print(f"   {Colors.RED}❌ Gagal claim reward{Colors.END}")
+            # Refresh balance anyway
+            self.login()
             return False
 
     # ==================== POP-UP AD ====================
