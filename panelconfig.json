@@ -37,6 +37,16 @@
           "label": "Skyfreecoins",
           "file": "sky.py",
           "runner": "python3"
+        },
+        "8": {
+          "label": "ClaimTrx",
+          "file": "trx.php",
+          "runner": "php"
+        },
+        "9": {
+          "label": "FeyorraTop",
+          "file": "Top.php",
+          "runner": "php"
         }
       }
     },
