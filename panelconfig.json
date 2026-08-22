@@ -49,7 +49,7 @@
           "runner": "php"
         },
         "2": {
-          "label": "altcryp",
+          "label": "Coming Soon",
           "file": "altcryp.py",
           "runner": "python3"
         },
