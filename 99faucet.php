@@ -1,7 +1,7 @@
 <?php
 // ============================================================
-// 99FAUCET AUTO BOT - PHP Version FIXED
-// Cookie Jar + Auto Login + hCaptcha Solver
+// 99FAUCET AUTO BOT - PHP + Login Choice
+// STOP jika redirect ke shortlink (tanpa auto solve)
 // ============================================================
 
 error_reporting(0);
@@ -102,36 +102,70 @@ function timer($seconds, $prefix = "[!] Please wait") {
 
 function get_config() {
     if (file_exists(CONFIG_FILE)) {
-        return json_decode(file_get_contents(CONFIG_FILE), true);
+        $config = json_decode(file_get_contents(CONFIG_FILE), true);
+        if (!isset($config['login_method'])) {
+            $config['login_method'] = 'email';
+        }
+        return $config;
     }
-    echo PUTIH . "Email: " . KUNING;
-    $email = trim(fgets(STDIN));
-    echo PUTIH . "Password: " . KUNING;
-    system('stty -echo');
-    $password = trim(fgets(STDIN));
-    system('stty echo');
-    echo "\n";
-    echo PUTIH . "Cookie (opsional): " . KUNING;
-    $cookie = trim(fgets(STDIN));
-    echo PUTIH . "API Key bypassallshortlinks: " . KUNING;
-    $apikey = trim(fgets(STDIN));
-    $config = [
-        'email' => $email,
-        'password' => $password,
-        'cookie' => $cookie,
-        'apikey' => $apikey
-    ];
+    return null;
+}
+
+function save_config($config) {
     file_put_contents(CONFIG_FILE, json_encode($config, JSON_PRETTY_PRINT));
-    echo HIJAU . "Config disimpan ke " . CONFIG_FILE . RESET . "\n";
-    sleep(1);
-    return $config;
+}
+
+function get_login_choice() {
+    clear();
+    echo CYAN . "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" . RESET . "\n";
+    echo BOLD . KUNING . "              🍪 99FAUCET AUTO BOT" . RESET . "\n";
+    echo CYAN . "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" . RESET . "\n";
+    echo PUTIH . "Pilih metode login:\n";
+    echo HIJAU . "  [1] " . PUTIH . "Pakai Cookie (langsung jalan)\n";
+    echo HIJAU . "  [2] " . PUTIH . "Pakai Email + Password (auto login)\n";
+    echo PUTIH . "Pilihan (1/2): " . KUNING;
+    $choice = trim(fgets(STDIN));
+    echo RESET;
+    
+    if ($choice == '2') {
+        echo PUTIH . "Email: " . KUNING;
+        $email = trim(fgets(STDIN));
+        echo PUTIH . "Password: " . KUNING;
+        system('stty -echo');
+        $password = trim(fgets(STDIN));
+        system('stty echo');
+        echo "\n";
+        echo PUTIH . "API Key bypassallshortlinks: " . KUNING;
+        $apikey = trim(fgets(STDIN));
+        echo RESET;
+        return [
+            'method' => 'email',
+            'email' => $email,
+            'password' => $password,
+            'apikey' => $apikey,
+            'cookie' => ''
+        ];
+    } else {
+        echo PUTIH . "Cookie (dari browser): " . KUNING;
+        $cookie = trim(fgets(STDIN));
+        echo PUTIH . "API Key bypassallshortlinks: " . KUNING;
+        $apikey = trim(fgets(STDIN));
+        echo RESET;
+        return [
+            'method' => 'cookie',
+            'email' => '',
+            'password' => '',
+            'apikey' => $apikey,
+            'cookie' => $cookie
+        ];
+    }
 }
 
 function generate_uf() {
     return md5(uniqid(mt_rand(), true));
 }
 
-function http_request($url, $method = 'GET', $data = [], $headers = [], CookieJar &$jar = null) {
+function http_request($url, $method = 'GET', $data = [], $headers = [], CookieJar &$jar = null, &$finalUrl = null) {
     if ($jar === null) {
         $jar = new CookieJar();
     }
@@ -149,7 +183,6 @@ function http_request($url, $method = 'GET', $data = [], $headers = [], CookieJa
         CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
     ];
     
-    // Set cookie
     $cookie_str = $jar->toString();
     if (!empty($cookie_str)) {
         $options[CURLOPT_COOKIE] = $cookie_str;
@@ -176,7 +209,8 @@ function http_request($url, $method = 'GET', $data = [], $headers = [], CookieJa
     $body = substr($response, $header_size);
     $header = substr($response, 0, $header_size);
     
-    // Parse cookie dari header
+    $finalUrl = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
+    
     $jar->parseSetCookie($header);
     
     curl_close($ch);
@@ -235,7 +269,6 @@ function solve_hcaptcha($sitekey, $pageurl, $apikey, $show_progress = false) {
 function get_sitekey($html) {
     preg_match('/data-sitekey="([^"]+)"/', $html, $match);
     if (!empty($match[1])) return $match[1];
-    // Coba regex alternatif
     preg_match('/sitekey:\s*"([^"]+)"/', $html, $match);
     if (!empty($match[1])) return $match[1];
     return null;
@@ -251,14 +284,12 @@ function is_logged_in($html) {
 function login(CookieJar &$jar, $email, $password, $apikey) {
     echo CYAN . "[*] Login via email..." . RESET . "\n";
     
-    // GET homepage dapetin cookie
     $home = http_request(BASE_URL, 'GET', [], [], $jar);
     if (!$home) {
         echo MERAH . "[!] Gagal akses homepage." . RESET . "\n";
         return false;
     }
     
-    // Set UF jika belum ada
     if (!$jar->get('uf')) {
         $jar->set('uf', generate_uf());
     }
@@ -284,13 +315,12 @@ function login(CookieJar &$jar, $email, $password, $apikey) {
         'ls' => 'id-ID'
     ];
     
-    $login_resp = http_request(BASE_URL . "/auth/login", 'POST', $data, [
+    http_request(BASE_URL . "/auth/login", 'POST', $data, [
         'Content-Type: application/x-www-form-urlencoded',
         'Origin: ' . BASE_URL,
         'Referer: ' . BASE_URL . '/',
     ], $jar);
     
-    // Cek dashboard
     $dash = http_request(BASE_URL . "/dashboard", 'GET', [], [], $jar);
     if ($dash && is_logged_in($dash)) {
         echo HIJAU . "[+] Login sukses!" . RESET . "\n";
@@ -313,10 +343,19 @@ function get_coins(CookieJar &$jar) {
     return [];
 }
 
-function get_faucet_page(CookieJar &$jar, $coin) {
+// ===== CEK SHORTLINK TANPA AUTO SOLVE =====
+function get_faucet_page(CookieJar &$jar, $coin, &$finalUrl = null) {
     $url = BASE_URL . "/faucet/$coin";
-    $result = http_request($url, 'GET', [], [], $jar);
+    $result = http_request($url, 'GET', [], [], $jar, $finalUrl);
     if (!$result) return null;
+    
+    // Jika redirect ke /links/... atau halaman berisi shortlink, stop
+    if ($finalUrl && strpos($finalUrl, '/links/') !== false) {
+        return ['status' => 'shortlink', 'url' => $finalUrl];
+    }
+    if (strpos($result, 'Shortlinks') !== false || strpos($result, 'Click To Visit') !== false) {
+        return ['status' => 'shortlink', 'url' => $url];
+    }
     
     preg_match('/name="token"\s+value="([^"]+)"/', $result, $token_match);
     $token = isset($token_match[1]) ? $token_match[1] : null;
@@ -328,17 +367,23 @@ function get_faucet_page(CookieJar &$jar, $coin) {
         $wait = (int)$min[1] * 60 + (int)$sec[1];
     }
     
-    return ['token' => $token, 'html' => $result, 'wait_time' => $wait, 'sitekey' => get_sitekey($result)];
+    $sitekey = get_sitekey($result);
+    
+    return ['status' => 'ok', 'token' => $token, 'html' => $result, 'wait_time' => $wait, 'sitekey' => $sitekey];
 }
 
 function wait_for_cooldown(CookieJar &$jar, $coin) {
     echo KUNING . "[*] Cek cooldown..." . RESET . "\n";
-    $max_wait = 600; // max 10 menit
+    $max_wait = 600;
     $total = 0;
     while ($total < $max_wait) {
         $page = get_faucet_page($jar, $coin);
         if (!$page) break;
-        $wait = $page['wait_time'];
+        if ($page['status'] === 'shortlink') {
+            echo MERAH . "[!] Redirect ke shortlink terdeteksi. Bot berhenti." . RESET . "\n";
+            return 'SHORTLINK';
+        }
+        $wait = $page['wait_time'] ?? 0;
         if ($wait <= 0) {
             echo HIJAU . "[+] Cooldown selesai." . RESET . "\n";
             return true;
@@ -355,16 +400,32 @@ function wait_for_cooldown(CookieJar &$jar, $coin) {
 function claim_faucet(CookieJar &$jar, $coin, $apikey) {
     echo CYAN . "[*] Claim      : PROCESSING... (coin: " . strtoupper($coin) . ")" . RESET . "\n";
     
-    // Tunggu cooldown
-    if (!wait_for_cooldown($jar, $coin)) {
+    $finalUrl = null;
+    $page = get_faucet_page($jar, $coin, $finalUrl);
+    if (!$page) {
+        echo MERAH . "[!] Gagal ambil halaman faucet." . RESET . "\n";
         return false;
     }
     
-    // Ambil halaman faucet fresh
-    $page = get_faucet_page($jar, $coin);
-    if (!$page || !$page['token']) {
-        echo MERAH . "[!] Gagal ambil token faucet." . RESET . "\n";
+    if ($page['status'] === 'shortlink') {
+        echo MERAH . "[!] Redirect ke shortlinks: " . $page['url'] . RESET . "\n";
+        echo MERAH . "[!] Bot berhenti karena membutuhkan shortlink manual." . RESET . "\n";
+        return 'SHORTLINK';
+    }
+    
+    $cooldown = wait_for_cooldown($jar, $coin);
+    if ($cooldown === 'SHORTLINK') {
+        return 'SHORTLINK';
+    }
+    if (!$cooldown) {
+        echo MERAH . "[!] Gagal menunggu cooldown." . RESET . "\n";
         return false;
+    }
+    
+    $page = get_faucet_page($jar, $coin);
+    if (!$page || $page['status'] === 'shortlink') {
+        echo MERAH . "[!] Halaman faucet tidak valid atau shortlink." . RESET . "\n";
+        return 'SHORTLINK';
     }
     
     $token = $page['token'];
@@ -372,7 +433,6 @@ function claim_faucet(CookieJar &$jar, $coin, $apikey) {
     echo KUNING . "[+] Token      : $token" . RESET . "\n";
     echo KUNING . "[+] Sitekey    : " . substr($sitekey, 0, 16) . "****" . RESET . "\n";
     
-    // Solve captcha
     $url = BASE_URL . "/faucet/$coin";
     $captcha = solve_hcaptcha($sitekey, $url, $apikey, true);
     if (!$captcha) return false;
@@ -400,7 +460,6 @@ function claim_faucet(CookieJar &$jar, $coin, $apikey) {
         return false;
     }
     
-    // Cek SweetAlert
     if (strpos($result, 'Swal.fire') !== false && strpos($result, 'Good job') !== false) {
         echo HIJAU . "[+] Claim      : SUCCESS ✓" . RESET . "\n";
         preg_match('/text:\s*[\'"]?([\d.]+)\s+(\w+)/', $result, $reward);
@@ -410,7 +469,6 @@ function claim_faucet(CookieJar &$jar, $coin, $apikey) {
         return true;
     }
     
-    // Cek cooldown
     preg_match('/id="minute">(\d+)/', $result, $min);
     preg_match('/id="second">(\d+)/', $result, $sec);
     if (!empty($min) && !empty($sec)) {
@@ -421,13 +479,11 @@ function claim_faucet(CookieJar &$jar, $coin, $apikey) {
         }
     }
     
-    // Cek success message
     if (strpos($result, 'has been sent') !== false || strpos($result, 'success') !== false) {
         echo HIJAU . "[+] Claim      : SUCCESS ✓" . RESET . "\n";
         return true;
     }
     
-    // Cek redirect ke login
     if (strpos($result, 'login') !== false && strlen($result) < 500) {
         echo MERAH . "[!] Session expired." . RESET . "\n";
         return "EXPIRED";
@@ -439,39 +495,71 @@ function claim_faucet(CookieJar &$jar, $coin, $apikey) {
 }
 
 // ========== MAIN ==========
-clear();
-
-echo CYAN . "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" . RESET . "\n";
-echo BOLD . KUNING . "              🍪 99FAUCET AUTO BOT (PHP)" . RESET . "\n";
-echo CYAN . "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" . RESET . "\n";
-
 $config = get_config();
-$email = $config['email'] ?? '';
-$password = $config['password'] ?? '';
-$cookie = $config['cookie'] ?? '';
-$apikey = $config['apikey'] ?? '';
+
+if ($config && isset($config['login_method'])) {
+    echo CYAN . "Config ditemukan. Login method terakhir: " . $config['login_method'] . RESET . "\n";
+    echo PUTIH . "Gunakan config yang ada? (y/n): " . KUNING;
+    $use_config = trim(fgets(STDIN));
+    if (strtolower($use_config) === 'y') {
+        $login_data = [
+            'method' => $config['login_method'],
+            'email' => $config['email'] ?? '',
+            'password' => $config['password'] ?? '',
+            'apikey' => $config['apikey'] ?? '',
+            'cookie' => $config['cookie'] ?? ''
+        ];
+    } else {
+        $login_data = get_login_choice();
+    }
+} else {
+    $login_data = get_login_choice();
+}
+
+save_config($login_data);
+
+clear();
+echo CYAN . "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" . RESET . "\n";
+echo BOLD . KUNING . "              🍪 99FAUCET AUTO BOT" . RESET . "\n";
+echo CYAN . "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" . RESET . "\n";
+echo KUNING . "[*] Login method: " . $login_data['method'] . RESET . "\n";
 
 $jar = new CookieJar();
 
-// Parse cookie dari config
-if (!empty($cookie)) {
-    $jar->fromString($cookie);
-}
-
-// Cek status login
-$dash = http_request(BASE_URL . "/dashboard", 'GET', [], [], $jar);
-if ($dash && is_logged_in($dash)) {
-    echo HIJAU . "[+] Session aktif!" . RESET . "\n";
-} else {
-    echo KUNING . "[*] Session tidak aktif, mencoba login..." . RESET . "\n";
-    if (!login($jar, $email, $password, $apikey)) {
-        echo MERAH . "[!] Login gagal. Cek config." . RESET . "\n";
+if ($login_data['method'] === 'cookie') {
+    if (!empty($login_data['cookie'])) {
+        $jar->fromString($login_data['cookie']);
+        echo HIJAU . "[+] Cookie loaded." . RESET . "\n";
+    } else {
+        echo MERAH . "[!] Cookie kosong!" . RESET . "\n";
         exit(1);
     }
-    // Simpan cookie
-    $config['cookie'] = $jar->toString();
-    file_put_contents(CONFIG_FILE, json_encode($config, JSON_PRETTY_PRINT));
-    echo HIJAU . "[+] Cookie disimpan." . RESET . "\n";
+    
+    $dash = http_request(BASE_URL . "/dashboard", 'GET', [], [], $jar);
+    if ($dash && is_logged_in($dash)) {
+        echo HIJAU . "[+] Session aktif dengan cookie!" . RESET . "\n";
+    } else {
+        echo MERAH . "[!] Cookie tidak valid atau expired." . RESET . "\n";
+        exit(1);
+    }
+} else {
+    $email = $login_data['email'];
+    $password = $login_data['password'];
+    $apikey = $login_data['apikey'];
+    
+    $dash = http_request(BASE_URL . "/dashboard", 'GET', [], [], $jar);
+    if ($dash && is_logged_in($dash)) {
+        echo HIJAU . "[+] Session aktif!" . RESET . "\n";
+    } else {
+        echo KUNING . "[*] Session tidak aktif, mencoba login..." . RESET . "\n";
+        if (!login($jar, $email, $password, $apikey)) {
+            echo MERAH . "[!] Login gagal. Cek config." . RESET . "\n";
+            exit(1);
+        }
+        $login_data['cookie'] = $jar->toString();
+        save_config($login_data);
+        echo HIJAU . "[+] Cookie disimpan." . RESET . "\n";
+    }
 }
 
 $coins = get_coins($jar);
@@ -505,19 +593,26 @@ $count = 0;
 while (true) {
     $count++;
     echo "\n" . CYAN . "┌─[ ROUND $count ]" . RESET . "\n";
-    $result = claim_faucet($jar, $coin, $apikey);
+    $result = claim_faucet($jar, $coin, $login_data['apikey']);
     
     if ($result === "EXPIRED") {
-        echo KUNING . "[*] Mencoba refresh session..." . RESET . "\n";
-        if (login($jar, $email, $password, $apikey)) {
-            $config['cookie'] = $jar->toString();
-            file_put_contents(CONFIG_FILE, json_encode($config, JSON_PRETTY_PRINT));
-            echo HIJAU . "[+] Session refresh sukses!" . RESET . "\n";
-            continue;
+        echo KUNING . "[*] Session expired. Mencoba refresh..." . RESET . "\n";
+        if ($login_data['method'] === 'email') {
+            if (login($jar, $login_data['email'], $login_data['password'], $login_data['apikey'])) {
+                $login_data['cookie'] = $jar->toString();
+                save_config($login_data);
+                echo HIJAU . "[+] Session refresh sukses!" . RESET . "\n";
+                continue;
+            }
         } else {
-            echo MERAH . "[!] Gagal refresh session." . RESET . "\n";
+            echo MERAH . "[!] Cookie expired. Harap update cookie di config." . RESET . "\n";
             break;
         }
+    }
+    
+    if ($result === 'SHORTLINK') {
+        echo MERAH . "[!] Shortlink terdeteksi. Bot berhenti." . RESET . "\n";
+        break;
     }
     
     if ($result) {
