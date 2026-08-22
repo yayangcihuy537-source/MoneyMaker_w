@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CryptoFuture Auto Claim Bot v12 - Pretty Output Edition
+CryptoFuture Auto Claim Bot v11 - Handle Failed! & retry
 Dev: ScriptyXSou
 """
 
@@ -14,17 +14,12 @@ import random
 import string
 import sys
 
-# ======================== ANSI COLORS ========================
-GREEN = '\033[92m'
-YELLOW = '\033[93m'
+# ======================== BANNER ========================
 ORANGE = '\033[38;5;214m'
 ORANGE2 = '\033[38;5;208m'
-CYAN = '\033[96m'
-RED = '\033[91m'
 RESET = '\033[0m'
 BOLD = '\033[1m'
 
-# ======================== BANNER ========================
 def print_banner():
     try:
         import pyfiglet
@@ -76,7 +71,6 @@ class CryptoFutureBot:
         self.balance = 0
         self.success_count = 0
         self.max_claims = max_claims
-        self.last_reward = 0
         
     # ---------- Extraction Helpers ----------
     def _extract_csrf(self, html):
@@ -120,17 +114,6 @@ class CryptoFutureBot:
             match = re.search(pattern, html, re.DOTALL)
             if match:
                 return int(match.group(1).replace(',', ''))
-        return None
-    
-    def _extract_reward(self, html):
-        # Cari di SweetAlert: "Success! 10 Coins has been added"
-        match = re.search(r'(\d+)\s*Coins\s*has been added', html)
-        if match:
-            return int(match.group(1))
-        # Alternatif: cari " +XX Coins"
-        match = re.search(r'\+\s*(\d+)\s*Coins', html)
-        if match:
-            return int(match.group(1))
         return None
     
     def _extract_timer(self, html):
@@ -178,7 +161,7 @@ class CryptoFutureBot:
     
     # ---------- Login ----------
     def login(self):
-        print(f'[+] Logging in as: {self.email}')
+        print('[+] Logging in as:', self.email)
         
         resp = self.session.get(self.base_url + '/')
         if resp.status_code != 200:
@@ -207,7 +190,7 @@ class CryptoFutureBot:
             return False
         
         if 'Login Success' in resp.text or '/dashboard' in resp.text or 'Dashboard' in resp.text:
-            print(GREEN + '[✓] Login success!' + RESET)
+            print('[+] Login success!')
             balance = self.get_balance()
             if balance is not None:
                 self.balance = balance
@@ -221,6 +204,7 @@ class CryptoFutureBot:
     
     # ---------- Get Fresh Form ----------
     def get_fresh_form(self):
+        """GET /earn and extract all form fields"""
         resp = self.session.get(self.base_url + '/earn')
         if resp.status_code != 200:
             return None, None, None, None, None
@@ -235,6 +219,8 @@ class CryptoFutureBot:
     
     # ---------- Claim ----------
     def claim(self):
+        print('[+] Attempting to claim...')
+        
         # Get fresh form
         html, csrf, token, earn_ticket, wallet = self.get_fresh_form()
         if not all([csrf, token, earn_ticket, wallet]):
@@ -245,7 +231,7 @@ class CryptoFutureBot:
         # Check cooldown
         timer = self._extract_timer(html)
         if timer > 0:
-            print(YELLOW + f'[⏳] Cooldown active: {timer} seconds remaining' + RESET)
+            print(f'[!] Cooldown active: {timer} seconds remaining')
             return timer
         
         self.csrf_token = csrf
@@ -279,23 +265,23 @@ class CryptoFutureBot:
         # ===== DETEKSI SUKSES =====
         is_success = any(kw in html.lower() for kw in ['success', 'coins has been added'])
         if is_success or 'Success!' in html:
-            reward = self._extract_reward(html)
-            if reward is None:
-                reward = 10  # default jika tidak terdeteksi
-            self.last_reward = reward
+            print('[+] Claim success!')
             self.success_count += 1
             balance = self._extract_balance(html)
             if balance is not None:
                 self.balance = balance
+                print(f'[+] New balance: {self.balance} Coins')
             else:
                 bal = self.get_balance()
                 if bal is not None:
                     self.balance = bal
+                    print(f'[+] Balance updated: {self.balance} Coins')
             return True
         
-        # ===== DETEKSI FAILED! (retry) =====
+        # ===== DETEKSI FAILED! (retry dengan form baru) =====
         if 'Failed!' in html or 'Please try again' in html:
-            print(YELLOW + '[!] Got "Failed!" response, refreshing form and retrying...' + RESET)
+            print('[!] Got "Failed!" response, refreshing form and retrying...')
+            # Ambil form baru dari halaman yang sama
             html2, csrf2, token2, earn_ticket2, wallet2 = self.get_fresh_form()
             if all([csrf2, token2, earn_ticket2, wallet2]):
                 self.csrf_token = csrf2
@@ -325,41 +311,45 @@ class CryptoFutureBot:
                 
                 html2 = resp2.text
                 if any(kw in html2.lower() for kw in ['success', 'coins has been added']) or 'Success!' in html2:
-                    reward2 = self._extract_reward(html2)
-                    if reward2 is None:
-                        reward2 = 10
-                    self.last_reward = reward2
+                    print('[+] Claim success on retry!')
                     self.success_count += 1
                     bal2 = self._extract_balance(html2)
                     if bal2 is not None:
                         self.balance = bal2
+                        print(f'[+] New balance: {self.balance} Coins')
                     return True
                 else:
+                    print('[-] Retry also failed')
                     return False
             else:
+                print('[-] Could not refresh form after Failed!')
                 return False
         
         # ===== COOLDOWN =====
         if 'Please Wait' in html:
             timer = self._extract_timer(html)
             if timer > 0:
-                print(YELLOW + f'[⏳] Cooldown active: {timer} seconds remaining' + RESET)
+                print(f'[!] Cooldown active: {timer} seconds remaining')
                 return timer
             else:
-                print(YELLOW + '[!] "Please Wait" but no timer found, assuming 30s cooldown' + RESET)
+                print('[!] "Please Wait" but no timer found, assuming 30s cooldown')
                 return 30
         
         if 'already claimed' in html.lower():
-            print(YELLOW + '[!] Already claimed, checking timer...' + RESET)
+            print('[!] Already claimed, checking timer...')
             timer = self._extract_timer(html)
             if timer > 0:
                 return timer
             else:
-                print(YELLOW + '[!] No timer found, waiting 60s' + RESET)
+                print('[!] No timer found, waiting 60s')
                 return 60
         
         # ===== UNKNOWN =====
-        print(RED + '[-] Claim failed, unexpected response' + RESET)
+        print('[-] Claim failed, unexpected response')
+        print('[DEBUG] Full HTML response:')
+        print('='*60)
+        print(html[:1500])  # cukup 1500 karakter biar gak kepanjangan
+        print('='*60)
         with open('claim_response.html', 'w', encoding='utf-8') as f:
             f.write(html)
         return False
@@ -367,7 +357,7 @@ class CryptoFutureBot:
     # ---------- Run Loop ----------
     def run(self, interval=12):
         print('='*50)
-        print(' CryptoFuture Auto Claim Bot v12')
+        print(' CryptoFuture Auto Claim Bot v11 (Final)')
         print(f' Email: {self.email}')
         print(f' Interval: {interval} seconds')
         print(f' Max claims: {self.max_claims}')
@@ -377,49 +367,43 @@ class CryptoFutureBot:
             print('[-] Login failed, exit')
             return
         
-        print(GREEN + '[✓] Login successful, starting claim loop...' + RESET)
+        print('[+] Login successful, starting claim loop...')
         print('-'*50)
         
         claim_count = 0
         while self.success_count < self.max_claims:
             try:
                 claim_count += 1
-                # ===== PRETTY HEADER =====
-                time_str = time.strftime("%H:%M:%S")
-                print(f'\n{CYAN}[{claim_count:02d}] 🕐 Claim attempt at {time_str}{RESET}')
-                print(f'[+] 💰 Current balance : {self.balance} Coins')
-                print(f'[+] 📊 Successful      : {self.success_count}/{self.max_claims}')
-                print(f'[>] ⚡ Attempting to claim...')
+                print(f'\n[{claim_count}] Claim attempt at {time.strftime("%H:%M:%S")}')
+                print(f'[+] Current balance: {self.balance} Coins')
+                print(f'[+] Successful claims so far: {self.success_count}/{self.max_claims}')
                 
                 result = self.claim()
                 
                 if result is True:
-                    print(GREEN + f'[✓] 🎉 Claim success!' + RESET)
-                    print(f'[+] 🎁 Reward         : +{self.last_reward} Coins')
-                    print(f'[+] 💰 New balance    : {self.balance} Coins')
-                    print(GREEN + '[✓] Claim completed successfully' + RESET)
+                    print('[+] Claim completed successfully')
                 elif isinstance(result, int) and result > 0:
-                    print(YELLOW + f'[⏳] Waiting {result} seconds before next attempt' + RESET)
+                    print(f'[!] Waiting {result} seconds before next attempt')
                     time.sleep(result + 2)
                     continue
                 elif result is False:
-                    print(RED + '[-] Claim failed, will retry after interval' + RESET)
+                    print('[-] Claim failed, will retry after interval')
                 
                 if self.success_count >= self.max_claims:
-                    print(f'\n{GREEN}[✓] Reached maximum claims ({self.max_claims}). Stopping bot.{RESET}')
+                    print(f'\n[!] Reached maximum claims ({self.max_claims}). Stopping bot.')
                     break
                 
-                print(f'{ORANGE}[⏳] Waiting {interval} seconds...{RESET}')
+                print(f'[+] Waiting {interval} seconds...')
                 time.sleep(interval)
                 
             except KeyboardInterrupt:
                 print('\n[!] Stopped by user')
                 break
             except Exception as e:
-                print(RED + f'[-] Error: {e}' + RESET)
+                print(f'[-] Error: {e}')
                 time.sleep(interval)
         
-        print(f'\n{GREEN}[✓] Bot finished. Total successful claims: {self.success_count}{RESET}')
+        print('\n[+] Bot finished. Total successful claims:', self.success_count)
 
 
 # ======================== MAIN ========================
