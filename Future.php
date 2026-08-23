@@ -1,7 +1,7 @@
 <?php
 // ============================================================
 // CRYPTOFUTURE AUTO BOT - PHP Version (Cookie Only)
-// NO PASSWORD NEEDED - Just cookie from browser
+// ALWAYS ASK FOR NEW COOKIE ON EACH RUN
 // ============================================================
 
 error_reporting(0);
@@ -97,15 +97,18 @@ function timer($seconds, $prefix = "[!] Please wait") {
     echo str_repeat(" ", 50) . "\r";
 }
 
+// ===== MODIFIED: ALWAYS ASK FOR NEW COOKIE =====
 function get_config() {
-    if (file_exists(CONFIG_FILE)) {
-        return json_decode(file_get_contents(CONFIG_FILE), true);
-    }
     echo PUTIH . "Cookie (dari browser, format: key1=value1; key2=value2): " . KUNING;
     $cookie = trim(fgets(STDIN));
+    if (empty($cookie)) {
+        echo MERAH . "[!] Cookie tidak boleh kosong." . RESET . "\n";
+        exit(1);
+    }
     $config = ['cookie' => $cookie];
+    // Tetap simpan ke file sebagai backup, tapi gak dipakai otomatis
     file_put_contents(CONFIG_FILE, json_encode($config, JSON_PRETTY_PRINT));
-    echo HIJAU . "Config disimpan ke " . CONFIG_FILE . RESET . "\n";
+    echo HIJAU . "Config disimpan ke " . CONFIG_FILE . " (backup)\n" . RESET;
     sleep(1);
     return $config;
 }
@@ -367,6 +370,7 @@ echo CYAN . "━━━━━━━━━━━━━━━━━━━━━━�
 echo BOLD . KUNING . "              🍪 CryptoFuture AUTO BOT" . RESET . "\n";
 echo CYAN . "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" . RESET . "\n";
 
+// ALWAYS ask for cookie
 $config = get_config();
 $cookie_str = $config['cookie'] ?? '';
 
@@ -381,12 +385,12 @@ $jar->fromString($cookie_str);
 // Cek session
 if (!is_logged_in($jar)) {
     echo MERAH . "[!] Cookie tidak valid atau expired." . RESET . "\n";
-    echo KUNING . "[*] Ambil cookie baru dari browser dan update config_cf.json" . RESET . "\n";
+    echo KUNING . "[*] Ambil cookie baru dari browser dan jalankan ulang." . RESET . "\n";
     exit(1);
 }
 echo HIJAU . "[+] Session aktif!" . RESET . "\n";
 
-// Simpan cookie terbaru
+// Simpan cookie terbaru (opsional)
 $config['cookie'] = $jar->toString();
 file_put_contents(CONFIG_FILE, json_encode($config, JSON_PRETTY_PRINT));
 
