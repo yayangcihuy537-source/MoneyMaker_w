@@ -39,13 +39,13 @@
           "runner": "python3"
         },
         "8": {
-          "label": "ClaimTrx",
-          "file": "trx.php",
+          "label": "Lightningquest",
+          "file": "light.php",
           "runner": "php"
         },
         "9": {
-          "label": "FeyorraTop",
-          "file": "Top.php",
+          "label": "Coming Soon",
+          "file": "",
           "runner": "php"
         }
       }
@@ -89,8 +89,8 @@
           "runner": "python3"
         },
         "4": {
-          "label": "BabyDogeTap",
-          "file": "tap.py",
+          "label": "ATFMiner",
+          "file": "atf.py",
           "runner": "python3"
         },
         "5": {
@@ -144,8 +144,8 @@
           "runner": "python3"
         },
         "15": {
-          "label": "ATFMiner",
-          "file": "atf.py",
+          "label": "Coming Soon",
+          "file": ".py",
           "runner": "python3"
         },
         "16": {
