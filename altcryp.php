@@ -19,7 +19,7 @@ define('DIM', "\033[2m");
 define('BASE_URL', 'https://altcryp.com');
 define('SOLVER_BASE', 'https://bypassallshortlinks.space');
 define('CONFIG_FILE', 'config_altcryp.json');
-define('CLAIM_INTERVAL', 300);  // default 5 menit
+define('CLAIM_INTERVAL', 20);  // default 5 menit
 define('RETRY_INTERVAL', 60);
 define('MAX_FAILURES', 2);      // <-- batas gagal sebelum stop
 
