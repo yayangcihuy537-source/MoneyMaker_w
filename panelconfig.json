@@ -39,8 +39,8 @@
           "runner": "python3"
         },
         "8": {
-          "label": "Lightningquest",
-          "file": "light.php",
+          "label": "Coming Soon",
+          "file": "",
           "runner": "php"
         },
         "9": {
