@@ -61,7 +61,7 @@
         "2": {
           "label": "Coming Soon",
           "file": "altcryp.php",
-          "runner": "python3"
+          "runner": "php"
         },
         "3": {
           "label": "Coming Soon",
