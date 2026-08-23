@@ -144,8 +144,8 @@
           "runner": "python3"
         },
         "15": {
-          "label": "Coming Soon",
-          "file": ".py",
+          "label": "DogeFaucet",
+          "file": "fd.py",
           "runner": "python3"
         },
         "16": {
