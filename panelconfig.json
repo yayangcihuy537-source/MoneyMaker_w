@@ -9,8 +9,8 @@
           "runner": "php"
         },
         "2": {
-          "label": "CoinPin",
-          "file": "CoinPin.py",
+          "label": "Coming Soon",
+          "file": "",
           "runner": "python"
         },
         "3": {
