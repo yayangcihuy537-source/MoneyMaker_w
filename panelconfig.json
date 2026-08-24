@@ -9,9 +9,9 @@
           "runner": "php"
         },
         "2": {
-          "label": "Coming Soon",
-          "file": "",
-          "runner": "python"
+          "label": "luckywatch",
+          "file": "luckywatch.py",
+          "runner": "python3"
         },
         "3": {
           "label": "Ourcoincash",
