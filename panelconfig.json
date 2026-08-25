@@ -84,13 +84,13 @@
           "runner": "python3"
         },
         "3": {
-          "label": "Pepeflow X CoinsZon X MiniGram X ListohiPay",
+          "label": "Pepeflow X CoinsZon ",
           "file": "pepe.py",
           "runner": "python3"
         },
         "4": {
-          "label": "ATFMiner",
-          "file": "atf.py",
+          "label": "MiniGram X ListohiPay",
+          "file": "",
           "runner": "python3"
         },
         "5": {
@@ -144,8 +144,8 @@
           "runner": "python3"
         },
         "15": {
-          "label": "DogeFaucet",
-          "file": "fd.py",
+          "label": "ATFMiner",
+          "file": "atf.py",
           "runner": "python3"
         },
         "16": {
