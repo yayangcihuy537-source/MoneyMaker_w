@@ -90,7 +90,7 @@
         },
         "4": {
           "label": "MiniGram X ListohiPay",
-          "file": "",
+          "file": "mili.py",
           "runner": "python3"
         },
         "5": {
