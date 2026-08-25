@@ -29,7 +29,7 @@
           "runner": "php"
         },
         "6": {
-          "label": "DogeMiner [Reward is too small]",
+          "label": "DogeMiner",
           "file": "Doge.py",
           "runner": "python3"
         },
@@ -154,9 +154,9 @@
           "runner": "python3"
         },
         "17": {
-          "label": "Coming Soon",
-          "file": "",
-          "runner": ""
+          "label": "DogeFaucet",
+          "file": "Dogefaucet.py",
+          "runner": "python3"
         }
       }
     },
