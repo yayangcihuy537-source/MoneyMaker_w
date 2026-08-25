@@ -154,8 +154,8 @@
           "runner": "python3"
         },
         "17": {
-          "label": "DogeFaucet",
-          "file": "Dogefaucet.py",
+          "label": "BabyDOGETapbot",
+          "file": "baby.py",
           "runner": "python3"
         }
       }
