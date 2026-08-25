@@ -19,8 +19,8 @@ define('DIM', "\033[2m");
 // ========== KONFIGURASI ==========
 define('BASE_URL', 'https://cryptofuture.co.in');
 define('CONFIG_FILE', 'config_cf.json');
-define('MAX_FAILURES', 10);
-define('CLAIM_COOLDOWN', 60);
+define('MAX_FAILURES', 15);
+define('CLAIM_COOLDOWN', 20);
 
 // ========== COOKIE JAR ==========
 class CookieJar {
