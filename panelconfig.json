@@ -19,9 +19,9 @@
           "runner": "php"
         },
         "4": {
-          "label": "ClaimCrypto",
-          "file": "bot.php",
-          "runner": "php"
+          "label": "Skyfreecoins",
+          "file": "sky.py",
+          "runner": "python3"
         },
         "5": {
           "label": "CryptoFuturev2",
@@ -34,8 +34,8 @@
           "runner": "python3"
         },
         "7": {
-          "label": "Skyfreecoins",
-          "file": "sky.py",
+          "label": "FomoEarn",
+          "file": "",
           "runner": "python3"
         },
         "8": {
