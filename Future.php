@@ -1,7 +1,6 @@
 <?php
 // ============================================================
-// CRYPTOFUTURE AUTO BOT - PHP Version (Cookie Only)
-// ALWAYS ASK FOR NEW COOKIE ON EACH RUN
+// CRYPTOFUTURE AUTO BOT - VERIFICATION CHECK FIXED
 // ============================================================
 
 error_reporting(0);
@@ -15,11 +14,13 @@ define('CYAN', "\033[0;36m");
 define('PUTIH', "\033[0;37m");
 define('RESET', "\033[0m");
 define('BOLD', "\033[1m");
+define('DIM', "\033[2m");
 
 // ========== KONFIGURASI ==========
 define('BASE_URL', 'https://cryptofuture.co.in');
 define('CONFIG_FILE', 'config_cf.json');
-define('CLAIM_INTERVAL', 11);
+define('MAX_FAILURES', 10);
+define('CLAIM_COOLDOWN', 60);
 
 // ========== COOKIE JAR ==========
 class CookieJar {
@@ -69,12 +70,66 @@ class CookieJar {
     }
 }
 
-// ========== FUNGSI ==========
-function clear() {
-    system('clear');
+// ========== UI ==========
+function clear_screen() { system('clear'); }
+
+function box_top($title = '') {
+    $len = 58;
+    $pad = ($len - strlen($title)) / 2;
+    $pad_l = floor($pad);
+    $pad_r = ceil($pad);
+    return CYAN . "╔" . str_repeat("═", $len) . "╗" . RESET . "\n" .
+           CYAN . "║" . str_repeat(" ", $pad_l) . BOLD . KUNING . $title . RESET . str_repeat(" ", $pad_r) . CYAN . "║" . RESET . "\n" .
+           CYAN . "╠" . str_repeat("═", $len) . "╣" . RESET;
 }
 
-function timer($seconds, $prefix = "[!] Please wait") {
+function box_bottom() {
+    return CYAN . "╚" . str_repeat("═", 58) . "╝" . RESET;
+}
+
+function box_line($left, $right = '') {
+    $len = 58;
+    $left_len = strlen(preg_replace('/\x1b\[[0-9;]*m/', '', $left));
+    $right_len = strlen(preg_replace('/\x1b\[[0-9;]*m/', '', $right));
+    $pad = $len - $left_len - $right_len;
+    if ($pad < 0) $pad = 0;
+    return CYAN . "║" . RESET . " " . $left . str_repeat(" ", $pad) . $right . CYAN . "║" . RESET;
+}
+
+function print_banner() {
+    clear_screen();
+    echo box_top(" CRYPTOFUTURE AUTO BOT ") . "\n";
+    echo box_line("  " . CYAN . "▪ Mode     : " . PUTIH . "Auto Claim") . "\n";
+    echo box_line("  " . CYAN . "▪ Cooldown : " . PUTIH . CLAIM_COOLDOWN . "s") . "\n";
+    echo box_line("  " . CYAN . "▪ Max Fail : " . PUTIH . MAX_FAILURES) . "\n";
+    echo box_bottom() . "\n\n";
+}
+
+function print_status($attempt, $failures, $total_claimed, $balance = null) {
+    echo box_top(" SESSION STATUS ") . "\n";
+    echo box_line("  " . CYAN . "Status   : " . HIJAU . "✓ ONLINE") . "\n";
+    $bal = ($balance !== null) ? number_format($balance, 0) . " Coins" : "Unknown";
+    echo box_line("  " . CYAN . "Balance  : " . PUTIH . $bal) . "\n";
+    echo box_line("  " . CYAN . "Attempts : " . PUTIH . $attempt) . "\n";
+    $fail_color = ($failures >= MAX_FAILURES) ? MERAH : ($failures > 0 ? KUNING : PUTIH);
+    echo box_line("  " . CYAN . "Failures : " . $fail_color . $failures . " / " . MAX_FAILURES) . "\n";
+    echo box_line("  " . CYAN . "Claimed  : " . HIJAU . "+" . number_format($total_claimed, 0) . " Coins") . "\n";
+    echo box_bottom() . "\n";
+}
+
+function print_final($total_claimed, $final_balance, $attempts, $failures, $reason = 'max_failures') {
+    clear_screen();
+    echo box_top(" EXECUTION FINISHED ") . "\n";
+    $reason_text = ($reason == 'max_failures') ? "Max failures reached" : "Manually stopped";
+    echo box_line("  " . CYAN . "Status     : " . MERAH . "STOPPED (" . $reason_text . ")") . "\n";
+    echo box_line("  " . CYAN . "Attempts   : " . PUTIH . $attempts) . "\n";
+    echo box_line("  " . CYAN . "Failures   : " . MERAH . $failures . " / " . MAX_FAILURES) . "\n";
+    echo box_line("  " . CYAN . "Claimed    : " . HIJAU . "+" . number_format($total_claimed, 0) . " Coins") . "\n";
+    echo box_line("  " . CYAN . "Balance    : " . PUTIH . number_format($final_balance, 0) . " Coins") . "\n";
+    echo box_bottom() . "\n";
+}
+
+function timer($seconds, $prefix = "⏳ Waiting") {
     $wait = (int)$seconds;
     $frames = ['⣾', '⣽', '⣻', '⢿', '⡿', '⣟', '⣯', '⣷'];
     $frame_count = count($frames);
@@ -87,59 +142,19 @@ function timer($seconds, $prefix = "[!] Please wait") {
             $secs = $wait % 60;
             $time_str = sprintf('%02d:%02d:%02d', $hours, $minutes, $secs);
             $spinner = $frames[$current];
-            echo PUTIH . $prefix . HIJAU . " $time_str " . PUTIH . $spinner . "\r";
+            echo "\r" . PUTIH . $prefix . HIJAU . " $time_str " . PUTIH . $spinner . "   ";
             usleep(100000);
             $current = ($current + 1) % $frame_count;
             if ((microtime(true) - $start) >= 1) break;
         }
         $wait--;
     }
-    echo str_repeat(" ", 50) . "\r";
+    echo "\r" . str_repeat(" ", 60) . "\r";
 }
 
-// ===== MODIFIED: ALWAYS ASK FOR NEW COOKIE =====
-function get_config() {
-    echo PUTIH . "Cookie (dari browser, format: key1=value1; key2=value2): " . KUNING;
-    $cookie = trim(fgets(STDIN));
-    if (empty($cookie)) {
-        echo MERAH . "[!] Cookie tidak boleh kosong." . RESET . "\n";
-        exit(1);
-    }
-    $config = ['cookie' => $cookie];
-    // Tetap simpan ke file sebagai backup, tapi gak dipakai otomatis
-    file_put_contents(CONFIG_FILE, json_encode($config, JSON_PRETTY_PRINT));
-    echo HIJAU . "Config disimpan ke " . CONFIG_FILE . " (backup)\n" . RESET;
-    sleep(1);
-    return $config;
-}
-
-function generate_device_token() {
-    return 'dev_' . substr(md5(uniqid(mt_rand(), true)), 0, 15) . time();
-}
-
-function generate_smart_token() {
-    $data = [
-        'ts' => intval(microtime(true) * 1000),
-        'cpu' => 8,
-        'mem' => 8,
-        'w' => 384,
-        'h' => 832,
-        'touch' => 5,
-        'moves' => rand(3, 15)
-    ];
-    return base64_encode(json_encode($data));
-}
-
-function generate_fp_hash() {
-    $ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36';
-    $raw = 'fp-' . $ua . '384832';
-    return hash('sha256', $raw);
-}
-
-function http_request($url, $method = 'GET', $data = [], $headers = [], CookieJar &$jar = null) {
-    if ($jar === null) {
-        $jar = new CookieJar();
-    }
+// ========== HTTP (with effective URL) ==========
+function http_request($url, $method = 'GET', $data = [], $headers = [], CookieJar &$jar = null, &$effective_url = null) {
+    if ($jar === null) $jar = new CookieJar();
     
     $ch = curl_init();
     $options = [
@@ -152,22 +167,18 @@ function http_request($url, $method = 'GET', $data = [], $headers = [], CookieJa
         CURLOPT_SSL_VERIFYHOST => false,
         CURLOPT_TIMEOUT => 30,
         CURLOPT_CONNECTTIMEOUT => 30,
-        CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
+        CURLOPT_USERAGENT => 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36',
     ];
     
     $cookie_str = $jar->toString();
-    if (!empty($cookie_str)) {
-        $options[CURLOPT_COOKIE] = $cookie_str;
-    }
+    if (!empty($cookie_str)) $options[CURLOPT_COOKIE] = $cookie_str;
     
     if (strtoupper($method) === 'POST') {
         $options[CURLOPT_POST] = true;
         $options[CURLOPT_POSTFIELDS] = http_build_query($data);
     }
     
-    if (!empty($headers)) {
-        $options[CURLOPT_HTTPHEADER] = $headers;
-    }
+    if (!empty($headers)) $options[CURLOPT_HTTPHEADER] = $headers;
     
     curl_setopt_array($ch, $options);
     $response = curl_exec($ch);
@@ -181,77 +192,97 @@ function http_request($url, $method = 'GET', $data = [], $headers = [], CookieJa
     $body = substr($response, $header_size);
     $header = substr($response, 0, $header_size);
     
+    $effective_url = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
+    
     $jar->parseSetCookie($header);
     
     curl_close($ch);
     return $body;
 }
 
-function is_logged_in($jar) {
+// ========== LOGIN ==========
+function do_login($jar, $email, $device_token = null) {
+    if (!$device_token) {
+        $device_token = 'dev_' . bin2hex(random_bytes(8)) . time();
+    }
+    
+    $home = http_request(BASE_URL . '/', 'GET', [], [], $jar);
+    if (!$home) return null;
+    
+    preg_match('/name="csrf_token_name"\s+value="([^"]+)"/', $home, $m);
+    $csrf = isset($m[1]) ? $m[1] : '';
+    if (empty($csrf)) $csrf = $jar->get('csrf_cookie_name');
+    if (empty($csrf)) return null;
+    
+    $data = [
+        'wallet' => $email,
+        'csrf_token_name' => $csrf,
+        'device_token' => $device_token
+    ];
+    
+    $result = http_request(BASE_URL . '/auth/login', 'POST', $data, [
+        'Content-Type: application/x-www-form-urlencoded',
+        'Origin: ' . BASE_URL,
+        'Referer: ' . BASE_URL . '/',
+    ], $jar);
+    
+    if (!$result) return null;
+    
     $dash = http_request(BASE_URL . '/dashboard', 'GET', [], [], $jar);
-    if ($dash && strpos($dash, 'Dashboard') !== false) {
+    if ($dash && (strpos($dash, 'Dashboard') !== false || strpos($dash, 'Welcome') !== false)) {
         return true;
     }
-    return false;
+    return null;
 }
 
-function get_faucet_data($jar) {
-    // Gunakan /earn karena dari trace
-    $html = http_request(BASE_URL . '/earn', 'GET', [], [], $jar);
+// ========== EARN PAGE (with URL check) ==========
+function get_earn_page($jar) {
+    $effective_url = null;
+    $html = http_request(BASE_URL . '/earn', 'GET', [], [
+        'Referer: ' . BASE_URL . '/',
+    ], $jar, $effective_url);
+    
     if (!$html) {
-        $html = http_request(BASE_URL . '/faucet/earn', 'GET', [], [], $jar);
-    }
-    if (!$html) return null;
-    
-    // Ekstrak dengan regex sederhana
-    $csrf = '';
-    $token = '';
-    $earn_ticket = '';
-    $wallet = '';
-    
-    // Cari dengan pattern yang lebih aman
-    if (preg_match('/name="csrf_token_name"\s+value="([^"]+)"/', $html, $m)) {
-        $csrf = $m[1];
-    } else if (preg_match('/csrf_token_name"\s*value="([^"]+)"/', $html, $m)) {
-        $csrf = $m[1];
+        file_put_contents('earn_error.txt', 'Empty response');
+        return null;
     }
     
-    if (preg_match('/name="token"\s+value="([^"]+)"/', $html, $m)) {
-        $token = $m[1];
-    } else if (preg_match('/token"\s*value="([^"]+)"/', $html, $m)) {
-        $token = $m[1];
+    // Save debug
+    file_put_contents('earn_debug.html', $html);
+    file_put_contents('earn_effective_url.txt', $effective_url);
+    
+    // Check if we landed on account page (verification required)
+    if (strpos($effective_url, '/account') !== false) {
+        return 'VERIFY';
     }
     
-    if (preg_match('/name="earn_ticket"\s+value="([^"]+)"/', $html, $m)) {
-        $earn_ticket = $m[1];
-    } else if (preg_match('/earn_ticket"\s*value="([^"]+)"/', $html, $m)) {
-        $earn_ticket = $m[1];
+    // Also check content for "Not Verified" or "Verification Required"
+    if (strpos($html, 'Not Verified') !== false || strpos($html, 'Verification Required') !== false) {
+        return 'VERIFY';
     }
     
-    if (preg_match('/name="wallet"\s+value="([^"]+)"/', $html, $m)) {
-        $wallet = $m[1];
-    } else if (preg_match('/wallet"\s*value="([^"]+)"/', $html, $m)) {
-        $wallet = $m[1];
-    }
-    
-    // Jika masih kosong, coba dari hidden input di form
-    if (empty($csrf) || empty($token) || empty($earn_ticket)) {
-        preg_match('/<form[^>]*>.*?csrf_token_name.*?value="([^"]+)"/s', $html, $m);
-        if (!empty($m[1])) $csrf = $m[1];
-        preg_match('/<form[^>]*>.*?token.*?value="([^"]+)"/s', $html, $m);
-        if (!empty($m[1])) $token = $m[1];
-        preg_match('/<form[^>]*>.*?earn_ticket.*?value="([^"]+)"/s', $html, $m);
-        if (!empty($m[1])) $earn_ticket = $m[1];
-        preg_match('/<form[^>]*>.*?wallet.*?value="([^"]+)"/s', $html, $m);
-        if (!empty($m[1])) $wallet = $m[1];
-    }
-    
-    // Cek redirect ke login
-    if (strpos($html, 'login') !== false && strlen($html) < 500) {
+    // Check if we are logged in (if page contains login form, session expired)
+    if (strpos($html, 'Login &amp; Start Claiming') !== false || (strpos($html, 'login') !== false && strlen($html) < 2000)) {
         return 'EXPIRED';
     }
     
+    // Extract tokens
+    $csrf = $token = $earn_ticket = $wallet = '';
+    
+    preg_match('/name="csrf_token_name"\s+value="([^"]+)"/', $html, $m);
+    $csrf = isset($m[1]) ? $m[1] : '';
+    
+    preg_match('/name="token"\s+value="([^"]+)"/', $html, $m);
+    $token = isset($m[1]) ? $m[1] : '';
+    
+    preg_match('/name="earn_ticket"\s+value="([^"]+)"/', $html, $m);
+    $earn_ticket = isset($m[1]) ? $m[1] : '';
+    
+    preg_match('/name="wallet"\s+value="([^"]+)"/', $html, $m);
+    $wallet = isset($m[1]) ? $m[1] : '';
+    
     if (empty($csrf) || empty($token) || empty($earn_ticket)) {
+        file_put_contents('tokens_missing.txt', "csrf=$csrf, token=$token, earn_ticket=$earn_ticket");
         return null;
     }
     
@@ -264,51 +295,16 @@ function get_faucet_data($jar) {
     ];
 }
 
-function extract_timer($html) {
-    if (preg_match('/Next claim available in:\s*<span[^>]*>(\d+)<\/span>m\s*<span[^>]*>(\d+)<\/span>s/', $html, $m)) {
-        return (int)$m[1] * 60 + (int)$m[2];
-    }
-    if (preg_match('/Next claim available in:\s*<span[^>]*>(\d+)<\/span>s/', $html, $m)) {
-        return (int)$m[1];
-    }
-    if (preg_match('/id="minute">(\d+)/', $html, $min) && preg_match('/id="second">(\d+)/', $html, $sec)) {
-        return (int)$min[1] * 60 + (int)$sec[1];
-    }
-    return 0;
-}
-
-function extract_reward($html) {
-    if (preg_match('/(\d+)\s*Coins\s*has been added/', $html, $m)) {
-        return (int)$m[1];
-    }
-    if (preg_match('/\+\s*(\d+)\s*Coins/', $html, $m)) {
-        return (int)$m[1];
-    }
-    return 10;
-}
-
-function extract_balance($html) {
-    if (preg_match('/balance-amount[^>]*>.*?(\d+)\s*<span/', $html, $m)) {
-        return (int)$m[1];
-    }
-    if (preg_match('/TOTAL BALANCE.*?(\d+)\s*Coins/', $html, $m)) {
-        return (int)$m[1];
-    }
-    return null;
-}
-
-function claim_faucet($jar, $faucet_data) {
+// ========== CLAIM ==========
+function do_claim($jar, $faucet_data) {
     $csrf = $faucet_data['csrf'];
     $token = $faucet_data['token'];
     $earn_ticket = $faucet_data['earn_ticket'];
     $wallet = $faucet_data['wallet'];
+    if (empty($wallet)) $wallet = 'garapanfaucetcrypto@gmail.com';
     
-    if (empty($wallet)) {
-        $wallet = 'garapanfaucetcrypto@gmail.com';
-    }
-    
-    $smart_token = generate_smart_token();
     $fp_hash = generate_fp_hash();
+    $smart_token = generate_smart_token();
     
     $data = [
         'csrf_token_name' => $csrf,
@@ -324,115 +320,251 @@ function claim_faucet($jar, $faucet_data) {
     $result = http_request(BASE_URL . '/faucet/earn', 'POST', $data, [
         'Content-Type: application/x-www-form-urlencoded',
         'Origin: ' . BASE_URL,
-        'Referer: ' . BASE_URL . '/earn',
+        'Referer: ' . BASE_URL . '/',
     ], $jar);
     
-    if (!$result) {
-        echo MERAH . "[!] Gagal claim (no response)." . RESET . "\n";
-        return false;
-    }
+    if (!$result) return false;
     
-    $html = $result;
+    file_put_contents('claim_debug.html', $result);
     
-    // Cek sukses
-    if (strpos($html, 'Success') !== false || strpos($html, 'coins has been added') !== false) {
-        $reward = extract_reward($html);
-        echo HIJAU . "[+] Claim sukses! +$reward Coins" . RESET . "\n";
-        $balance = extract_balance($html);
-        if ($balance !== null) {
-            echo HIJAU . "[+] Balance sekarang: $balance Coins" . RESET . "\n";
+    if (strpos($result, 'Success!') !== false || strpos($result, '✅') !== false) {
+        $balance = extract_balance($result);
+        $reward = extract_reward($result);
+        if ($balance === null) {
+            $balance = get_balance_from_dashboard($jar);
         }
-        return true;
+        return ['success' => true, 'reward' => $reward, 'balance' => $balance];
     }
     
-    // Cek cooldown
-    $timer = extract_timer($html);
-    if ($timer > 0) {
-        echo KUNING . "[⏳] Cooldown $timer detik." . RESET . "\n";
-        return $timer;
+    if (preg_match('/Next claim available in:.*?(\d+)m.*?(\d+)s/', $result, $m)) {
+        $timer = (int)$m[1] * 60 + (int)$m[2];
+        return ['success' => false, 'timer' => $timer];
+    }
+    if (preg_match('/Next claim available in:.*?(\d+)s/', $result, $m)) {
+        return ['success' => false, 'timer' => (int)$m[1]];
     }
     
-    // Cek "Failed!" retry
-    if (strpos($html, 'Failed!') !== false || strpos($html, 'Please try again') !== false) {
-        echo KUNING . "[!] Got Failed, refresh form..." . RESET . "\n";
-        return false;
-    }
-    
-    echo MERAH . "[?] Claim tidak jelas." . RESET . "\n";
-    file_put_contents('claim_debug_cf.html', $html);
     return false;
 }
 
+// ========== HELPERS ==========
+function generate_smart_token() {
+    $data = [
+        'ts' => intval(microtime(true) * 1000),
+        'cpu' => 8,
+        'mem' => 8,
+        'w' => 384,
+        'h' => 832,
+        'touch' => 5,
+        'moves' => rand(3, 15)
+    ];
+    return base64_encode(json_encode($data));
+}
+
+function generate_fp_hash() {
+    $ua = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36';
+    $raw = 'fp-' . $ua . '384832';
+    return hash('sha256', $raw);
+}
+
+function extract_balance($html) {
+    $dom = new DOMDocument();
+    @$dom->loadHTML($html);
+    $xpath = new DOMXPath($dom);
+    $nodes = $xpath->query("//*[contains(@class, 'balance-amount')]");
+    if ($nodes->length > 0) {
+        $text = trim($nodes->item(0)->textContent);
+        if (preg_match('/([\d,]+)/', $text, $m)) {
+            return (int) str_replace(',', '', $m[1]);
+        }
+    }
+    if (preg_match_all('/(\d{2,})\s*Coins?/i', $html, $matches)) {
+        $candidates = array_map('intval', $matches[1]);
+        if (!empty($candidates)) return max($candidates);
+    }
+    return null;
+}
+
+function extract_reward($html) {
+    if (preg_match('/Success!?\s*(\d+)\s*Coins?/i', $html, $m)) {
+        return (int)$m[1];
+    }
+    if (preg_match('/has been added.*?(\d+)\s*Coins?/i', $html, $m)) {
+        return (int)$m[1];
+    }
+    return 10;
+}
+
+function get_balance_from_dashboard($jar) {
+    $html = http_request(BASE_URL . '/dashboard', 'GET', [], [], $jar);
+    if ($html) return extract_balance($html);
+    return null;
+}
+
 // ========== MAIN ==========
-clear();
+print_banner();
 
-echo CYAN . "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" . RESET . "\n";
-echo BOLD . KUNING . "              🍪 CryptoFuture AUTO BOT" . RESET . "\n";
-echo CYAN . "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" . RESET . "\n";
-
-// ALWAYS ask for cookie
-$config = get_config();
-$cookie_str = $config['cookie'] ?? '';
-
-if (empty($cookie_str)) {
-    echo MERAH . "[!] Cookie tidak ditemukan." . RESET . "\n";
+echo box_top(" SETUP ") . "\n";
+echo box_line("  " . PUTIH . "Masukkan email FaucetPay") . "\n";
+echo box_bottom() . "\n\n";
+echo PUTIH . "Email: " . KUNING;
+$email = trim(fgets(STDIN));
+if (empty($email)) {
+    echo MERAH . "\n[!] Email tidak boleh kosong.\n" . RESET;
     exit(1);
+}
+
+$device_token = '';
+if (file_exists(CONFIG_FILE)) {
+    $config = json_decode(file_get_contents(CONFIG_FILE), true);
+    if ($config && isset($config['device_token'])) {
+        $device_token = $config['device_token'];
+    }
+}
+if (empty($device_token)) {
+    $device_token = 'dev_' . bin2hex(random_bytes(8)) . time();
 }
 
 $jar = new CookieJar();
-$jar->fromString($cookie_str);
 
-// Cek session
-if (!is_logged_in($jar)) {
-    echo MERAH . "[!] Cookie tidak valid atau expired." . RESET . "\n";
-    echo KUNING . "[*] Ambil cookie baru dari browser dan jalankan ulang." . RESET . "\n";
+print_banner();
+echo box_top(" LOGIN ") . "\n";
+echo box_line("  " . CYAN . "⏳ Logging in as " . PUTIH . $email) . "\n";
+echo box_bottom() . "\n";
+
+if (!do_login($jar, $email, $device_token)) {
+    echo box_top(" ERROR ") . "\n";
+    echo box_line("  " . MERAH . "✗ Login failed! Check email or device token.") . "\n";
+    echo box_bottom() . "\n";
     exit(1);
 }
-echo HIJAU . "[+] Session aktif!" . RESET . "\n";
 
-// Simpan cookie terbaru (opsional)
-$config['cookie'] = $jar->toString();
+echo box_top(" LOGIN ") . "\n";
+echo box_line("  " . HIJAU . "✓ Login successful!") . "\n";
+echo box_bottom() . "\n";
+
+$config = ['email' => $email, 'device_token' => $device_token];
 file_put_contents(CONFIG_FILE, json_encode($config, JSON_PRETTY_PRINT));
 
-// Ambil data faucet
-$faucet_data = get_faucet_data($jar);
-if (!$faucet_data || $faucet_data === 'EXPIRED') {
-    echo MERAH . "[!] Gagal ambil data faucet." . RESET . "\n";
-    if ($faucet_data === 'EXPIRED') {
-        echo KUNING . "[*] Cookie mungkin perlu refresh. Ambil cookie baru." . RESET . "\n";
-    }
-    exit(1);
-}
+sleep(1);
 
-echo KUNING . "[+] CSRF       : " . $faucet_data['csrf'] . RESET . "\n";
-echo KUNING . "[+] Token      : " . $faucet_data['token'] . RESET . "\n";
-echo KUNING . "[+] Earn Ticket: " . $faucet_data['earn_ticket'] . RESET . "\n";
+$attempts = 0;
+$failures = 0;
+$total_claimed = 0;
+$balance = null;
 
-$count = 0;
 while (true) {
-    $count++;
-    echo "\n" . CYAN . "┌─[ ROUND $count ]" . RESET . "\n";
+    $attempts++;
+    print_banner();
+    print_status($attempts, $failures, $total_claimed, $balance);
     
-    $faucet_data = get_faucet_data($jar);
-    if (!$faucet_data) {
-        echo MERAH . "[!] Gagal refresh data faucet." . RESET . "\n";
-        sleep(5);
+    echo box_top(" CLAIMING ") . "\n";
+    echo box_line("  " . CYAN . "⏳ Fetching earn page...") . "\n";
+    echo box_bottom() . "\n";
+    
+    $faucet_data = get_earn_page($jar);
+    if ($faucet_data === 'VERIFY') {
+        echo box_top(" VERIFICATION REQUIRED ") . "\n";
+        echo box_line("  " . MERAH . "✗ Your account is NOT VERIFIED.") . "\n";
+        echo box_line("  " . KUNING . "⚠ Please verify via Telegram:") . "\n";
+        echo box_line("  " . PUTIH . "https://t.me/cryptofuturefaucet_bot?start=verify_1101") . "\n";
+        echo box_line("  " . KUNING . "After verification, run the script again.") . "\n";
+        echo box_bottom() . "\n";
+        exit(1);
+    }
+    
+    if ($faucet_data === 'EXPIRED') {
+        echo box_top(" SESSION EXPIRED ") . "\n";
+        echo box_line("  " . MERAH . "✗ Session expired, re-login...") . "\n";
+        echo box_bottom() . "\n";
+        if (!do_login($jar, $email, $device_token)) {
+            echo box_top(" ERROR ") . "\n";
+            echo box_line("  " . MERAH . "✗ Re-login failed. Exiting.") . "\n";
+            echo box_bottom() . "\n";
+            break;
+        }
         continue;
     }
-    if ($faucet_data === 'EXPIRED') {
-        echo MERAH . "[!] Session expired. Ambil cookie baru." . RESET . "\n";
-        break;
+    
+    if (!$faucet_data) {
+        echo box_top(" ERROR ") . "\n";
+        echo box_line("  " . MERAH . "✗ Failed to get earn page. Check earn_debug.html") . "\n";
+        echo box_bottom() . "\n";
+        $failures++;
+        if ($failures >= MAX_FAILURES) {
+            print_final($total_claimed, ($balance !== null) ? $balance : 0, $attempts, $failures);
+            echo PUTIH . "Press Enter to exit...";
+            fgets(STDIN);
+            exit(0);
+        }
+        timer(5, "🔄 Retry in");
+        continue;
     }
     
-    $result = claim_faucet($jar, $faucet_data);
-    if ($result === true) {
-        echo HIJAU . "⏳ Next claim in " . CLAIM_INTERVAL . "s..." . RESET . "\n";
-        timer(CLAIM_INTERVAL, "🔄 Next claim in");
-    } elseif (is_int($result) && $result > 0) {
-        echo KUNING . "⏳ Cooldown $result detik..." . RESET . "\n";
-        timer($result + 2, "🔄 Cooldown");
-    } else {
-        echo KUNING . "🔄 Retry in 5s..." . RESET . "\n";
+    $result = do_claim($jar, $faucet_data);
+    
+    if ($result === false) {
+        echo box_top(" CLAIM RESULT ") . "\n";
+        echo box_line("  " . MERAH . "✗ FAILED (unknown)") . "\n";
+        echo box_bottom() . "\n";
+        $failures++;
+        if ($failures >= MAX_FAILURES) {
+            print_final($total_claimed, ($balance !== null) ? $balance : 0, $attempts, $failures);
+            echo PUTIH . "Press Enter to exit...";
+            fgets(STDIN);
+            exit(0);
+        }
         timer(5, "🔄 Retry in");
+        continue;
+    }
+    
+    if ($result['success']) {
+        $reward = $result['reward'];
+        if ($result['balance'] !== null) {
+            $balance = $result['balance'];
+        } else {
+            $dash_balance = get_balance_from_dashboard($jar);
+            if ($dash_balance !== null) $balance = $dash_balance;
+            else $balance = ($balance !== null) ? $balance + $reward : $reward;
+        }
+        $total_claimed += $reward;
+        $failures = 0;
+        
+        print_banner();
+        print_status($attempts, $failures, $total_claimed, $balance);
+        echo box_top(" CLAIM RESULT ") . "\n";
+        echo box_line("  " . HIJAU . "✓ SUCCESS" . "  +" . number_format($reward, 0) . " Coins") . "\n";
+        if ($balance !== null) {
+            echo box_line("  " . CYAN . "Balance : " . PUTIH . number_format($balance, 0) . " Coins") . "\n";
+        }
+        echo box_line("  " . KUNING . "⏳ Next claim in " . CLAIM_COOLDOWN . "s") . "\n";
+        echo box_bottom() . "\n";
+        timer(CLAIM_COOLDOWN, "🔄 Next claim in");
+        
+    } else {
+        $timer_val = isset($result['timer']) ? $result['timer'] : 0;
+        if ($timer_val > 0) {
+            echo box_top(" COOLDOWN ") . "\n";
+            echo box_line("  " . KUNING . "⏳ Cooldown " . $timer_val . " seconds") . "\n";
+            echo box_bottom() . "\n";
+            timer($timer_val + 2, "⏳ Cooldown");
+        } else {
+            echo box_top(" CLAIM RESULT ") . "\n";
+            echo box_line("  " . MERAH . "✗ FAILED") . "\n";
+            echo box_bottom() . "\n";
+            $failures++;
+            if ($failures >= MAX_FAILURES) {
+                print_final($total_claimed, ($balance !== null) ? $balance : 0, $attempts, $failures);
+                echo PUTIH . "Press Enter to exit...";
+                fgets(STDIN);
+                exit(0);
+            }
+            timer(5, "🔄 Retry in");
+        }
     }
 }
+
+print_final($total_claimed, ($balance !== null) ? $balance : 0, $attempts, $failures);
+echo PUTIH . "Press Enter to exit...";
+fgets(STDIN);
+exit(0);
