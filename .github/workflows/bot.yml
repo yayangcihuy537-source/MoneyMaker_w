@@ -1,0 +1,38 @@
+name: Volt Bot - 10 Million Accounts
+
+on:
+  schedule:
+    # Run every 6 hours (multiple runs needed)
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  run-volt-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6 hours max
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        pip install requests fake-useragent
+    
+    - name: Run Volt Bot - 10M Accounts
+      run: |
+        python volt_bot.py
+    
+    - name: Upload results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: volt-results-${{ github.run_id }}
+        path: |
+          *.json
+          checkpoint_*.json
