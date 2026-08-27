@@ -39,8 +39,8 @@
           "runner": "python3"
         },
         "8": {
-          "label": "Coming Soon",
-          "file": "",
+          "label": "EarnSolana",
+          "file": "Sol.php",
           "runner": "php"
         },
         "9": {
