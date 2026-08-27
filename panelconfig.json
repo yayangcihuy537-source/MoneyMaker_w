@@ -130,8 +130,8 @@
         },
         "12": {
           "label": "Faucet Btc",
-          "file": "Btc.py",
-          "runner": "python3"
+          "file": "Btc.php",
+          "runner": "php"
         },
         "13": {
           "label": "LtcMiner",
