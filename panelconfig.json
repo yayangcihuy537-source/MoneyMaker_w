@@ -44,13 +44,13 @@
           "runner": "php"
         },
         "9": {
-          "label": "Coming Soon",
-          "file": "",
+          "label": "MoonPtc",
+          "file": "moon.php",
           "runner": "php"
         },
         "10": {
-          "label": "Coming Soon",
-          "file": "",
+          "label": "LightQuest",
+          "file": "light.php",
           "runner": "php"
         },
         "11": {
