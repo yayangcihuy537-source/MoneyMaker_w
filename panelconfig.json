@@ -14,8 +14,8 @@
           "runner": "python3"
         },
         "3": {
-          "label": "Ourcoincash",
-          "file": "Ourcoincash.php",
+          "label": "LightQuest",
+          "file": "light.php",
           "runner": "php"
         },
         "4": {
@@ -49,8 +49,8 @@
           "runner": "php"
         },
         "10": {
-          "label": "LightQuest",
-          "file": "light.php",
+          "label": "Coming Soon",
+          "file": "",
           "runner": "php"
         },
         "11": {
