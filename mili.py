@@ -34,15 +34,15 @@ LITOSHI_URL = "https://litoshipay.com"
 
 UA = "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.47 Mobile Safari/537.36 Telegram-Android/12.6.4"
 
-# ---------- Game config ----------
-MINI_GAMES = ["lucky_wheel", "scratch", "coin_catch", "flappy_coin"]
+# ---------- Game config (MiniGramX update sesuai foto) ----------
+MINI_GAMES = ["lucky_wheel", "coin_catch", "flappy_coin"]  # scratch dihapus
 MINI_GAME_MAP = {
     "lucky_wheel": {"display": "SPIN", "icon": "🎡"},
-    "scratch":     {"display": "SCRATCH", "icon": "🎫"},
     "coin_catch":  {"display": "CATCH", "icon": "🪙"},
     "flappy_coin": {"display": "FLAPPY", "icon": "🐦"},
 }
 
+# LitoshiPay tetap 4 games
 LITOSHI_GAMES = ["lucky_wheel", "scratch", "coin_catch", "flappy_coin"]
 LITOSHI_GAME_MAP = {
     "lucky_wheel": {"display": "SPIN", "icon": "🎡"},
@@ -483,8 +483,6 @@ class BaseBot:
 
         if game == "lucky_wheel":
             return self.play_game(game, doubled=False)
-        elif game == "scratch":
-            return self.play_game("scratch", doubled=False)
         elif game == "coin_catch":
             score = random.randint(0, 5)
             bombed = False
@@ -502,6 +500,9 @@ class BaseBot:
                 score = 0
                 survived = False
             return self.play_game(game, score=score, bombed=bombed, survived=survived)
+        # fallback for scratch (litoshi only)
+        elif game == "scratch":
+            return self.play_game(game, doubled=False)
         return None
 
     # ---------- Claim Daily ----------
