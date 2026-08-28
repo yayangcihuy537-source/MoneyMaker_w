@@ -169,8 +169,8 @@
           "runner": "python3"
         },
         "18": {
-          "label": "Coming Soon",
-          "file": "",
+          "label": "NotBux",
+          "file": "notbux.py",
           "runner": "python3"
         },
         "19": {
