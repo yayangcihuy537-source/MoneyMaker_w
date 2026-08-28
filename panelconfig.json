@@ -171,12 +171,7 @@
         "2": {
           "label": "Get Query_ID / Init data",
           "file": "query.py",
-          "runner": "python3"
-        },
-        "3": {
-          "label": "Get auth_token / BearerToken ",
-          "file": "Bearer.py",
-          "runner": "python3"
+          "runner": "python3"        
         }
       }
     }
