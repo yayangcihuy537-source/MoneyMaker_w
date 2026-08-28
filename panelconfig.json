@@ -47,6 +47,16 @@
           "label": "Coming Soon",
           "file": "",
           "runner": "php"
+        },
+        "10": {
+          "label": "Coming Soon",
+          "file": "",
+          "runner": "php"
+        },
+        "11": {
+          "label": "Coming Soon",
+          "file": "",
+          "runner": "php"
         }
       }
     },
@@ -157,6 +167,16 @@
           "label": "BabyDOGETapbot",
           "file": "baby.py",
           "runner": "python3"
+        },
+        "18": {
+          "label": "Coming Soon",
+          "file": "",
+          "runner": "python3"
+        },
+        "19": {
+          "label": "Coming Soon",
+          "file": "",
+          "runner": "python3"
         }
       }
     },
@@ -171,7 +191,7 @@
         "2": {
           "label": "Get Query_ID / Init data",
           "file": "query.py",
-          "runner": "python3"        
+          "runner": "python3"
         }
       }
     }
