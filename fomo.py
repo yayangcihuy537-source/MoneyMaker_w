@@ -360,7 +360,10 @@ class FomoEarnBot:
         if resp.get("status") == "ok":
             return resp.get("data", {})
         else:
-            print(f"{R}✗ Gagal get task: {resp.get('message')}{RESET}")
+            # Jika respon mengandung limitDay, kita anggap daily limit tercapai
+            msg = resp.get("message", "")
+            if "limitDay" in msg or "daily" in msg.lower():
+                self.cur_day = self.daily_limit  # force stop
             return None
 
     def claim_task(self, task_id):
@@ -420,6 +423,9 @@ class FomoEarnBot:
             print(f"\n{M}▶ Fetching video task...{RESET}")
             task = self.get_task()
             if not task:
+                # Jika get_task gagal karena limitDay, cur_day sudah di-set = daily_limit, loop berikutnya akan break
+                if self.cur_day >= self.daily_limit:
+                    continue  # akan break di awal loop berikutnya
                 print(f"{Y}! No task available, waiting 5s...{RESET}")
                 time.sleep(5)
                 continue
@@ -461,11 +467,10 @@ class FomoEarnBot:
                 if self.failures >= 2:
                     print(f"{R}✗ Too many consecutive failures. Stopping.{RESET}")
                     break
-                # If failure because of limit, we might stop early, but we already break after 2 failures
+                # Jika failure karena limit, kita break juga? tapi lebih baik biarkan counter gagal
                 if "limit" in str(result).lower():
                     print(f"{Y}☕ Server limit detected. Cooldown 3 min...{RESET}")
                     self._cooldown(180)
-                    # After cooldown, continue loop; if still limit, next failure will stop.
 
             time.sleep(2)
 
