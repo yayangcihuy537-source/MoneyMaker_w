@@ -121,10 +121,10 @@ def print_success(reward, balance, hour, hour_limit, today, day_limit):
     print(f"{G}--------------------------------------------------------{RESET}")
 
 
-def print_finished(completed, earned, balance):
+def print_finished(completed, earned, balance, reason="FINISHED"):
     print()
     print(f"{G}========================================================{RESET}")
-    print(f"{Y}                :: EXECUTION FINISHED ::{RESET}")
+    print(f"{Y}                :: {reason} ::{RESET}")
     print(f"{G}========================================================{RESET}")
     print()
     print(f"{C}  Videos Completed : {G}{completed}")
@@ -192,6 +192,7 @@ class FomoEarnBot:
         self.extra_cookies = {}
         self.max_videos = 0          # 0 = unlimited
         self.videos_done = 0         # counter for max limit
+        self.failures = 0            # counter for consecutive failures
 
     def _set_cookies(self, cookies_dict):
         for k, v in cookies_dict.items():
@@ -302,8 +303,6 @@ class FomoEarnBot:
     def _post(self, url, data, timeout=15):
         try:
             resp = self.session.post(url, data=data, timeout=timeout)
-            # Optional debug line – can be commented out
-            # print(f"{D}DEBUG: {url} -> status {resp.status_code}{RESET}")
             if resp.status_code != 200:
                 print(f"{Y}Response preview: {resp.text[:200]}{RESET}")
             return resp.json()
@@ -330,11 +329,7 @@ class FomoEarnBot:
             if data.get("user"):
                 user = data["user"]
                 self.balance = float(user.get("balance", 0.0))
-                # Try to get user id from somewhere else, maybe from getCurrentUser
-                # We'll call getCurrentUser again? Or just show balance.
-                # For ID, we can use a placeholder or fetch again
                 user_id = "N/A"
-                # Try to get userid from getCurrentUser again
                 resp2 = self._post(self.USER_API, {"method": "getCurrentUser"})
                 if resp2.get("status") == "ok" and resp2.get("data", {}).get("userid"):
                     user_id = resp2["data"]["userid"]
@@ -402,24 +397,22 @@ class FomoEarnBot:
 
         self.fetch_limits()
 
-        # Display status
         print(f"{C}  Max Videos  : {W}{'Unlimited' if self.max_videos == 0 else self.max_videos}{RESET}")
+        print(f"{C}  Stop after  : {W}2 consecutive failures{RESET}")
 
         while True:
             # Refresh limits periodically
             self.fetch_limits()
 
+            # Check limits
             if self.cur_hour >= self.hourly_limit:
-                print(f"\n{Y}☕ Hourly limit reached ({self.cur_hour}/{self.hourly_limit}). Cooldown 3 min...{RESET}")
-                self._cooldown(180)
-                self.cur_hour = 0
-                continue
+                print(f"\n{Y}☕ Hourly limit reached ({self.cur_hour}/{self.hourly_limit}). Stopping.{RESET}")
+                break
 
             if self.cur_day >= self.daily_limit:
                 print(f"\n{G}✓ Daily limit reached ({self.cur_day}/{self.daily_limit}). Done!{RESET}")
                 break
 
-            # Check max_videos limit
             if self.max_videos > 0 and self.videos_done >= self.max_videos:
                 print(f"\n{G}✓ Max videos limit reached ({self.videos_done}/{self.max_videos}). Done!{RESET}")
                 break
@@ -448,6 +441,7 @@ class FomoEarnBot:
 
             success, result = self.claim_task(task_id)
             if success:
+                self.failures = 0  # reset failure counter on success
                 self.videos_done += 1
                 self.completed_today += 1
                 self.total_earned += price
@@ -462,15 +456,29 @@ class FomoEarnBot:
                     self.daily_limit
                 )
             else:
-                print(f"  {R}✗ Claim failed: {result}{RESET}")
+                self.failures += 1
+                print(f"  {R}✗ Claim failed: {result}{RESET} (failure {self.failures}/2)")
+                if self.failures >= 2:
+                    print(f"{R}✗ Too many consecutive failures. Stopping.{RESET}")
+                    break
+                # If failure because of limit, we might stop early, but we already break after 2 failures
                 if "limit" in str(result).lower():
                     print(f"{Y}☕ Server limit detected. Cooldown 3 min...{RESET}")
                     self._cooldown(180)
+                    # After cooldown, continue loop; if still limit, next failure will stop.
 
             time.sleep(2)
 
         # Finish
-        print_finished(self.completed_today, self.total_earned, self.balance)
+        reason = "STOPPED (failures)" if self.failures >= 2 else "FINISHED"
+        if self.cur_day >= self.daily_limit:
+            reason = "DAILY LIMIT REACHED"
+        elif self.cur_hour >= self.hourly_limit:
+            reason = "HOURLY LIMIT REACHED"
+        elif self.max_videos > 0 and self.videos_done >= self.max_videos:
+            reason = "MAX VIDEOS REACHED"
+
+        print_finished(self.completed_today, self.total_earned, self.balance, reason)
         input(f"{C}Press Enter to exit...{RESET}")
 
 
