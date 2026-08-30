@@ -44,8 +44,8 @@
           "runner": "php"
         },
         "9": {
-          "label": "Coming Soon",
-          "file": "",
+          "label": "GainLtc",
+          "file": "GainLtc.php",
           "runner": "php"
         },
         "10": {
