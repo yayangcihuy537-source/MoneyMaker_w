@@ -39,13 +39,13 @@
           "runner": "python3"
         },
         "8": {
-          "label": "EarnSolana",
-          "file": "sol.php",
+          "label": "MoonPtc",
+          "file": "moon.php",
           "runner": "php"
         },
         "9": {
-          "label": "MoonPtc",
-          "file": "moon.php",
+          "label": "Coming Soon",
+          "file": "",
           "runner": "php"
         },
         "10": {
