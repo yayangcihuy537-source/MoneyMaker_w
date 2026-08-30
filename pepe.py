@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ╔═══════════════════════════════════════════════════════════════╗
-║         🚀 PEPEFLOW X COINSZON - PARALLEL BOT              ║
+║         🚀 PEPEFLOW X COINSZON X CLOCKADS - PARALLEL BOT    ║
 ║   AUTO CLAIM • AUTO GAMES • AUTO DOUBLE • AUTO SKIP LIMIT  ║
 ║   🔐 AUTH via init_data (NO PHPSESSID)                     ║
 ║   🎲 FINGERPRINT RANDOM (acak tiap reauth)                 ║
@@ -21,13 +21,15 @@ RESET = '\033[0m'
 # ========== KONFIGURASI ==========
 PEPE_CONFIG = "pepeflow_config.json"
 COIN_CONFIG  = "coinszon_config.json"
+CLOCK_CONFIG = "clockads_config.json"
 
 PEPE_URL = "https://pepeflow.com"
 COIN_URL  = "https://coinszon.com"
+CLOCK_URL = "https://clockads.in"
 
 UA = "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.47 Mobile Safari/537.36 Telegram-Android/12.6.4"
 
-# ---------- Game config ----------
+# ---------- Game config per site ----------
 PEPE_GAMES = ["lucky_wheel", "slots", "scratch", "treasure_dig"]
 PEPE_GAME_MAP = {
     "lucky_wheel": {"display": "SPIN", "icon": "🎡"},
@@ -36,10 +38,19 @@ PEPE_GAME_MAP = {
     "treasure_dig":{"display": "DIG", "icon": "⛏️"},
 }
 
-COIN_GAMES = ["lucky_wheel", "slots"]
+COIN_GAMES = ["lucky_wheel", "slots"]   # dari kode awal
 COIN_GAME_MAP = {
     "lucky_wheel": {"display": "SPIN", "icon": "🎡"},
     "slots":       {"display": "SLOTS", "icon": "🎰"},
+}
+
+# Clockads games (dari HTML: lucky_wheel, slots, scratch, treasure_dig)
+CLOCK_GAMES = ["lucky_wheel", "slots", "scratch", "treasure_dig"]
+CLOCK_GAME_MAP = {
+    "lucky_wheel": {"display": "SPIN", "icon": "🎡"},
+    "slots":       {"display": "SLOTS", "icon": "🎰"},
+    "scratch":     {"display": "SCRATCH", "icon": "🎫"},
+    "treasure_dig":{"display": "DIG", "icon": "⛏️"},
 }
 
 # ========== Config (only init_data) ==========
@@ -251,7 +262,6 @@ class BaseBot:
 
     # ---------- Pending Win with AD Proof ----------
     def get_pending(self):
-        """Check if there is a pending win."""
         resp = self.post("/actions/mini_games.php", data={"action": "get_pending"})
         if resp and resp.status_code == 200:
             try:
@@ -261,7 +271,6 @@ class BaseBot:
         return None
 
     def issue_ad_proof(self, pending_id):
-        """Issue a proof token for the ad."""
         data = {"action": "issue_ad_proof", "pending_id": str(pending_id)}
         resp = self.post("/actions/mini_games.php", data=data)
         if resp and resp.status_code == 200:
@@ -272,7 +281,6 @@ class BaseBot:
         return None
 
     def complete_ad_proof(self, proof_token):
-        """Mark the ad as completed."""
         data = {"action": "complete_ad_proof", "proof_token": proof_token, "ad_clicked": "1"}
         resp = self.post("/actions/mini_games.php", data=data)
         if resp and resp.status_code == 200:
@@ -283,7 +291,6 @@ class BaseBot:
         return None
 
     def claim_pending_with_proof(self, pending_id, claim_token, proof_token):
-        """Claim pending win with proof token."""
         data = {
             "action": "claim_pending",
             "pending_id": str(pending_id),
@@ -300,7 +307,6 @@ class BaseBot:
         return None
 
     def claim_pending(self):
-        """Full pending win claim with ad proof flow."""
         pending = self.get_pending()
         if not pending or pending.get('status') != 'success' or not pending.get('pending'):
             return False
@@ -315,7 +321,6 @@ class BaseBot:
         reward = pending_data.get('reward', 0)
         self.log(f"{Y}🎁 Found pending win: {reward} {self.currency}{RESET}")
         
-        # Step 1: Issue proof token
         proof_resp = self.issue_ad_proof(pending_id)
         if not proof_resp or proof_resp.get('status') != 'success':
             self.log(f"{R}❌ Failed to issue ad proof{RESET}")
@@ -326,16 +331,13 @@ class BaseBot:
             self.log(f"{R}❌ No proof token received{RESET}")
             return False
         
-        # Step 2: Simulate ad watching
         ad_progress(10, "📺 Watching ad for pending win")
         
-        # Step 3: Complete the ad proof
         complete_resp = self.complete_ad_proof(proof_token)
         if not complete_resp or complete_resp.get('status') != 'success':
             self.log(f"{R}❌ Failed to complete ad proof{RESET}")
             return False
         
-        # Step 4: Claim with proof
         claim_resp = self.claim_pending_with_proof(pending_id, claim_token, proof_token)
         if claim_resp and claim_resp.get('status') == 'success':
             reward_claimed = claim_resp.get('reward', 0)
@@ -396,7 +398,7 @@ class BaseBot:
                                 self.limited_games.discard(g)
                     return data
                 except: pass
-            # Fallback: scan HTML
+            # Fallback
             for g in self.game_list:
                 pattern = rf'{g}.*?cooldown.*?(\d+)'
                 match = re.search(pattern, html, re.IGNORECASE | re.DOTALL)
@@ -606,13 +608,11 @@ class BaseBot:
             print(f"{C}🎮 {self.name} {self.game_map[g]['display']}...{RESET}")
             result = self.play_single(g)
             
-            # If play failed due to pending win, claim it and retry once
             if result and result.get('status') == 'error':
                 err_msg = result.get('message', '')
                 if 'pending' in err_msg.lower():
                     self.log(f"{Y}⚠️ Pending win detected, claiming...{RESET}")
                     if self.claim_pending():
-                        # Retry the same game after claiming
                         self.log(f"{G}↻ Retrying {self.game_map[g]['display']} after claim{RESET}")
                         time.sleep(2)
                         result2 = self.play_single(g)
@@ -641,14 +641,12 @@ class BaseBot:
                 else:
                     self.log(f"{G}✔ {self.game_map[g]['display']} +0.00000000 (Bal: {self.balance:.8f}){RESET}")
 
-                # Cek daily limit dari response (hanya jika daily_limit > 0)
                 daily_played = result.get('daily_played')
                 daily_limit = result.get('daily_limit')
                 if daily_played is not None and daily_limit is not None and daily_limit > 0 and daily_played >= daily_limit:
                     self.limited_games.add(g)
                     self.log(f"{Y}⏭️ {self.game_map[g]['display']} daily limit reached ({daily_played}/{daily_limit}){RESET}")
 
-                # Cek global limit (hanya jika global_limit > 0)
                 global_played = result.get('global_played')
                 global_limit = result.get('global_limit')
                 if global_played is not None and global_limit is not None and global_limit > 0 and global_played >= global_limit:
@@ -697,6 +695,10 @@ class CoinBot(BaseBot):
     def __init__(self, cfg):
         super().__init__(COIN_URL, cfg, COIN_GAMES, COIN_GAME_MAP, "Coinszon", "COIN")
 
+class ClockBot(BaseBot):
+    def __init__(self, cfg):
+        super().__init__(CLOCK_URL, cfg, CLOCK_GAMES, CLOCK_GAME_MAP, "Clockads", "TRX")
+
 # ========== MODE PARALLEL ==========
 def parallel_pair(bots):
     for bot in bots:
@@ -738,7 +740,7 @@ def parallel_pair(bots):
 
 # ========== SETUP ==========
 def setup_bots():
-    print(f"{Y}📝 Setup PepeFlow dan Coinszon{RESET}")
+    print(f"{Y}📝 Setup PepeFlow, Coinszon, dan Clockads{RESET}")
     
     init1 = input(f"{C}Masukkan init_data untuk PepeFlow: {W}").strip()
     if init1:
@@ -776,20 +778,38 @@ def setup_bots():
     else:
         print(f"{R}❌ Coinszon kosong, dilewati{RESET}")
 
+    init3 = input(f"{C}Masukkan init_data untuk Clockads: {W}").strip()
+    if init3:
+        cfg3 = BaseConfig(CLOCK_CONFIG)
+        cfg3.init_data = init3
+        try:
+            parsed = urllib.parse.parse_qs(init3)
+            user_str = parsed.get('user', [None])[0]
+            if user_str:
+                u = json.loads(urllib.parse.unquote(user_str))
+                cfg3.telegram_id = str(u.get('id',''))
+                cfg3.telegram_username = u.get('username','')
+        except:
+            pass
+        cfg3.save()
+        print(f"{G}✅ Clockads tersimpan{RESET}")
+    else:
+        print(f"{R}❌ Clockads kosong, dilewati{RESET}")
+
 # ========== MAIN ==========
 def main():
     while True:
         os.system('clear')
         print(f"""
 {PURPLE}╔══════════════════════════════════════════════════════════╗
-║   {GOLD}🚀 PEPEFLOW X COINSZON - PARALLEL BOT              {PURPLE}║
+║   {GOLD}🚀 PEPEFLOW X COINSZON X CLOCKADS - PARALLEL BOT  {PURPLE}║
 ║   {PINK}🔐 AUTH via init_data (NO PHPSESSID)              {PURPLE}║
 ║   {PINK}🎲 FINGERPRINT RANDOM setiap reauth               {PURPLE}║
 ║   {PINK}🚫 AUTO SKIP LIMIT (daily + global)               {PURPLE}║
 ║   {PINK}🎁 AUTO CLAIM PENDING WIN (WITH AD PROOF)         {PURPLE}║
 ╠══════════════════════════════════════════════════════════╣
-║   {G}[1]{RESET} 🔄 Start PepeFlow X CoinsZons (parallel)  ║
-║   {Y}[2]{RESET} Setup initdata PepeFlow X CoinsZon       ║
+║   {G}[1]{RESET} 🔄 Start all bots (parallel)               ║
+║   {Y}[2]{RESET} Setup initdata semua bot                  ║
 ║   {R}[0]{RESET} Exit                                     ║
 ╚══════════════════════════════════════════════════════════╝{RESET}
 """)
@@ -799,6 +819,7 @@ def main():
         elif choice == '1':
             pcfg = BaseConfig(PEPE_CONFIG)
             ccfg = BaseConfig(COIN_CONFIG)
+            clcfg = BaseConfig(CLOCK_CONFIG)
             if not pcfg.load() or not pcfg.init_data:
                 print(f"{R}❌ PepeFlow init_data belum disetup (menu 2){RESET}")
                 input("Enter...")
@@ -807,10 +828,15 @@ def main():
                 print(f"{R}❌ Coinszon init_data belum disetup (menu 2){RESET}")
                 input("Enter...")
                 continue
+            if not clcfg.load() or not clcfg.init_data:
+                print(f"{R}❌ Clockads init_data belum disetup (menu 2){RESET}")
+                input("Enter...")
+                continue
             pbot = PepeBot(pcfg)
             cbot = CoinBot(ccfg)
+            clbot = ClockBot(clcfg)
             try:
-                parallel_pair([pbot, cbot])
+                parallel_pair([pbot, cbot, clbot])
             except KeyboardInterrupt:
                 pass
             input("Enter...")
