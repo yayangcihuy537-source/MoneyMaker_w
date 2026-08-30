@@ -19,7 +19,7 @@ $RESET = "\033[0m";
 // KONFIGURASI JEDA
 // ============================================================
 $RUN_DURATION = 10800;  // 3 jam dalam detik
-$BREAK_DURATION = 7200; // 120 menit = 7200 detik
+$BREAK_DURATION = 2.820; // 120 menit = 7200 detik
 
 // ============================================================
 // UI FUNCTIONS
