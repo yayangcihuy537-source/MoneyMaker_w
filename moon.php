@@ -1,1 +1,380 @@
-<?php eval(base64_decode('ZXJyb3JfcmVwb3J0aW5nKDApOwpkYXRlX2RlZmF1bHRfdGltZXpvbmVfc2V0KCdBc2lhL0pha2FydGEnKTsKJGNvbmZpZ0ZpbGUgPSAiTW9vblB0Yy5qc29uIjsKCi8vID09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQovLyAgQ09MT1JTCi8vID09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQpjb25zdCBtZXJhaCAgPSAiXDAzM1swOzMxbSI7CmNvbnN0IGhpamF1ICA9ICJcMDMzWzA7MzJtIjsKY29uc3Qga3VuaW5nID0gIlwwMzNbMDszM20iOwpjb25zdCBjeWFuICAgPSAiXDAzM1swOzM2bSI7CmNvbnN0IHB1dGloICA9ICJcMDMzWzA7MzdtIjsKY29uc3QgcmVzZXQgID0gIlwwMzNbMG0iOwoKY29uc3Qgc2NyaXB0X25hbWUgPSAiTW9vblBUQyBBdXRvIENsYWltIjsKY29uc3QgaG9zdCAgICAgICAgPSAiaHR0cHM6Ly9tb29ucHRjLmNvbSI7CmNvbnN0IE1BWF9DTEFJTVMgID0gNTAwMDsKY29uc3QgTUFYX0ZBSUxVUkVTID0gNTsKCmZ1bmN0aW9uIGNsZWFyKCkgewogICAgKFBIUF9PUyA9PSAiTGludXgiKSA/IHN5c3RlbSgnY2xlYXInKSA6IHBjbG9zZShwb3BlbignY2xzJywgJ3cnKSk7Cn0KCmZ1bmN0aW9uIHByaW50X2Jhbm5lcigpIHsKICAgIGNsZWFyKCk7CiAgICBlY2hvIGN5YW4gLiAiPT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT1cbiI7CiAgICBlY2hvIGN5YW4gLiAi4pWRIiAuIHJlc2V0IC4gIiAgICAgICAgICAgICAgICAiIC4ga3VuaW5nIC4gIjo6IE1vb25QVEMgQXV0byBDbGFpbSA6OiIgLiByZXNldCAuICIgICAgICAgICAgICAgICAgICIgLiBjeWFuIC4gIuKVkVxuIjsKICAgIGVjaG8gY3lhbiAuICI9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PVxuIjsKICAgIGVjaG8gY3lhbiAuICLilZEiIC4gcmVzZXQgLiAiICIgLiBjeWFuIC4gIuKWqiBNb2RlICAgIiAuIHB1dGloIC4gIkF1dG8gQ2xhaW0gKFJvdGF0aW9uIENhcHRjaGEpIiAuIHN0cl9yZXBlYXQoIiAiLCAxOCkgLiBjeWFuIC4gIuKVkVxuIjsKICAgIGVjaG8gY3lhbiAuICLilZEiIC4gcmVzZXQgLiAiICIgLiBjeWFuIC4gIuKWqiBXZWJzaXRlICIgLiBwdXRpaCAuICJtb29ucHRjLmNvbSIgLiBzdHJfcmVwZWF0KCIgIiwgMjkpIC4gY3lhbiAuICLilZFcbiI7CiAgICBlY2hvIGN5YW4gLiAi4pWRIiAuIHJlc2V0IC4gIiAiIC4gY3lhbiAuICLilqogTWF4ICAgICAiIC4gcHV0aWggLiBNQVhfQ0xBSU1TIC4gIiBjbGFpbXMsICIgLiBNQVhfRkFJTFVSRVMgLiAiIGZhaWxzIHN0b3AiIC4gc3RyX3JlcGVhdCgiICIsIDEwKSAuIGN5YW4gLiAi4pWRXG4iOwogICAgZWNobyBjeWFuIC4gIj09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09XG4iOwogICAgZWNobyBjeWFuIC4gIi0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tXG5cbiIgLiByZXNldDsKfQoKLy8gPT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09Ci8vICBUSU1FUgovLyA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0KZnVuY3Rpb24gdGltZXIoJHNlY29uZHMpIHsKICAgICR3YWl0X3RpbWUgPSAoaW50KSRzZWNvbmRzOwogICAgaWYgKCR3YWl0X3RpbWUgPD0gMCkgJHdhaXRfdGltZSA9IDU7CiAgICAkZnJhbWVzID0gWyfio74nLCAn4qO9JywgJ+KjuycsICfior8nLCAn4qG/JywgJ+KjnycsICfio68nLCAn4qO3J107CiAgICAkY3VycmVudF9mcmFtZSA9IDA7CiAgICB3aGlsZSAoJHdhaXRfdGltZSA+IDApIHsKICAgICAgICAkaG91cnMgPSBmbG9vcigkd2FpdF90aW1lIC8gMzYwMCk7CiAgICAgICAgJG1pbnV0ZXMgPSBmbG9vcigoJHdhaXRfdGltZSAlIDM2MDApIC8gNjApOwogICAgICAgICRzZWNvbmRzX2xlZnQgPSAkd2FpdF90aW1lICUgNjA7CiAgICAgICAgJHRpbWVfZm9ybWF0dGVkID0gc3ByaW50ZignJTAyZDolMDJkOiUwMmQnLCAkaG91cnMsICRtaW51dGVzLCAkc2Vjb25kc19sZWZ0KTsKICAgICAgICAkc3Bpbm5lciA9ICRmcmFtZXNbJGN1cnJlbnRfZnJhbWVdOwogICAgICAgIGVjaG8gIlxyIiAuIGt1bmluZyAuICJjb29sZG93bi4uLiAiIC4gcHV0aWggLiAkdGltZV9mb3JtYXR0ZWQgLiAiICIgLiAkc3Bpbm5lciAuICIgICAiIC4gcmVzZXQ7CiAgICAgICAgc2xlZXAoMSk7CiAgICAgICAgJHdhaXRfdGltZS0tOwogICAgICAgICRjdXJyZW50X2ZyYW1lID0gKCRjdXJyZW50X2ZyYW1lICsgMSkgJSBjb3VudCgkZnJhbWVzKTsKICAgIH0KICAgIGVjaG8gIlxyIiAuIHN0cl9yZXBlYXQoIiAiLCA0MCkgLiAiXHIiOwp9CgovLyA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0KLy8gIEhUVFAgSEVMUEVSCi8vID09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQpmdW5jdGlvbiBodHRwX3JlcXVlc3QoJHVybCwgJG1ldGhvZCA9ICdHRVQnLCAkZGF0YSA9IFtdLCAkaGVhZGVycyA9IFtdLCAkY29va2llZmlsZSA9ICdjb29raWVzLnR4dCcpIHsKICAgICRjaCA9IGN1cmxfaW5pdCgpOwogICAgJGZpbmFsX2hlYWRlcnMgPSBbXTsKICAgIGZvcmVhY2ggKCRoZWFkZXJzIGFzICRoZWFkZXIpIHsKICAgICAgICAkZmluYWxfaGVhZGVyc1tdID0gJGhlYWRlcjsKICAgIH0KICAgICRvcHRpb25zID0gWwogICAgICAgIENVUkxPUFRfVVJMICAgICAgICAgICAgPT4gJHVybCwKICAgICAgICBDVVJMT1BUX1JFVFVSTlRSQU5TRkVSID0+IHRydWUsCiAgICAgICAgQ1VSTE9QVF9IRUFERVIgICAgICAgICA9PiB0cnVlLAogICAgICAgIENVUkxPUFRfRk9MTE9XTE9DQVRJT04gPT4gdHJ1ZSwKICAgICAgICBDVVJMT1BUX01BWFJFRElSUyAgICAgID0+IDEwLAogICAgICAgIENVUkxPUFRfU1NMX1ZFUklGWUhPU1QgPT4gMSwKICAgICAgICBDVVJMT1BUX1NTTF9WRVJJRllQRUVSID0+IHRydWUsCiAgICAgICAgQ1VSTE9QVF9IVFRQSEVBREVSICAgICA9PiAkZmluYWxfaGVhZGVycywKICAgICAgICBDVVJMT1BUX0NPTk5FQ1RUSU1FT1VUID0+IDMwLAogICAgICAgIENVUkxPUFRfVElNRU9VVCAgICAgICAgPT4gMzAsCiAgICAgICAgQ1VSTE9QVF9DT09LSUVGSUxFICAgICA9PiAnY29va2llcy50eHQnLAogICAgICAgIENVUkxPUFRfQ09PS0lFSkFSICAgICAgPT4gJ2Nvb2tpZXMudHh0JwogICAgXTsKICAgIGlmIChzdHJ0b3VwcGVyKCRtZXRob2QpID09PSAnUE9TVCcpIHsKICAgICAgICAkb3B0aW9uc1tDVVJMT1BUX1BPU1RdID0gdHJ1ZTsKICAgICAgICAkb3B0aW9uc1tDVVJMT1BUX1BPU1RGSUVMRFNdID0gJGRhdGE7CiAgICB9CiAgICBjdXJsX3NldG9wdF9hcnJheSgkY2gsICRvcHRpb25zKTsKICAgICRyZXNwb25zZSA9IGN1cmxfZXhlYygkY2gpOwogICAgaWYgKCRyZXNwb25zZSA9PT0gZmFsc2UpIHsKICAgICAgICBjdXJsX2Nsb3NlKCRjaCk7CiAgICAgICAgcmV0dXJuICJFUlJPUl9TSUdOQUwiOwogICAgfQogICAgJGhlYWRlcl9zaXplID0gY3VybF9nZXRpbmZvKCRjaCwgQ1VSTElORk9fSEVBREVSX1NJWkUpOwogICAgJGJvZHkgPSBzdWJzdHIoJHJlc3BvbnNlLCAkaGVhZGVyX3NpemUpOwogICAgY3VybF9jbG9zZSgkY2gpOwogICAgcmV0dXJuICRib2R5Owp9CgovLyA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0KLy8gIENPTkZJRwovLyA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0KZnVuY3Rpb24gZ2V0Q29uZmlnKCRjb25maWdGaWxlKSB7CiAgICBpZiAoIWZpbGVfZXhpc3RzKCRjb25maWdGaWxlKSkgewogICAgICAgIHByaW50X2Jhbm5lcigpOwogICAgICAgIGVjaG8gcHV0aWggLiAiRW1haWw6ICIgLiBrdW5pbmc7CiAgICAgICAgJGVtYWlsID0gdHJpbShmZ2V0cyhTVERJTikpOwogICAgICAgIGVjaG8gcHV0aWggLiAiVXNlci1BZ2VudDogIiAuIGt1bmluZzsKICAgICAgICAkdWEgPSB0cmltKGZnZXRzKFNURElOKSk7CiAgICAgICAgJGRhdGEgPSBbImVtYWlsIiA9PiAkZW1haWwsICJ1YSIgPT4gJHVhXTsKICAgICAgICBmaWxlX3B1dF9jb250ZW50cygkY29uZmlnRmlsZSwganNvbl9lbmNvZGUoJGRhdGEsIEpTT05fUFJFVFRZX1BSSU5UKSk7CiAgICAgICAgZWNobyBoaWphdSAuICJTYXZlZC5cblxuIiAuIHJlc2V0OwogICAgICAgIHNsZWVwKDEpOwogICAgICAgIHJldHVybiAkZGF0YTsKICAgIH0KICAgIHJldHVybiBqc29uX2RlY29kZShmaWxlX2dldF9jb250ZW50cygkY29uZmlnRmlsZSksIHRydWUpOwp9CgovLyA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0KLy8gIEdFVCBCQUxBTkNFCi8vID09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQpmdW5jdGlvbiBnZXRfYmFsYW5jZSgkaGVhZGVycykgewogICAgJGRhc2ggPSBodHRwX3JlcXVlc3QoaG9zdCAuICIvYXBpL2JhbGFuY2UiLCAiR0VUIiwgW10sICRoZWFkZXJzKTsKICAgICRkYXRhID0ganNvbl9kZWNvZGUoJGRhc2gsIHRydWUpOwogICAgcmV0dXJuICRkYXRhWydiYWxhbmNlJ10gPz8gJzAnOwp9CgovLyA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0KLy8gIEdFVCBVU0VSTkFNRQovLyA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0KZnVuY3Rpb24gZ2V0X3VzZXJuYW1lKCRoZWFkZXJzKSB7CiAgICAkZGFzaCA9IGh0dHBfcmVxdWVzdChob3N0IC4gIi9hcGkvdXNlciIsICJHRVQiLCBbXSwgJGhlYWRlcnMpOwogICAgJGRhdGEgPSBqc29uX2RlY29kZSgkZGFzaCwgdHJ1ZSk7CiAgICByZXR1cm4gJGRhdGFbJ3VzZXJuYW1lJ10gPz8gJ1Vua25vd24nOwp9CgovLyA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0KLy8gIExPR0lOCi8vID09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQpmdW5jdGlvbiBsb2dpbigkZW1haWwsICR1YSwgJiRoZWFkZXJzKSB7CiAgICAkbG9naW5faGVhZGVycyA9IFsKICAgICAgICAiaG9zdDogbW9vbnB0Yy5jb20iLAogICAgICAgICJ1c2VyLWFnZW50OiAiIC4gJHVhLAogICAgICAgICJ4LXJlcXVlc3RlZC13aXRoOiBYTUxIdHRwUmVxdWVzdCIsCiAgICAgICAgInNlYy1jaC11YTogXCJDaHJvbWl1bVwiO3Y9XCIxNDZcIiwgXCJOb3QtQS5CcmFuZFwiO3Y9XCIyNFwiLCBcIkFuZHJvaWQgV2ViVmlld1wiO3Y9XCIxNDZcIiIsCiAgICAgICAgInNlYy1jaC11YS1tb2JpbGU6ID8xIiwKICAgICAgICAic2VjLWNoLXVhLXBsYXRmb3JtOiBcIkFuZHJvaWRcIiIsCiAgICAgICAgImNvbnRlbnQtdHlwZTogYXBwbGljYXRpb24vanNvbiIsCiAgICAgICAgIm9yaWdpbjogaHR0cHM6Ly9tb29ucHRjLmNvbSIsCiAgICAgICAgInJlZmVyZXI6IGh0dHBzOi8vbW9vbnB0Yy5jb20vIiwKICAgICAgICAiYWNjZXB0LWxhbmd1YWdlOiBlbi1HQixlbi1VUztxPTAuOSxlbjtxPTAuOCIsCiAgICBdOwogICAgJGRhdGEgPSBqc29uX2VuY29kZShbImVtYWlsIiA9PiAkZW1haWxdKTsKICAgICRyZXMgPSBodHRwX3JlcXVlc3QoaG9zdCAuICIvYXBpL2F1dGgvZW1haWwtbG9naW4iLCAiUE9TVCIsICRkYXRhLCAkbG9naW5faGVhZGVycyk7CiAgICAkcmVzdWx0ID0ganNvbl9kZWNvZGUoJHJlcywgdHJ1ZSk7CiAgICBpZiAoKCRyZXN1bHRbJ29rJ10gPz8gZmFsc2UpID09PSB0cnVlKSB7CiAgICAgICAgcmV0dXJuIHRydWU7CiAgICB9CiAgICByZXR1cm4gZmFsc2U7Cn0KCi8vID09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQovLyAgVkFSSUFOVCBJRCA9PiBBTlNXRVIgKEZVTEwgTUFQUElORykKLy8gPT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09CiRhbnN3ZXJzID0gWwogICAgMjEgPT4gJzI1JywgMTkgPT4gJzg3JywgODggPT4gJzMzMicsIDM0ID0+ICczMDQnLAogICAgMjYgPT4gJzIxNCcsIDI4ID0+ICcxNTMnLCAyOSA9PiAnMTE5JywgOSAgPT4gJzYyJywKICAgIDc5ID0+ICcyNzEnLCA4ICA9PiAnODcnLCA0ICA9PiAnMjE4JywgNjEgPT4gJzE1MScsCiAgICAyNCA9PiAnMjc4JywgOTYgPT4gJzg5JywgODUgPT4gJzk1JywgODcgPT4gJzMyJywKICAgIDc1ID0+ICc2MicsIDM1ID0+ICcyNzEnLCA4MyA9PiAnMTUyJywgNDUgPT4gJzMwMicsCiAgICAzMiA9PiAnMjknLCA0MyA9PiAnMzAnLCAzMyA9PiAnMzI4JywgNTcgPT4gJzI3MycsCiAgICA1MiA9PiAnODknLCA3MyA9PiAnMTIzJywgNzIgPT4gJzE1NCcsIDcwID0+ICcyMTInLAogICAgNjMgPT4gJzg3JywgNDcgPT4gJzI0MicsIDMwID0+ICc5MCcsIDE4ID0+ICcxMTcnLAogICAgNDggPT4gJzIxMycsIDI1ID0+ICcyNDknLCA2MCA9PiAnMTc4JywgNDYgPT4gJzI2OScsCiAgICA2NyA9PiAnMzAwJywgMTAgPT4gJzM0JywgMTIgPT4gJzMwOCcsCiAgICAyMiA9PiAnMTY3JywKXTsKCi8vID09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQovLyAgTUFJTgovLyA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0KcHJpbnRfYmFubmVyKCk7CgokY29uZmlnID0gZ2V0Q29uZmlnKCRjb25maWdGaWxlKTsKJGVtYWlsID0gJGNvbmZpZ1snZW1haWwnXTsKJHVhID0gJGNvbmZpZ1sndWEnXTsKCiRoZWFkZXJzID0gWwogICAgImhvc3Q6IG1vb25wdGMuY29tIiwKICAgICJ1c2VyLWFnZW50OiAiIC4gJHVhLAogICAgIngtcmVxdWVzdGVkLXdpdGg6IFhNTEh0dHBSZXF1ZXN0IiwKICAgICJzZWMtY2gtdWE6IFwiQ2hyb21pdW1cIjt2PVwiMTQ2XCIsIFwiTm90LUEuQnJhbmRcIjt2PVwiMjRcIiwgXCJBbmRyb2lkIFdlYlZpZXdcIjt2PVwiMTQ2XCIiLAogICAgInNlYy1jaC11YS1tb2JpbGU6ID8xIiwKICAgICJzZWMtY2gtdWEtcGxhdGZvcm06IFwiQW5kcm9pZFwiIiwKICAgICJjb250ZW50LXR5cGU6IGFwcGxpY2F0aW9uL2pzb24iLAogICAgIm9yaWdpbjogaHR0cHM6Ly9tb29ucHRjLmNvbSIsCiAgICAicmVmZXJlcjogaHR0cHM6Ly9tb29ucHRjLmNvbS9mYXVjZXQiLAogICAgImFjY2VwdC1sYW5ndWFnZTogZW4tR0IsZW4tVVM7cT0wLjksZW47cT0wLjgiLApdOwoKLy8gTG9naW4KaWYgKCFsb2dpbigkZW1haWwsICR1YSwgJGhlYWRlcnMpKSB7CiAgICBlY2hvIG1lcmFoIC4gIltGQUlMRURdIExvZ2luIGZhaWxlZC4gQ2hlY2sgZW1haWwuXG4iOwogICAgZXhpdDsKfQplY2hvIGhpamF1IC4gIltTVUNDRVNTXSBMb2dnZWQgaW4uXG5cbiI7CgokdXNlcm5hbWUgPSBnZXRfdXNlcm5hbWUoJGhlYWRlcnMpOwokYmFsYW5jZSA9IGdldF9iYWxhbmNlKCRoZWFkZXJzKTsKCiRjbGFpbXNfZG9uZSA9IDA7CiRmYWlsdXJlcyA9IDA7CiR1bmtub3duX3JldHJpZXMgPSAwOwoKZWNobyBwdXRpaCAuICJVc2VyOiAiIC4gY3lhbiAuICR1c2VybmFtZSAuICJcbiI7CmVjaG8gcHV0aWggLiAiU3RhcnRpbmcuLi5cblxuIjsKCndoaWxlICgkY2xhaW1zX2RvbmUgPCBNQVhfQ0xBSU1TICYmICRmYWlsdXJlcyA8IE1BWF9GQUlMVVJFUykgewogICAgCiAgICAvLyA9PT09PSBHRVQgRkFVQ0VUIFNUQVRVUyA9PT09PQogICAgJHJlcyA9IGh0dHBfcmVxdWVzdChob3N0IC4gIi9hcGkvZmF1Y2V0L3N0YXR1cyIsICJHRVQiLCBbXSwgJGhlYWRlcnMpOwogICAgJGRhdGEgPSBqc29uX2RlY29kZSgkcmVzLCB0cnVlKTsKICAgIAogICAgaWYgKGlzc2V0KCRkYXRhWydlcnJvciddKSAmJiAkZGF0YVsnZXJyb3InXSA9PT0gJ3VuYXV0aG9yaXplZCcpIHsKICAgICAgICBlY2hvIGt1bmluZyAuICJbIV0gU2Vzc2lvbiBleHBpcmVkLiBSZS1sb2dnaW5nLi4uXG4iOwogICAgICAgIGlmICghbG9naW4oJGVtYWlsLCAkdWEsICRoZWFkZXJzKSkgewogICAgICAgICAgICBlY2hvIG1lcmFoIC4gIltGQUlMRURdIFJlLWxvZ2luIGZhaWxlZC5cbiI7CiAgICAgICAgICAgIGV4aXQ7CiAgICAgICAgfQogICAgICAgICR1bmtub3duX3JldHJpZXMgPSAwOwogICAgICAgIGNvbnRpbnVlOwogICAgfQogICAgCiAgICAvLyBDaGVjayBjb29sZG93bgogICAgaWYgKCgkZGF0YVsnY2FuQ2xhaW0nXSA/PyB0cnVlKSA9PT0gZmFsc2UpIHsKICAgICAgICAkcmVtYWluaW5nID0gJGRhdGFbJ3JlbWFpbmluZ1NlY29uZHMnXSA/PyAwOwogICAgICAgIGlmICgkcmVtYWluaW5nID4gMCkgewogICAgICAgICAgICB0aW1lcigkcmVtYWluaW5nKTsKICAgICAgICAgICAgY29udGludWU7CiAgICAgICAgfQogICAgfQogICAgCiAgICAvLyA9PT09PSBHRU5FUkFURSBST1RBVElPTiBDQVBUQ0hBID09PT09CiAgICAkZ2VuX2hlYWRlcnMgPSAkaGVhZGVyczsKICAgICRnZW5faGVhZGVyc1tdID0gImNvbnRlbnQtdHlwZTogYXBwbGljYXRpb24vanNvbiI7CiAgICAkZ2VuX2hlYWRlcnNbXSA9ICJyZWZlcmVyOiBodHRwczovL21vb25wdGMuY29tL2ZhdWNldCI7CiAgICAkZ2VuX3JlcyA9IGh0dHBfcmVxdWVzdChob3N0IC4gIi9hcGkvY2FwdGNoYS1yb3RhdGlvbi9nZW5lcmF0ZSIsICJQT1NUIiwgJ3t9JywgJGdlbl9oZWFkZXJzKTsKICAgICRnZW5fZGF0YSA9IGpzb25fZGVjb2RlKCRnZW5fcmVzLCB0cnVlKTsKICAgIAogICAgaWYgKGVtcHR5KCRnZW5fZGF0YVsnc3VjY2VzcyddKSkgewogICAgICAgIGVjaG8gbWVyYWggLiAiW0VSUk9SXSBGYWlsZWQgdG8gZ2VuZXJhdGUgY2FwdGNoYS5cbiI7CiAgICAgICAgJGZhaWx1cmVzKys7CiAgICAgICAgdGltZXIoMTApOwogICAgICAgIGNvbnRpbnVlOwogICAgfQogICAgCiAgICAkdG9rZW4gPSAkZ2VuX2RhdGFbJ3Rva2VuJ10gPz8gbnVsbDsKICAgICR2YXJpYW50SWQgPSAkZ2VuX2RhdGFbJ2NoYWxsZW5nZSddWyd2YXJpYW50SWQnXSA/PyBudWxsOwogICAgaWYgKCEkdG9rZW4gfHwgJHZhcmlhbnRJZCA9PT0gbnVsbCkgewogICAgICAgIGVjaG8gbWVyYWggLiAiW0VSUk9SXSBJbnZhbGlkIGNhcHRjaGEgcmVzcG9uc2UuXG4iOwogICAgICAgICRmYWlsdXJlcysrOwogICAgICAgIHRpbWVyKDEwKTsKICAgICAgICBjb250aW51ZTsKICAgIH0KICAgIAogICAgLy8gPT09PT0gRklORCBBTlNXRVIgPT09PT0KICAgIGlmICghYXJyYXlfa2V5X2V4aXN0cygkdmFyaWFudElkLCAkYW5zd2VycykpIHsKICAgICAgICAkdW5rbm93bl9yZXRyaWVzKys7CiAgICAgICAgaWYgKCR1bmtub3duX3JldHJpZXMgPj0gMykgewogICAgICAgICAgICAkZmFpbHVyZXMrKzsKICAgICAgICAgICAgJHVua25vd25fcmV0cmllcyA9IDA7CiAgICAgICAgICAgIGVjaG8gbWVyYWggLiAiW0ZBSUxFRF0gVW5rbm93biB2YXJpYW50OiAkdmFyaWFudElkXG4iOwogICAgICAgIH0KICAgICAgICB0aW1lcigxMCk7CiAgICAgICAgY29udGludWU7CiAgICB9CiAgICAkYW5zd2VyID0gWyRhbnN3ZXJzWyR2YXJpYW50SWRdXTsKICAgICR1bmtub3duX3JldHJpZXMgPSAwOwogICAgCiAgICAvLyA9PT09PSBWRVJJRlkgQ0FQVENIQSA9PT09PQogICAgJHZlcmlmeV9oZWFkZXJzID0gJGhlYWRlcnM7CiAgICAkdmVyaWZ5X2hlYWRlcnNbXSA9ICJjb250ZW50LXR5cGU6IGFwcGxpY2F0aW9uL2pzb24iOwogICAgJHZlcmlmeV9oZWFkZXJzW10gPSAicmVmZXJlcjogaHR0cHM6Ly9tb29ucHRjLmNvbS9mYXVjZXQiOwogICAgJHZlcmlmeV9wYXlsb2FkID0ganNvbl9lbmNvZGUoWwogICAgICAgICd0b2tlbicgPT4gJHRva2VuLAogICAgICAgICdhbnN3ZXInID0+ICRhbnN3ZXIsCiAgICAgICAgJ3R5cGUnID0+ICdyb3RhdGlvbicKICAgIF0pOwogICAgJHZlcmlmeV9yZXMgPSBodHRwX3JlcXVlc3QoaG9zdCAuICIvYXBpL2NhcHRjaGEtcm90YXRpb24vdmVyaWZ5IiwgIlBPU1QiLCAkdmVyaWZ5X3BheWxvYWQsICR2ZXJpZnlfaGVhZGVycyk7CiAgICAkdmVyaWZ5X2RhdGEgPSBqc29uX2RlY29kZSgkdmVyaWZ5X3JlcywgdHJ1ZSk7CiAgICAKICAgIGlmIChlbXB0eSgkdmVyaWZ5X2RhdGFbJ3N1Y2Nlc3MnXSkgfHwgZW1wdHkoJHZlcmlmeV9kYXRhWyd2ZXJpZmllZFRva2VuJ10pKSB7CiAgICAgICAgZWNobyBtZXJhaCAuICJbRVJST1JdIENhcHRjaGEgdmVyaWZpY2F0aW9uIGZhaWxlZC5cbiI7CiAgICAgICAgJGZhaWx1cmVzKys7CiAgICAgICAgdGltZXIoMTApOwogICAgICAgIGNvbnRpbnVlOwogICAgfQogICAgCiAgICAkdmVyaWZpZWRUb2tlbiA9ICR2ZXJpZnlfZGF0YVsndmVyaWZpZWRUb2tlbiddOwogICAgCiAgICAvLyA9PT09PSBDTEFJTSBGQVVDRVQgPT09PT0KICAgICRjbGFpbV9oZWFkZXJzID0gJGhlYWRlcnM7CiAgICAkY2xhaW1faGVhZGVyc1tdID0gImNvbnRlbnQtdHlwZTogYXBwbGljYXRpb24vanNvbiI7CiAgICAkY2xhaW1faGVhZGVyc1tdID0gInJlZmVyZXI6IGh0dHBzOi8vbW9vbnB0Yy5jb20vZmF1Y2V0IjsKICAgICRjbGFpbV9wYXlsb2FkID0ganNvbl9lbmNvZGUoWydjYXB0Y2hhVG9rZW4nID0+ICR2ZXJpZmllZFRva2VuXSk7CiAgICAkY2xhaW1fcmVzID0gaHR0cF9yZXF1ZXN0KGhvc3QgLiAiL2FwaS9mYXVjZXQvY2xhaW0iLCAiUE9TVCIsICRjbGFpbV9wYXlsb2FkLCAkY2xhaW1faGVhZGVycyk7CiAgICAkY2xhaW1fZGF0YSA9IGpzb25fZGVjb2RlKCRjbGFpbV9yZXMsIHRydWUpOwogICAgCiAgICBpZiAoKCRjbGFpbV9kYXRhWydvayddID8/IGZhbHNlKSA9PT0gdHJ1ZSkgewogICAgICAgICRjbGFpbXNfZG9uZSsrOwogICAgICAgICRmYWlsdXJlcyA9IDA7CiAgICAgICAgJHJld2FyZCA9ICRjbGFpbV9kYXRhWydmaW5hbFJld2FyZCddID8/IDA7CiAgICAgICAgJGJhbGFuY2UgPSAkY2xhaW1fZGF0YVsnbmV3QmFsYW5jZSddID8/ICRiYWxhbmNlOwogICAgICAgICRyb2xsID0gJGNsYWltX2RhdGFbJ3JvbGwnXSA/PyAwOwogICAgICAgIAogICAgICAgIC8vIE1pbmltYWwgb3V0cHV0CiAgICAgICAgJGVtb2ppID0gWyfwn5SlJywgJ+Kaoe+4jycsICfirZAnLCAn8J+SjicsICfwn5qAJywgJ/CfkrAnLCAn8J+OrycsICfwn4+GJ107CiAgICAgICAgJHJhbmQgPSAkZW1vamlbYXJyYXlfcmFuZCgkZW1vamkpXTsKICAgICAgICBlY2hvIGhpamF1IC4gIltTVUNDRVNTXSBSb2xsOiB7JHJvbGx9eyRyYW5kfSB8ICt7JHJld2FyZH3imqHvuI8gQ29pbnMgfCBCYWxhbmNlOiB7JGJhbGFuY2V94q2QXG4iOwogICAgICAgIAogICAgICAgICRyZW1haW5pbmcgPSAkY2xhaW1fZGF0YVsncmVtYWluaW5nU2Vjb25kcyddID8/IDEwOwogICAgICAgIGlmICgkcmVtYWluaW5nID4gMCkgewogICAgICAgICAgICB0aW1lcigkcmVtYWluaW5nKTsKICAgICAgICB9IGVsc2UgewogICAgICAgICAgICB0aW1lcigxMCk7CiAgICAgICAgfQogICAgfSBlbHNlIHsKICAgICAgICAkZmFpbHVyZXMrKzsKICAgICAgICAkbXNnID0gJGNsYWltX2RhdGFbJ21lc3NhZ2UnXSA/PyAnVW5rbm93biBlcnJvcic7CiAgICAgICAgZWNobyBtZXJhaCAuICJbRkFJTEVEXSAoJGZhaWx1cmVzLyRNQVhfRkFJTFVSRVMpICRtc2dcbiI7CiAgICAgICAgdGltZXIoMTApOwogICAgfQp9CgppZiAoJGNsYWltc19kb25lID49IE1BWF9DTEFJTVMpIHsKICAgIGVjaG8gaGlqYXUgLiAiXG5b4pyTXSBEb25lISAiIC4gTUFYX0NMQUlNUyAuICIgY2xhaW1zIGNvbXBsZXRlZC5cbiI7Cn0gZWxzZSB7CiAgICBlY2hvIG1lcmFoIC4gIlxuW+Kcl10gU3RvcHBlZCBhZnRlciAiIC4gTUFYX0ZBSUxVUkVTIC4gIiBmYWlsdXJlcy5cbiI7Cn0KJGJhbGFuY2UgPSBnZXRfYmFsYW5jZSgkaGVhZGVycyk7CmVjaG8gcHV0aWggLiAiRmluYWwgQmFsYW5jZTogIiAuIGhpamF1IC4gJGJhbGFuY2UgLiAiIENvaW5zXG4iOw==')); ?>
+<?php
+
+error_reporting(0);
+date_default_timezone_set('Asia/Jakarta');
+$configFile = "MoonPtc.json";
+
+// ============================================================
+//  COLORS
+// ============================================================
+const merah  = "\033[0;31m";
+const hijau  = "\033[0;32m";
+const kuning = "\033[0;33m";
+const cyan   = "\033[0;36m";
+const putih  = "\033[0;37m";
+const reset  = "\033[0m";
+
+const script_name = "MoonPTC Auto Claim";
+const host        = "https://moonptc.com";
+const MAX_CLAIMS  = 5000;
+const MAX_FAILURES = 5;
+
+// ---- Jeda otomatis ----
+const PAUSE_INTERVAL = 7200;   // 2 jam dalam detik
+const PAUSE_DURATION = 4320;   // 1,2 jam = 72 menit
+
+function clear() {
+    (PHP_OS == "Linux") ? system('clear') : pclose(popen('cls', 'w'));
+}
+
+function print_banner() {
+    clear();
+    echo cyan . "========================================================\n";
+    echo cyan . "║" . reset . "                " . kuning . ":: MoonPTC Auto Claim ::" . reset . "                 " . cyan . "║\n";
+    echo cyan . "========================================================\n";
+    echo cyan . "║" . reset . " " . cyan . "▪ Mode   " . putih . "Auto Claim (Rotation Captcha)" . str_repeat(" ", 18) . cyan . "║\n";
+    echo cyan . "║" . reset . " " . cyan . "▪ Website " . putih . "moonptc.com" . str_repeat(" ", 29) . cyan . "║\n";
+    echo cyan . "║" . reset . " " . cyan . "▪ Max     " . putih . MAX_CLAIMS . " claims, " . MAX_FAILURES . " fails stop" . str_repeat(" ", 10) . cyan . "║\n";
+    echo cyan . "║" . reset . " " . cyan . "▪ Jeda    " . putih . "2 jam jalan → 1,2 jam pause" . str_repeat(" ", 13) . cyan . "║\n";
+    echo cyan . "========================================================\n";
+    echo cyan . "--------------------------------------------------------\n\n" . reset;
+}
+
+// ============================================================
+//  TIMER
+// ============================================================
+function timer($seconds) {
+    $wait_time = (int)$seconds;
+    if ($wait_time <= 0) $wait_time = 5;
+    $frames = ['⣾', '⣽', '⣻', '⢿', '⡿', '⣟', '⣯', '⣷'];
+    $current_frame = 0;
+    while ($wait_time > 0) {
+        $hours = floor($wait_time / 3600);
+        $minutes = floor(($wait_time % 3600) / 60);
+        $seconds_left = $wait_time % 60;
+        $time_formatted = sprintf('%02d:%02d:%02d', $hours, $minutes, $seconds_left);
+        $spinner = $frames[$current_frame];
+        echo "\r" . kuning . "cooldown... " . putih . $time_formatted . " " . $spinner . "   " . reset;
+        sleep(1);
+        $wait_time--;
+        $current_frame = ($current_frame + 1) % count($frames);
+    }
+    echo "\r" . str_repeat(" ", 40) . "\r";
+}
+
+// ============================================================
+//  HTTP HELPER
+// ============================================================
+function http_request($url, $method = 'GET', $data = [], $headers = [], $cookiefile = 'cookies.txt') {
+    $ch = curl_init();
+    $final_headers = [];
+    foreach ($headers as $header) {
+        $final_headers[] = $header;
+    }
+    $options = [
+        CURLOPT_URL            => $url,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HEADER         => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_MAXREDIRS      => 10,
+        CURLOPT_SSL_VERIFYHOST => 1,
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_HTTPHEADER     => $final_headers,
+        CURLOPT_CONNECTTIMEOUT => 30,
+        CURLOPT_TIMEOUT        => 30,
+        CURLOPT_COOKIEFILE     => 'cookies.txt',
+        CURLOPT_COOKIEJAR      => 'cookies.txt'
+    ];
+    if (strtoupper($method) === 'POST') {
+        $options[CURLOPT_POST] = true;
+        $options[CURLOPT_POSTFIELDS] = $data;
+    }
+    curl_setopt_array($ch, $options);
+    $response = curl_exec($ch);
+    if ($response === false) {
+        curl_close($ch);
+        return "ERROR_SIGNAL";
+    }
+    $header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+    $body = substr($response, $header_size);
+    curl_close($ch);
+    return $body;
+}
+
+// ============================================================
+//  CONFIG
+// ============================================================
+function getConfig($configFile) {
+    if (!file_exists($configFile)) {
+        print_banner();
+        echo putih . "Email: " . kuning;
+        $email = trim(fgets(STDIN));
+        echo putih . "User-Agent: " . kuning;
+        $ua = trim(fgets(STDIN));
+        $data = ["email" => $email, "ua" => $ua];
+        file_put_contents($configFile, json_encode($data, JSON_PRETTY_PRINT));
+        echo hijau . "Saved.\n\n" . reset;
+        sleep(1);
+        return $data;
+    }
+    return json_decode(file_get_contents($configFile), true);
+}
+
+// ============================================================
+//  GET BALANCE
+// ============================================================
+function get_balance($headers) {
+    $dash = http_request(host . "/api/balance", "GET", [], $headers);
+    $data = json_decode($dash, true);
+    return $data['balance'] ?? '0';
+}
+
+// ============================================================
+//  GET USERNAME
+// ============================================================
+function get_username($headers) {
+    $dash = http_request(host . "/api/user", "GET", [], $headers);
+    $data = json_decode($dash, true);
+    return $data['username'] ?? 'Unknown';
+}
+
+// ============================================================
+//  LOGIN
+// ============================================================
+function login($email, $ua, &$headers) {
+    $login_headers = [
+        "host: moonptc.com",
+        "user-agent: " . $ua,
+        "x-requested-with: XMLHttpRequest",
+        "sec-ch-ua: \"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Android WebView\";v=\"146\"",
+        "sec-ch-ua-mobile: ?1",
+        "sec-ch-ua-platform: \"Android\"",
+        "content-type: application/json",
+        "origin: https://moonptc.com",
+        "referer: https://moonptc.com/",
+        "accept-language: en-GB,en-US;q=0.9,en;q=0.8",
+    ];
+    $data = json_encode(["email" => $email]);
+    $res = http_request(host . "/api/auth/email-login", "POST", $data, $login_headers);
+    $result = json_decode($res, true);
+    if (($result['ok'] ?? false) === true) {
+        return true;
+    }
+    return false;
+}
+
+// ============================================================
+//  VARIANT ID => ANSWER (FULL MAPPING)
+// ============================================================
+$answers = [
+    21 => '25', 19 => '87', 88 => '332', 34 => '304',
+    26 => '214', 28 => '153', 29 => '119', 9  => '62',
+    79 => '271', 8  => '87', 4  => '218', 61 => '151',
+    24 => '278', 96 => '89', 85 => '95', 87 => '32',
+    75 => '62', 35 => '271', 83 => '152', 45 => '302',
+    32 => '29', 43 => '30', 33 => '328', 57 => '273',
+    52 => '89', 73 => '123', 72 => '154', 70 => '212',
+    63 => '87', 47 => '242', 30 => '90', 18 => '117',
+    48 => '213', 25 => '249', 60 => '178', 46 => '269',
+    67 => '300', 10 => '34', 12 => '308',
+    22 => '167',
+];
+
+// ============================================================
+//  MAIN
+// ============================================================
+print_banner();
+
+$config = getConfig($configFile);
+$email = $config['email'];
+$ua = $config['ua'];
+
+$headers = [
+    "host: moonptc.com",
+    "user-agent: " . $ua,
+    "x-requested-with: XMLHttpRequest",
+    "sec-ch-ua: \"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Android WebView\";v=\"146\"",
+    "sec-ch-ua-mobile: ?1",
+    "sec-ch-ua-platform: \"Android\"",
+    "content-type: application/json",
+    "origin: https://moonptc.com",
+    "referer: https://moonptc.com/faucet",
+    "accept-language: en-GB,en-US;q=0.9,en;q=0.8",
+];
+
+// Login
+if (!login($email, $ua, $headers)) {
+    echo merah . "[FAILED] Login failed. Check email.\n";
+    exit;
+}
+echo hijau . "[SUCCESS] Logged in.\n\n";
+
+$username = get_username($headers);
+$balance = get_balance($headers);
+
+$claims_done = 0;
+$failures = 0;
+$unknown_retries = 0;
+
+$start_time = time(); // waktu mulai untuk pengecekan jeda
+
+echo putih . "User: " . cyan . $username . "\n";
+echo putih . "Starting...\n\n";
+
+while ($claims_done < MAX_CLAIMS && $failures < MAX_FAILURES) {
+    
+    // ===== GET FAUCET STATUS =====
+    $res = http_request(host . "/api/faucet/status", "GET", [], $headers);
+    $data = json_decode($res, true);
+    
+    if (isset($data['error']) && $data['error'] === 'unauthorized') {
+        echo kuning . "[!] Session expired. Re-logging...\n";
+        if (!login($email, $ua, $headers)) {
+            echo merah . "[FAILED] Re-login failed.\n";
+            exit;
+        }
+        $unknown_retries = 0;
+        continue;
+    }
+    
+    // Check cooldown
+    if (($data['canClaim'] ?? true) === false) {
+        $remaining = $data['remainingSeconds'] ?? 0;
+        if ($remaining > 0) {
+            timer($remaining);
+            // Setelah timer selesai, cek jeda
+            if (time() - $start_time >= PAUSE_INTERVAL) {
+                echo kuning . "\n[PAUSE] Running for 2 hours. Taking 1.2 hours break...\n";
+                timer(PAUSE_DURATION);
+                $start_time = time();
+            }
+            continue;
+        }
+    }
+    
+    // ===== GENERATE ROTATION CAPTCHA =====
+    $gen_headers = $headers;
+    $gen_headers[] = "content-type: application/json";
+    $gen_headers[] = "referer: https://moonptc.com/faucet";
+    $gen_res = http_request(host . "/api/captcha-rotation/generate", "POST", '{}', $gen_headers);
+    $gen_data = json_decode($gen_res, true);
+    
+    if (empty($gen_data['success'])) {
+        echo merah . "[ERROR] Failed to generate captcha.\n";
+        $failures++;
+        timer(10);
+        // Cek jeda setelah timer
+        if (time() - $start_time >= PAUSE_INTERVAL) {
+            echo kuning . "\n[PAUSE] Running for 2 hours. Taking 1.2 hours break...\n";
+            timer(PAUSE_DURATION);
+            $start_time = time();
+        }
+        continue;
+    }
+    
+    $token = $gen_data['token'] ?? null;
+    $variantId = $gen_data['challenge']['variantId'] ?? null;
+    if (!$token || $variantId === null) {
+        echo merah . "[ERROR] Invalid captcha response.\n";
+        $failures++;
+        timer(10);
+        if (time() - $start_time >= PAUSE_INTERVAL) {
+            echo kuning . "\n[PAUSE] Running for 2 hours. Taking 1.2 hours break...\n";
+            timer(PAUSE_DURATION);
+            $start_time = time();
+        }
+        continue;
+    }
+    
+    // ===== FIND ANSWER =====
+    if (!array_key_exists($variantId, $answers)) {
+        $unknown_retries++;
+        if ($unknown_retries >= 3) {
+            $failures++;
+            $unknown_retries = 0;
+            echo merah . "[FAILED] Unknown variant: $variantId\n";
+        }
+        timer(10);
+        if (time() - $start_time >= PAUSE_INTERVAL) {
+            echo kuning . "\n[PAUSE] Running for 2 hours. Taking 1.2 hours break...\n";
+            timer(PAUSE_DURATION);
+            $start_time = time();
+        }
+        continue;
+    }
+    $answer = [$answers[$variantId]];
+    $unknown_retries = 0;
+    
+    // ===== VERIFY CAPTCHA =====
+    $verify_headers = $headers;
+    $verify_headers[] = "content-type: application/json";
+    $verify_headers[] = "referer: https://moonptc.com/faucet";
+    $verify_payload = json_encode([
+        'token' => $token,
+        'answer' => $answer,
+        'type' => 'rotation'
+    ]);
+    $verify_res = http_request(host . "/api/captcha-rotation/verify", "POST", $verify_payload, $verify_headers);
+    $verify_data = json_decode($verify_res, true);
+    
+    if (empty($verify_data['success']) || empty($verify_data['verifiedToken'])) {
+        echo merah . "[ERROR] Captcha verification failed.\n";
+        $failures++;
+        timer(10);
+        if (time() - $start_time >= PAUSE_INTERVAL) {
+            echo kuning . "\n[PAUSE] Running for 2 hours. Taking 1.2 hours break...\n";
+            timer(PAUSE_DURATION);
+            $start_time = time();
+        }
+        continue;
+    }
+    
+    $verifiedToken = $verify_data['verifiedToken'];
+    
+    // ===== CLAIM FAUCET =====
+    $claim_headers = $headers;
+    $claim_headers[] = "content-type: application/json";
+    $claim_headers[] = "referer: https://moonptc.com/faucet";
+    $claim_payload = json_encode(['captchaToken' => $verifiedToken]);
+    $claim_res = http_request(host . "/api/faucet/claim", "POST", $claim_payload, $claim_headers);
+    $claim_data = json_decode($claim_res, true);
+    
+    if (($claim_data['ok'] ?? false) === true) {
+        $claims_done++;
+        $failures = 0;
+        $reward = $claim_data['finalReward'] ?? 0;
+        $balance = $claim_data['newBalance'] ?? $balance;
+        $roll = $claim_data['roll'] ?? 0;
+        
+        $emoji = ['🔥', '⚡️', '⭐', '💎', '🚀', '💰', '🎯', '🏆'];
+        $rand = $emoji[array_rand($emoji)];
+        echo hijau . "[SUCCESS] Roll: {$roll}{$rand} | +{$reward}⚡️ Coins | Balance: {$balance}⭐\n";
+        
+        $remaining = $claim_data['remainingSeconds'] ?? 10;
+        if ($remaining > 0) {
+            timer($remaining);
+        } else {
+            timer(10);
+        }
+    } else {
+        $failures++;
+        $msg = $claim_data['message'] ?? 'Unknown error';
+        echo merah . "[FAILED] ($failures/$MAX_FAILURES) $msg\n";
+        timer(10);
+    }
+    
+    // ---- Cek jeda otomatis setelah satu siklus selesai ----
+    if (time() - $start_time >= PAUSE_INTERVAL) {
+        echo kuning . "\n[PAUSE] Running for 2 hours. Taking 1.2 hours break...\n";
+        timer(PAUSE_DURATION);
+        $start_time = time(); // reset timer
+    }
+}
+
+if ($claims_done >= MAX_CLAIMS) {
+    echo hijau . "\n[✓] Done! " . MAX_CLAIMS . " claims completed.\n";
+} else {
+    echo merah . "\n[✗] Stopped after " . MAX_FAILURES . " failures.\n";
+}
+$balance = get_balance($headers);
+echo putih . "Final Balance: " . hijau . $balance . " Coins\n";
