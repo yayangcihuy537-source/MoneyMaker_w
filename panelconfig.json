@@ -74,9 +74,9 @@
           "runner": "python3"
         },
         "3": {
-          "label": "Aruble",
-          "file": "aruble.php",
-          "runner": "php"
+          "label": "AdCoins",
+          "file": "ad.py",
+          "runner": "python3"
         }
       }
     },
