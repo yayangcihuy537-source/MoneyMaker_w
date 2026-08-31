@@ -49,8 +49,8 @@
           "runner": "php"
         },
         "10": {
-          "label": "Coming Soon",
-          "file": "",
+          "label": "ClaimX",
+          "file": "ClaimX.php",
           "runner": "php"
         },
         "11": {
