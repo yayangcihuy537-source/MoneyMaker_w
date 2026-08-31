@@ -2,8 +2,8 @@
 error_reporting(0);
 system('clear');
 
-$cookieFile = __DIR__ . "/cookie.txt";
-$configFile = __DIR__ . "/config.json";
+$cookieFile = __DIR__ . "/Gain.txt";
+$configFile = __DIR__ . "/Gain.json";
 
 // ============================================================
 // COLOR
@@ -18,7 +18,7 @@ $RESET = "\033[0m";
 // ============================================================
 // KONFIGURASI JEDA
 // ============================================================
-$RUN_DURATION = 10800;  // 3 jam dalam detik
+$RUN_DURATION = 30800;  // 3 jam dalam detik
 $BREAK_DURATION = 2820; // 120 menit = 7200 detik
 
 // ============================================================
