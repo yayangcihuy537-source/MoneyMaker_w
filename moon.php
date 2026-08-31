@@ -18,10 +18,7 @@ const script_name = "MoonPTC Auto Claim";
 const host        = "https://moonptc.com";
 const MAX_CLAIMS  = 5000;
 const MAX_FAILURES = 5;
-
-// ---- Jeda otomatis ----
-const PAUSE_INTERVAL = 7200;   // 2 jam dalam detik
-const PAUSE_DURATION = 4320;   // 1,2 jam = 72 menit
+const MAX_RUNTIME = 21600; // 6 jam dalam detik
 
 function clear() {
     (PHP_OS == "Linux") ? system('clear') : pclose(popen('cls', 'w'));
@@ -35,7 +32,8 @@ function print_banner() {
     echo cyan . "║" . reset . " " . cyan . "▪ Mode   " . putih . "Auto Claim (Rotation Captcha)" . str_repeat(" ", 18) . cyan . "║\n";
     echo cyan . "║" . reset . " " . cyan . "▪ Website " . putih . "moonptc.com" . str_repeat(" ", 29) . cyan . "║\n";
     echo cyan . "║" . reset . " " . cyan . "▪ Max     " . putih . MAX_CLAIMS . " claims, " . MAX_FAILURES . " fails stop" . str_repeat(" ", 10) . cyan . "║\n";
-    echo cyan . "║" . reset . " " . cyan . "▪ Jeda    " . putih . "2 jam jalan → 1,2 jam pause" . str_repeat(" ", 13) . cyan . "║\n";
+    echo cyan . "║" . reset . " " . cyan . "▪ Jeda    " . putih . "14-19 detik (human-like)" . str_repeat(" ", 18) . cyan . "║\n";
+    echo cyan . "║" . reset . " " . cyan . "▪ Durasi  " . putih . "Maksimal 6 jam lalu berhenti" . str_repeat(" ", 16) . cyan . "║\n";
     echo cyan . "========================================================\n";
     echo cyan . "--------------------------------------------------------\n\n" . reset;
 }
@@ -216,13 +214,19 @@ $claims_done = 0;
 $failures = 0;
 $unknown_retries = 0;
 
-$start_time = time(); // waktu mulai untuk pengecekan jeda
+$start_time = time(); // waktu mulai script
 
 echo putih . "User: " . cyan . $username . "\n";
-echo putih . "Starting...\n\n";
+echo putih . "Starting... (max 6 hours runtime)\n\n";
 
 while ($claims_done < MAX_CLAIMS && $failures < MAX_FAILURES) {
     
+    // ---- Cek jika sudah berjalan 6 jam ----
+    if (time() - $start_time >= MAX_RUNTIME) {
+        echo kuning . "\n[STOP] Bot has been running for 6 hours. Stopping.\n";
+        break;
+    }
+
     // ===== GET FAUCET STATUS =====
     $res = http_request(host . "/api/faucet/status", "GET", [], $headers);
     $data = json_decode($res, true);
@@ -242,14 +246,12 @@ while ($claims_done < MAX_CLAIMS && $failures < MAX_FAILURES) {
         $remaining = $data['remainingSeconds'] ?? 0;
         if ($remaining > 0) {
             timer($remaining);
-            // Setelah timer selesai, cek jeda
-            if (time() - $start_time >= PAUSE_INTERVAL) {
-                echo kuning . "\n[PAUSE] Running for 2 hours. Taking 1.2 hours break...\n";
-                timer(PAUSE_DURATION);
-                $start_time = time();
-            }
-            continue;
         }
+        // Setelah cooldown, beri jeda human 14-19 detik
+        $delay = rand(14, 19);
+        echo kuning . "⏳ Human delay: {$delay}s\n";
+        sleep($delay);
+        continue;
     }
     
     // ===== GENERATE ROTATION CAPTCHA =====
@@ -262,13 +264,9 @@ while ($claims_done < MAX_CLAIMS && $failures < MAX_FAILURES) {
     if (empty($gen_data['success'])) {
         echo merah . "[ERROR] Failed to generate captcha.\n";
         $failures++;
-        timer(10);
-        // Cek jeda setelah timer
-        if (time() - $start_time >= PAUSE_INTERVAL) {
-            echo kuning . "\n[PAUSE] Running for 2 hours. Taking 1.2 hours break...\n";
-            timer(PAUSE_DURATION);
-            $start_time = time();
-        }
+        $delay = rand(14, 19);
+        echo kuning . "⏳ Human delay: {$delay}s\n";
+        sleep($delay);
         continue;
     }
     
@@ -277,12 +275,9 @@ while ($claims_done < MAX_CLAIMS && $failures < MAX_FAILURES) {
     if (!$token || $variantId === null) {
         echo merah . "[ERROR] Invalid captcha response.\n";
         $failures++;
-        timer(10);
-        if (time() - $start_time >= PAUSE_INTERVAL) {
-            echo kuning . "\n[PAUSE] Running for 2 hours. Taking 1.2 hours break...\n";
-            timer(PAUSE_DURATION);
-            $start_time = time();
-        }
+        $delay = rand(14, 19);
+        echo kuning . "⏳ Human delay: {$delay}s\n";
+        sleep($delay);
         continue;
     }
     
@@ -294,12 +289,9 @@ while ($claims_done < MAX_CLAIMS && $failures < MAX_FAILURES) {
             $unknown_retries = 0;
             echo merah . "[FAILED] Unknown variant: $variantId\n";
         }
-        timer(10);
-        if (time() - $start_time >= PAUSE_INTERVAL) {
-            echo kuning . "\n[PAUSE] Running for 2 hours. Taking 1.2 hours break...\n";
-            timer(PAUSE_DURATION);
-            $start_time = time();
-        }
+        $delay = rand(14, 19);
+        echo kuning . "⏳ Human delay: {$delay}s\n";
+        sleep($delay);
         continue;
     }
     $answer = [$answers[$variantId]];
@@ -320,12 +312,9 @@ while ($claims_done < MAX_CLAIMS && $failures < MAX_FAILURES) {
     if (empty($verify_data['success']) || empty($verify_data['verifiedToken'])) {
         echo merah . "[ERROR] Captcha verification failed.\n";
         $failures++;
-        timer(10);
-        if (time() - $start_time >= PAUSE_INTERVAL) {
-            echo kuning . "\n[PAUSE] Running for 2 hours. Taking 1.2 hours break...\n";
-            timer(PAUSE_DURATION);
-            $start_time = time();
-        }
+        $delay = rand(14, 19);
+        echo kuning . "⏳ Human delay: {$delay}s\n";
+        sleep($delay);
         continue;
     }
     
@@ -347,8 +336,8 @@ while ($claims_done < MAX_CLAIMS && $failures < MAX_FAILURES) {
         $roll = $claim_data['roll'] ?? 0;
         
         $emoji = ['🔥', '⚡️', '⭐', '💎', '🚀', '💰', '🎯', '🏆'];
-        $rand = $emoji[array_rand($emoji)];
-        echo hijau . "[SUCCESS] Roll: {$roll}{$rand} | +{$reward}⚡️ Coins | Balance: {$balance}⭐\n";
+        $rand_emoji = $emoji[array_rand($emoji)];
+        echo hijau . "[SUCCESS] Roll: {$roll}{$rand_emoji} | +{$reward}⚡️ Coins | Balance: {$balance}⭐\n";
         
         $remaining = $claim_data['remainingSeconds'] ?? 10;
         if ($remaining > 0) {
@@ -363,16 +352,16 @@ while ($claims_done < MAX_CLAIMS && $failures < MAX_FAILURES) {
         timer(10);
     }
     
-    // ---- Cek jeda otomatis setelah satu siklus selesai ----
-    if (time() - $start_time >= PAUSE_INTERVAL) {
-        echo kuning . "\n[PAUSE] Running for 2 hours. Taking 1.2 hours break...\n";
-        timer(PAUSE_DURATION);
-        $start_time = time(); // reset timer
-    }
+    // ---- Jeda human (14-19 detik) setelah satu siklus ----
+    $delay = rand(14, 19);
+    echo kuning . "⏳ Human delay: {$delay}s\n";
+    sleep($delay);
 }
 
 if ($claims_done >= MAX_CLAIMS) {
     echo hijau . "\n[✓] Done! " . MAX_CLAIMS . " claims completed.\n";
+} elseif (time() - $start_time >= MAX_RUNTIME) {
+    echo kuning . "\n[✓] Bot stopped after 6 hours.\n";
 } else {
     echo merah . "\n[✗] Stopped after " . MAX_FAILURES . " failures.\n";
 }
