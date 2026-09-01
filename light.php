@@ -25,7 +25,7 @@ define('B_WHITE', "\033[1;37m");
 define('B_MAGENTA', "\033[1;35m");
 
 // ============================================================
-//  FUNCTION CURL
+//  FUNCTION CURL (DENGAN COOKIE)
 // ============================================================
 function curl($url, $post = 0, $httpheader = 0, $proxy = 0) {
     $ch = curl_init();
@@ -36,6 +36,8 @@ function curl($url, $post = 0, $httpheader = 0, $proxy = 0) {
     curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 30);
     curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+    curl_setopt($ch, CURLOPT_COOKIEFILE, 'cookie.txt');
+    curl_setopt($ch, CURLOPT_COOKIEJAR, 'cookie.txt');
     
     if ($post) {
         curl_setopt($ch, CURLOPT_POST, true);
@@ -50,35 +52,56 @@ function curl($url, $post = 0, $httpheader = 0, $proxy = 0) {
     }
     curl_setopt($ch, CURLOPT_HEADER, true);
     $response = curl_exec($ch);
-    $httpcode = curl_getinfo($ch);
-    if (!$httpcode) return "Curl Error: " . curl_error($ch);
-    else {
-        $header = substr($response, 0, curl_getinfo($ch, CURLINFO_HEADER_SIZE));
-        $body = substr($response, curl_getinfo($ch, CURLINFO_HEADER_SIZE));
-        curl_close($ch);
-        return array($header, $body);
+    if (!$response) {
+        return "Curl Error: " . curl_error($ch);
     }
+    $header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+    $header = substr($response, 0, $header_size);
+    $body = substr($response, $header_size);
+    @curl_close($ch);
+    return array($header, $body);
 }
 
 // ============================================================
-//  DISPLAY BANNER - NEW UI
+//  FUNCTION CURL REQUEST (TANPA HEADER UNTUK BYPASS)
+// ============================================================
+function curl_request($url, $method = 'GET', $post = null, $headers = []) {
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 30);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+    if ($headers) curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    if ($method === 'POST') {
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $post);
+    }
+    $response = curl_exec($ch);
+    $error = curl_error($ch);
+    @curl_close($ch);
+    if ($error) return false;
+    return $response;
+}
+
+// ============================================================
+//  DISPLAY BANNER
 // ============================================================
 function displayBanner($username = '') {
     system('clear');
     $line = str_repeat('═', 56);
-    
     echo B_CYAN . "╔" . $line . "╗" . RESET . "\n";
     echo B_CYAN . "║" . RESET . str_repeat(' ', 8) . B_MAGENTA . ":: ⚡️LightningQuest⚡️ ::" . RESET . str_repeat(' ', 9) . B_CYAN . "║" . RESET . "\n";
     echo B_CYAN . "║" . RESET . str_repeat(' ', 14) . B_RED . "🔥AUTO EARN BOT🔥" . RESET . str_repeat(' ', 15) . B_CYAN . "║" . RESET . "\n";
     echo B_CYAN . "╚" . $line . "╝" . RESET . "\n";
     echo "\n";
-    
     echo B_CYAN . "  [+] Website : " . B_WHITE . "⚡️lightningquest.net ⚡️" . RESET . "\n";
     echo B_CYAN . "  [+] ScriptMaker : " . B_YELLOW . "@SouuXso 🔥" . RESET . "\n";
     echo B_CYAN . "  [+] Bot : " . B_GREEN . "ONLINE 🟢" . RESET . "\n";
     echo B_CYAN . str_repeat('═', 56) . RESET . "\n";
     echo "\n";
-    
     if ($username) {
         echo B_CYAN . "  [+] Welcome, " . B_WHITE . $username . RESET . "\n\n";
     }
@@ -120,9 +143,126 @@ function Save($namadata) {
     return $data;
 }
 
-$email = Save("Email");
-$pass = Save("Password");
-$api = Save("user-agent");
+// ============================================================
+//  GET SITEKEY DARI API CONFIG
+// ============================================================
+function getSitekeyFromConfig($access_token, $api) {
+    $headers = [
+        'User-Agent: '.$api,
+        'Authorization: Bearer ' . $access_token,
+        'x-requested-with: XMLHttpRequest',
+        'Content-Type: application/json',
+    ];
+    list($header, $body) = curl('https://lightningquest.net/api/config', 0, $headers);
+    $data = json_decode($body, true);
+    
+    if (isset($data['hcaptchaSiteKey']) && $data['hcaptchaSiteKey']) {
+        return $data['hcaptchaSiteKey'];
+    }
+    if (isset($data['turnstileSiteKey']) && $data['turnstileSiteKey']) {
+        return $data['turnstileSiteKey'];
+    }
+    return null;
+}
+
+// ============================================================
+//  GET CSRF 
+// ============================================================
+function getCSRF() {
+    if (file_exists('csrf_cache.txt')) {
+        $csrf = trim(file_get_contents('csrf_cache.txt'));
+        if (strlen($csrf) > 5) return $csrf;
+    }
+    
+    if (file_exists('cookie.txt')) {
+        $cookie = file_get_contents('cookie.txt');
+        if (preg_match('/XSRF-TOKEN[=\s]+([^;\s]+)/i', $cookie, $match)) {
+            $csrf = urldecode($match[1]);
+            if (strlen($csrf) > 5) {
+                file_put_contents('csrf_cache.txt', $csrf);
+                return $csrf;
+            }
+        }
+        if (preg_match('/csrf_token[=\s]+([^;\s]+)/i', $cookie, $match)) {
+            $csrf = urldecode($match[1]);
+            if (strlen($csrf) > 5) {
+                file_put_contents('csrf_cache.txt', $csrf);
+                return $csrf;
+            }
+        }
+    }
+    
+    $headers = [
+        'User-Agent: Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36',
+        'x-requested-with: XMLHttpRequest',
+    ];
+    if (file_exists('access_token.txt')) {
+        $token = trim(file_get_contents('access_token.txt'));
+        $headers[] = 'Authorization: Bearer ' . $token;
+    }
+    list($header, $html) = curl('https://lightningquest.net/faucet', 0, $headers);
+    
+    $patterns = [
+        '/<meta name="csrf-token" content="([^"]+)"/i',
+        '/<meta name="csrf_token" content="([^"]+)"/i',
+        '/<input[^>]*name="csrf_token"[^>]*value="([^"]+)"/i',
+        '/csrfToken\s*=\s*"([^"]+)"/i',
+        '/"csrf_token"\s*:\s*"([^"]+)"/i',
+        '/<script[^>]*>.*?csrf_token["\']?\s*[:=]\s*["\']([^"\']+)["\']/si',
+    ];
+    foreach ($patterns as $pattern) {
+        if (preg_match($pattern, $html, $match)) {
+            $csrf = $match[1];
+            if (strlen($csrf) > 5) {
+                file_put_contents('csrf_cache.txt', $csrf);
+                return $csrf;
+            }
+        }
+    }
+    
+    return 'fallback_' . md5(time());
+}
+
+// ============================================================
+//  BYPASS CAPTCHA
+// ============================================================
+function bypassCaptcha($sitekey, $method, $pageurl) {
+    $apiKey = trim(file_get_contents('bypass_api_key.txt'));
+    if (!$apiKey) {
+        echo B_RED . "  [!] API Key bypass tidak ditemukan!\n" . RESET;
+        return false;
+    }
+    $url = "https://bypassallshortlinks.space/in.php?key=" . urlencode($apiKey) . "&method=" . urlencode($method) . "&sitekey=" . urlencode($sitekey) . "&pageurl=" . urlencode($pageurl);
+    $response = curl_request($url);
+    if ($response === false || strpos($response, 'ERROR') !== false) {
+        echo B_RED . "  [!] Bypass submit error\n" . RESET;
+        return false;
+    }
+    $parts = explode('|', $response);
+    if (count($parts) < 2) {
+        echo B_RED . "  [!] Invalid response\n" . RESET;
+        return false;
+    }
+    $taskId = trim($parts[1]);
+    echo B_YELLOW . "  [BYPASS] Task ID: " . $taskId . "\n" . RESET;
+    for ($i = 0; $i < 30; $i++) {
+        sleep(3);
+        $resUrl = "https://bypassallshortlinks.space/res.php?key=" . urlencode($apiKey) . "&id=" . urlencode($taskId);
+        $result = curl_request($resUrl);
+        if ($result === false) continue;
+        if (strpos($result, 'OK|') === 0) {
+            $token = substr($result, 3);
+            echo B_GREEN . "  [BYPASS] Token obtained\n" . RESET;
+            return $token;
+        }
+        if (strpos($result, 'ERROR') !== false) {
+            echo B_RED . "  [BYPASS] Error: " . $result . "\n" . RESET;
+            return false;
+        }
+    }
+    echo B_RED . "  [BYPASS] Timeout\n" . RESET;
+    return false;
+}
 
 // ============================================================
 //  LOGIN
@@ -131,6 +271,7 @@ if (!file_exists("cookie.txt") || !file_exists("access_token.txt")) {
     login:
     @unlink("cookie.txt");
     @unlink("access_token.txt");
+    @unlink("csrf_cache.txt");
     
     $curl = curl_init();
     curl_setopt_array($curl, [
@@ -178,6 +319,9 @@ if (!file_exists("cookie.txt") || !file_exists("access_token.txt")) {
     displayBanner($username);
 }
 
+$email = Save("Email");
+$pass = Save("Password");
+$api = Save("user-agent");
 $access_token = trim(file_get_contents('access_token.txt'));
 
 // ============================================================
@@ -313,179 +457,138 @@ function doDaily($api, $access_token) {
 }
 
 // ============================================================
-//  FAUCET (FIXED - with initial cooldown check)
+//  FAUCET (FIXED - PAYLOAD CAPTCHA)
 // ============================================================
 function doFaucet($api, $access_token, &$reward_info) {
     echo B_CYAN . "  [💧] Faucet" . RESET . "\n";
-    echo "      Status      : " . B_YELLOW . "Checking..." . RESET . "\n";
+    echo "      Status      : " . B_YELLOW . "Checking...\n" . RESET;
 
-    // 0. Cek claim-status dulu untuk cooldown
-    $ch0 = curl_init();
-    curl_setopt_array($ch0, [
-        CURLOPT_URL => 'https://lightningquest.net/api/claim-status',
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_COOKIEJAR => 'cookie.txt',
-        CURLOPT_COOKIEFILE => 'cookie.txt',
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_SSL_VERIFYHOST => false,
-        CURLOPT_TIMEOUT => 20,
-        CURLOPT_HTTPHEADER => [
-            'x-requested-with: XMLHttpRequest',
-            'User-Agent: '.$api,
-            'Authorization: Bearer ' . $access_token,
-        ],
-    ]);
-    $res0 = curl_exec($ch0);
-    $data0 = json_decode($res0, true);
+    // Cek cooldown dulu
+    $headers = [
+        'x-requested-with: XMLHttpRequest',
+        'User-Agent: '.$api,
+        'Authorization: Bearer ' . $access_token,
+    ];
+    list($header, $body) = curl('https://lightningquest.net/api/claim-status', 0, $headers);
+    $data0 = json_decode($body, true);
+    
     if (isset($data0['error']) && $data0['error'] === 'unauthorized') {
         return 'unauthorized';
     }
+    
     if ($data0 && isset($data0['faucet']['ready']) && $data0['faucet']['ready'] === false) {
         $nextAt = strtotime($data0['faucet']['nextAt']);
         $next = max(0, $nextAt - time());
         $min = floor($next / 60);
         $sec = $next % 60;
-        echo "      Status      : " . B_YELLOW . "⏳ Cooldown" . RESET . "\n";
-        echo "      Next Claim  : " . B_WHITE . "{$min}m {$sec}s" . RESET . "\n";
+        echo "      Status      : " . B_YELLOW . "⏳ Cooldown\n" . RESET;
+        echo "      Next Claim  : " . B_WHITE . "{$min}m {$sec}s\n" . RESET;
         timer($next);
         return 'cooldown';
     }
 
-    // 1. GET CHALLENGE (IconCaptcha)
-    $ch = curl_init();
-    curl_setopt_array($ch, [
-        CURLOPT_URL => 'https://lightningquest.net/api/faucet/iconcaptcha/challenge',
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_COOKIEJAR => 'cookie.txt',
-        CURLOPT_COOKIEFILE => 'cookie.txt',
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_SSL_VERIFYHOST => false,
-        CURLOPT_TIMEOUT => 20,
-        CURLOPT_CONNECTTIMEOUT => 8,
-        CURLOPT_HTTPHEADER => [
-            'x-requested-with: XMLHttpRequest',
-            'User-Agent: '.$api,
-            'sec-ch-ua-platform: "Android"',
-            'sec-ch-ua: "Chromium";v="127", "Not)A;Brand";v="99", "Microsoft Edge Simulate";v="127", "Lemur";v="127"',
-            'upgrade-insecure-requests: 1',
-            'sec-ch-ua-mobile: ?1',
-            'sec-fetch-site: same-origin',
-            'sec-fetch-mode: navigate',
-            'sec-fetch-dest: empty',
-            'referer: https://lightningquest.net/faucet',
-            'accept-language: en-GB,en-US;q=0.9,hi;q=0.7',
-            'priority: u=1, i',
-            'Authorization: Bearer ' . $access_token,
-        ],
-    ]);
-    $res = curl_exec($ch);
-    $data = json_decode($res, true);
-
-    if (isset($data['error']) && $data['error'] === 'unauthorized') {
-        return 'unauthorized';
-    }
-
-    if (!isset($data['token'])) {
-        echo "      Status      : " . B_RED . "❌ No challenge" . RESET . "\n";
+    $captchaRequired = $data0['faucet']['captchaRequired'] ?? false;
+    $captchaProvider = $data0['faucet']['captchaProvider'] ?? 'hcaptcha';
+    
+    // Ambil CSRF
+    $csrf = getCSRF();
+    if (!$csrf || strlen($csrf) < 3) {
+        echo "      Status      : " . B_RED . "❌ CSRF token tidak ditemukan\n" . RESET;
         return false;
     }
-
-    $token = $data['token'];
-    $prompt = $data['prompt'] ?? '';
-    preg_match('/Select the (.+?)[\.]?$/i', $prompt, $matches);
-    $targetLabel = trim($matches[1] ?? '');
-    $selectedKey = null;
-    foreach ($data['choices'] as $choice) {
-        if (strcasecmp(trim($choice['label']), $targetLabel) === 0) {
-            $selectedKey = $choice['key'];
-            break;
-        }
-    }
-    if (!$selectedKey) {
-        echo "      Status      : " . B_RED . "❌ Captcha answer not found" . RESET . "\n";
-        return false;
-    }
-
-    // 2. GET /api/faucet/challenge
-    $ch3 = curl_init();
-    curl_setopt_array($ch3, [
-        CURLOPT_URL => 'https://lightningquest.net/api/faucet/challenge',
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_COOKIEJAR => 'cookie.txt',
-        CURLOPT_COOKIEFILE => 'cookie.txt',
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_SSL_VERIFYHOST => false,
-        CURLOPT_TIMEOUT => 20,
-        CURLOPT_CONNECTTIMEOUT => 8,
-        CURLOPT_HTTPHEADER => [
-            'x-requested-with: XMLHttpRequest',
-            'User-Agent: '.$api,
-            'sec-ch-ua-platform: "Android"',
-            'sec-ch-ua: "Chromium";v="127", "Not)A;Brand";v="99", "Microsoft Edge Simulate";v="127", "Lemur";v="127"',
-            'upgrade-insecure-requests: 1',
-            'sec-ch-ua-mobile: ?1',
-            'sec-fetch-site: same-origin',
-            'sec-fetch-mode: navigate',
-            'sec-fetch-dest: empty',
-            'referer: https://lightningquest.net/faucet',
-            'accept-language: en-GB,en-US;q=0.9,hi;q=0.7',
-            'priority: u=1, i',
-            'Authorization: Bearer ' . $access_token,
-        ],
-    ]);
-    $res3 = curl_exec($ch3);
-    $data3 = json_decode($res3, true);
-
+    
+    // GET challenge
+    $challengeHeaders = [
+        'User-Agent: '.$api,
+        'Authorization: Bearer ' . $access_token,
+        'Content-Type: application/json',
+        'x-requested-with: XMLHttpRequest',
+        'referer: https://lightningquest.net/faucet',
+        'X-CSRF-TOKEN: ' . $csrf,
+    ];
+    list($header3, $body3) = curl('https://lightningquest.net/api/faucet/challenge', 0, $challengeHeaders);
+    $data3 = json_decode($body3, true);
+    
     if (!isset($data3['claimToken'])) {
-        echo "      Status      : " . B_RED . "❌ Failed to get claimToken" . RESET . "\n";
+        echo "      Status      : " . B_RED . "❌ Failed to get claimToken\n" . RESET;
         return false;
     }
-
+    
     $claimToken = $data3['claimToken'];
     $minWaitSeconds = $data3['minWaitSeconds'] ?? 5;
-    echo "      ⏳ Waiting   : " . B_WHITE . "{$minWaitSeconds}s" . RESET . "\n";
-    sleep($minWaitSeconds);
+    echo "      ⏳ Waiting   : " . B_WHITE . "{$minWaitSeconds}s\n" . RESET;
+    timer($minWaitSeconds);
 
-    // 3. POST /api/claim/faucet
-    $payload = json_encode([
-        'captchaProvider' => 'iconcaptcha',
-        'iconCaptchaToken' => $token,
-        'iconCaptchaAnswer' => $selectedKey,
-        'claimToken' => $claimToken,
-    ]);
+    // Build payload
+    if ($captchaRequired) {
+        echo "      Status      : " . B_YELLOW . "Bypassing {$captchaProvider}...\n" . RESET;
+        
+        // AMBIL SITEKEY
+        $sitekey = getSitekeyFromConfig($access_token, $api);
+        
+        if (!$sitekey) {
+            $headers2 = [
+                'User-Agent: ' . $api,
+                'Authorization: Bearer ' . $access_token,
+                'referer: https://lightningquest.net/faucet',
+                'X-CSRF-TOKEN: ' . $csrf,
+            ];
+            list($header2, $html) = curl('https://lightningquest.net/faucet', 0, $headers2);
+            
+            $patterns = [
+                '/data-sitekey="([^"]+)"/i',
+                '/data-turnstile-widget="[^"]+"[^>]*data-sitekey="([^"]+)"/i',
+                '/hcaptcha-sitekey="([^"]+)"/i',
+                '/turnstile-sitekey="([^"]+)"/i',
+            ];
+            foreach ($patterns as $pattern) {
+                if (preg_match($pattern, $html, $match)) {
+                    $sitekey = $match[1];
+                    break;
+                }
+            }
+        }
+        
+        if (!$sitekey) {
+            echo "      Status      : " . B_RED . "❌ Sitekey not found\n" . RESET;
+            return false;
+        }
+        
+        echo B_YELLOW . "  [DEBUG] Sitekey: " . $sitekey . "\n" . RESET;
+        
+        $token = bypassCaptcha($sitekey, $captchaProvider, 'https://lightningquest.net/faucet');
+        if (!$token) {
+            echo "      Status      : " . B_RED . "❌ Bypass failed\n" . RESET;
+            return false;
+        }
+        
+        // FORMAT PAYLOAD YANG BENAR - SERVER MINTA captchaToken BUKAN captcha_token
+        $payload = json_encode([
+            'csrf_token' => $csrf,
+            'claimToken' => $claimToken,
+            'captchaToken' => $token,
+            'captchaProvider' => $captchaProvider,
+        ]);
+    } else {
+        echo "      Status      : " . B_GREEN . "No captcha required\n" . RESET;
+        $payload = json_encode([
+            'csrf_token' => $csrf,
+            'claimToken' => $claimToken,
+        ]);
+    }
 
-    $ch4 = curl_init();
-    curl_setopt_array($ch4, [
-        CURLOPT_URL => 'https://lightningquest.net/api/claim/faucet',
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_ENCODING => '',
-        CURLOPT_MAXREDIRS => 10,
-        CURLOPT_TIMEOUT => 30,
-        CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-        CURLOPT_CUSTOMREQUEST => 'POST',
-        CURLOPT_POSTFIELDS => $payload,
-        CURLOPT_COOKIEJAR => 'cookie.txt',
-        CURLOPT_COOKIEFILE => 'cookie.txt',
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_SSL_VERIFYHOST => false,
-        CURLOPT_HTTPHEADER => [
-            'x-requested-with: XMLHttpRequest',
-            'User-Agent: '.$api,
-            'Content-Type: application/json',
-            'Authorization: Bearer ' . $access_token,
-            'accept: */*',
-            'origin: https://lightningquest.net',
-            'sec-fetch-site: same-origin',
-            'sec-fetch-mode: cors',
-            'sec-fetch-dest: empty',
-            'referer: https://lightningquest.net/faucet',
-            'accept-language: en-GB,en-US;q=0.9,hi;q=0.7',
-            'priority: u=1, i',
-        ],
-    ]);
-    $res4 = curl_exec($ch4);
-    $data4 = json_decode($res4, true);
-
+    // Claim
+    $claimHeaders = [
+        'User-Agent: '.$api,
+        'Content-Type: application/json',
+        'Authorization: Bearer ' . $access_token,
+        'X-CSRF-TOKEN: ' . $csrf,
+        'x-requested-with: XMLHttpRequest',
+        'referer: https://lightningquest.net/faucet',
+    ];
+    list($header4, $body4) = curl('https://lightningquest.net/api/claim/faucet', $payload, $claimHeaders);
+    $data4 = json_decode($body4, true);
+    
     if ($data4 && ($data4['ok'] ?? false)) {
         $coins = $data4['reward']['coins'] ?? 0;
         $xp = $data4['reward']['xp'] ?? 0;
@@ -507,11 +610,11 @@ function doFaucet($api, $access_token, &$reward_info) {
             'next_sec' => $sec
         ];
 
-        echo "      ✓ " . B_GREEN . "Claim Successful!" . RESET . "\n";
+        echo "      ✓ " . B_GREEN . "Claim Successful!\n" . RESET;
         return true;
     } else {
         $errorMsg = $data4['message'] ?? 'Unknown error';
-        echo "      Status      : " . B_RED . "❌ Claim failed: $errorMsg" . RESET . "\n";
+        echo "      Status      : " . B_RED . "❌ Claim failed: $errorMsg\n" . RESET;
         return false;
     }
 }
@@ -519,7 +622,17 @@ function doFaucet($api, $access_token, &$reward_info) {
 // ============================================================
 //  MAIN LOOP
 // ============================================================
-echo B_YELLOW . "  🔄 Starting auto loop..." . RESET . "\n\n";
+if (!file_exists('bypass_api_key.txt')) {
+    echo B_CYAN . "  [!] Masukkan API Key bypass (dari bypassallshortlinks.space): " . RESET;
+    $key = trim(fgets(STDIN));
+    file_put_contents('bypass_api_key.txt', $key);
+}
+
+$email = Save("Email");
+$pass = Save("Password");
+$api = Save("user-agent");
+
+echo B_YELLOW . "  🔄 Starting auto loop...\n\n" . RESET;
 
 $fail_count = 0;
 $loop_count = 0;
@@ -535,6 +648,7 @@ while (true) {
         echo B_RED . "  [!] Session expired. Re-login..." . RESET . "\n";
         unlink('access_token.txt');
         unlink('cookie.txt');
+        unlink('csrf_cache.txt');
         goto login;
     }
     echo "\n";
@@ -552,10 +666,10 @@ while (true) {
         echo B_RED . "  [!] Session expired. Re-login..." . RESET . "\n";
         unlink('access_token.txt');
         unlink('cookie.txt');
+        unlink('csrf_cache.txt');
         goto login;
     }
     
-    // Display reward section if faucet successful
     if ($faucet_result === true && !empty($reward_info)) {
         echo "\n" . B_CYAN . "  ==================== REWARD ====================" . RESET . "\n\n";
         echo B_WHITE . "      [+] Coins      : " . B_GREEN . "+" . $reward_info['coins'] . "⚡️" . RESET . "\n";
@@ -568,7 +682,7 @@ while (true) {
     }
     
     if ($faucet_result === 'cooldown') {
-        // Timer already handled inside doFaucet
+        // Timer already handled
     }
     
     if ($faucet_result === false) {
