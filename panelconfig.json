@@ -49,8 +49,8 @@
           "runner": "php"
         },
         "10": {
-          "label": "soon",
-          "file": "aruble.php",
+          "label": "EarnSolana",
+          "file": "Sol.php",
           "runner": "php"
         },
         "11": {
