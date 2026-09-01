@@ -39,8 +39,8 @@
           "runner": "python3"
         },
         "8": {
-          "label": "MoonPtc",
-          "file": "moon.php",
+          "label": "ClaimX",
+          "file": "ClaimX.php",
           "runner": "php"
         },
         "9": {
@@ -49,8 +49,8 @@
           "runner": "php"
         },
         "10": {
-          "label": "ClaimX",
-          "file": "ClaimX.php",
+          "label": "soon",
+          "file": "aruble.php",
           "runner": "php"
         },
         "11": {
