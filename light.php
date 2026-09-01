@@ -267,62 +267,61 @@ function bypassCaptcha($sitekey, $method, $pageurl) {
 // ============================================================
 //  LOGIN
 // ============================================================
-if (!file_exists("cookie.txt") || !file_exists("access_token.txt")) {
-    login:
-    @unlink("cookie.txt");
-    @unlink("access_token.txt");
-    @unlink("csrf_cache.txt");
+function doLogin($email, $pass, $api) {
+    // Hapus cookie & token lama
+    @unlink('cookie.txt');
+    @unlink('access_token.txt');
+    @unlink('csrf_cache.txt');
     
-    $curl = curl_init();
-    curl_setopt_array($curl, [
+    $headers = [
+        'User-Agent: '.$api,
+        'sec-ch-ua-platform: "Android"',
+        'x-requested-with: XMLHttpRequest',
+        'sec-ch-ua: "Chromium";v="146", "Not-A.Brand";v="24", "Android WebView";v="146"',
+        'Content-Type: application/json',
+        'sec-ch-ua-mobile: ?1',
+        'origin: https://lightningquest.net',
+        'sec-fetch-site: same-origin',
+        'sec-fetch-mode: cors',
+        'sec-fetch-dest: empty',
+        'referer: https://lightningquest.net/login',
+        'accept-language: en-GB,en-US;q=0.9,en;q=0.8',
+        'priority: u=1, i',
+    ];
+    $post = '{"email":"'.$email.'","password":"'.$pass.'","trafficExchangeBonus":false}';
+    
+    $ch = curl_init();
+    curl_setopt_array($ch, [
         CURLOPT_URL => 'https://lightningquest.net/api/auth/login',
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_ENCODING => '',
-        CURLOPT_MAXREDIRS => 10,
-        CURLOPT_TIMEOUT => 30,
-        CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-        CURLOPT_CUSTOMREQUEST => 'POST',
-        CURLOPT_POSTFIELDS => '{"email":"'.$email.'","password":"'.$pass.'","trafficExchangeBonus":false}',
-        CURLOPT_COOKIEJAR => 'cookie.txt',
-        CURLOPT_COOKIEFILE => 'cookie.txt',
         CURLOPT_SSL_VERIFYPEER => false,
         CURLOPT_SSL_VERIFYHOST => false,
-        CURLOPT_HTTPHEADER => [
-            'User-Agent: '.$api,
-            'sec-ch-ua-platform: "Android"',
-            'x-requested-with: XMLHttpRequest',
-            'sec-ch-ua: "Chromium";v="146", "Not-A.Brand";v="24", "Android WebView";v="146"',
-            'Content-Type: application/json',
-            'sec-ch-ua-mobile: ?1',
-            'origin: https://lightningquest.net',
-            'sec-fetch-site: same-origin',
-            'sec-fetch-mode: cors',
-            'sec-fetch-dest: empty',
-            'referer: https://lightningquest.net/login',
-            'accept-language: en-GB,en-US;q=0.9,en;q=0.8',
-            'priority: u=1, i',
-        ],
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => $post,
+        CURLOPT_HTTPHEADER => $headers,
+        CURLOPT_COOKIEFILE => 'cookie.txt',
+        CURLOPT_COOKIEJAR => 'cookie.txt',
+        CURLOPT_HEADER => false,
+        CURLOPT_TIMEOUT => 30,
     ]);
-    $response = curl_exec($curl);
-    $data = json_decode($response, true);
+    $response = curl_exec($ch);
+    $error = curl_error($ch);
+    curl_close($ch);
     
+    if ($error) {
+        echo B_RED . "  [LOGIN] Curl error: $error\n" . RESET;
+        return false;
+    }
+    
+    $data = json_decode($response, true);
     if (!empty($data['access_token']) && !empty($data['user']['user_metadata']['username'])) {
         file_put_contents('access_token.txt', $data['access_token']);
-        $username = $data['user']['user_metadata']['username'];
-        displayBanner($username);
+        return $data['user']['user_metadata']['username'];
     } else {
-        echo B_RED . "  [!] Login Gagal! Cek email/password." . RESET . "\n";
-        exit;
+        echo B_RED . "  [LOGIN] Gagal! Response: " . substr($response, 0, 200) . "\n" . RESET;
+        return false;
     }
-} else {
-    $username = "LightGarap";
-    displayBanner($username);
 }
-
-$email = Save("Email");
-$pass = Save("Password");
-$api = Save("user-agent");
-$access_token = trim(file_get_contents('access_token.txt'));
 
 // ============================================================
 //  QUESTS
@@ -367,7 +366,7 @@ function doQuests($api, $access_token) {
         }
     }
     if (!$claimId) {
-        echo B_YELLOW . "      ⚠️ No quest to claim." . RESET . "\n";
+        echo B_YELLOW . "      ⚠️ No quest to claim.\n" . RESET;
         return true;
     }
     
@@ -404,10 +403,10 @@ function doQuests($api, $access_token) {
     if (($data['ok'] ?? false) === true) {
         $coins = $data['reward']['coins'] ?? 0;
         $xp = $data['reward']['xp'] ?? 0;
-        echo B_GREEN . "      ✓ Quest claimed! +{$coins} Coins, +{$xp} XP" . RESET . "\n";
+        echo B_GREEN . "      ✓ Quest claimed! +{$coins} Coins, +{$xp} XP\n" . RESET;
         return true;
     }
-    echo B_YELLOW . "      ⚠️ No quest to claim." . RESET . "\n";
+    echo B_YELLOW . "      ⚠️ No quest to claim.\n" . RESET;
     return true;
 }
 
@@ -449,10 +448,10 @@ function doDaily($api, $access_token) {
     if (($data['ok'] ?? false) === true) {
         $coins = $data['reward']['coins'] ?? 0;
         $xp = $data['reward']['xp'] ?? 0;
-        echo B_GREEN . "      ✓ Daily bonus claimed! +{$coins} Coins, +{$xp} XP" . RESET . "\n";
+        echo B_GREEN . "      ✓ Daily bonus claimed! +{$coins} Coins, +{$xp} XP\n" . RESET;
         return true;
     }
-    echo B_YELLOW . "      ⚠️ Daily bonus already claimed." . RESET . "\n";
+    echo B_YELLOW . "      ⚠️ Daily bonus already claimed.\n" . RESET;
     return false;
 }
 
@@ -460,7 +459,7 @@ function doDaily($api, $access_token) {
 //  FAUCET (FIXED - PAYLOAD CAPTCHA)
 // ============================================================
 function doFaucet($api, $access_token, &$reward_info) {
-    echo B_CYAN . "  [💧] Faucet" . RESET . "\n";
+    echo B_CYAN . "  [💧] Faucet\n" . RESET;
     echo "      Status      : " . B_YELLOW . "Checking...\n" . RESET;
 
     // Cek cooldown dulu
@@ -620,83 +619,203 @@ function doFaucet($api, $access_token, &$reward_info) {
 }
 
 // ============================================================
-//  MAIN LOOP
+//  FARMING MAIN LOOP
 // ============================================================
-if (!file_exists('bypass_api_key.txt')) {
-    echo B_CYAN . "  [!] Masukkan API Key bypass (dari bypassallshortlinks.space): " . RESET;
-    $key = trim(fgets(STDIN));
-    file_put_contents('bypass_api_key.txt', $key);
-}
-
-$email = Save("Email");
-$pass = Save("Password");
-$api = Save("user-agent");
-
-echo B_YELLOW . "  🔄 Starting auto loop...\n\n" . RESET;
-
-$fail_count = 0;
-$loop_count = 0;
-
-while (true) {
-    $loop_count++;
-    echo B_CYAN . "  ===== Loop #{$loop_count} ===== " . RESET . "\n\n";
-    
-    // 1. QUESTS
-    echo B_CYAN . "  [📋] Quest" . RESET . "\n";
-    $quest_result = doQuests($api, $access_token);
-    if ($quest_result === 'unauthorized') {
-        echo B_RED . "  [!] Session expired. Re-login..." . RESET . "\n";
-        unlink('access_token.txt');
-        unlink('cookie.txt');
-        unlink('csrf_cache.txt');
-        goto login;
-    }
-    echo "\n";
-    
-    // 2. DAILY BONUS
-    echo B_CYAN . "  [🎁] Daily" . RESET . "\n";
-    $daily_result = doDaily($api, $access_token);
-    echo "\n";
-    
-    // 3. FAUCET
-    $reward_info = [];
-    $faucet_result = doFaucet($api, $access_token, $reward_info);
-    
-    if ($faucet_result === 'unauthorized') {
-        echo B_RED . "  [!] Session expired. Re-login..." . RESET . "\n";
-        unlink('access_token.txt');
-        unlink('cookie.txt');
-        unlink('csrf_cache.txt');
-        goto login;
+function startFarming($email, $pass, $api) {
+    // Login
+    $username = doLogin($email, $pass, $api);
+    if (!$username) {
+        echo B_RED . "  [!] Login Gagal! Cek email/password.\n" . RESET;
+        return;
     }
     
-    if ($faucet_result === true && !empty($reward_info)) {
-        echo "\n" . B_CYAN . "  ==================== REWARD ====================" . RESET . "\n\n";
-        echo B_WHITE . "      [+] Coins      : " . B_GREEN . "+" . $reward_info['coins'] . "⚡️" . RESET . "\n";
-        echo B_WHITE . "      [+] XP         : " . B_GREEN . "+" . $reward_info['xp'] . "⭐️" . RESET . "\n";
-        echo B_WHITE . "      [+] Balance    : " . B_YELLOW . $reward_info['balance'] . "⚡️" . RESET . "\n";
-        echo B_WHITE . "      [+] Level      : " . B_MAGENTA . $reward_info['level'] . "📍" . RESET . "\n";
-        echo B_WHITE . "      [+] Multiplier : " . B_CYAN . "x" . $reward_info['multiplier'] . "🥇" . RESET . "\n";
-        echo B_WHITE . "      [+] Next Claim : " . B_YELLOW . $reward_info['next_min'] . "m " . sprintf("%02d", $reward_info['next_sec']) . "s" . RESET . "\n";
-        echo B_CYAN . "\n  ================================================" . RESET . "\n";
-    }
+    $access_token = trim(file_get_contents('access_token.txt'));
+    displayBanner($username);
+    echo B_YELLOW . "  🔄 Starting auto loop...\n\n" . RESET;
     
-    if ($faucet_result === 'cooldown') {
-        // Timer already handled
-    }
+    $fail_count = 0;
+    $loop_count = 0;
+    $max_failures = 10;
     
-    if ($faucet_result === false) {
-        $fail_count++;
-        if ($fail_count >= 5) {
-            echo B_RED . "  [!] Too many failures. Waiting 60s..." . RESET . "\n";
-            timer(60);
+    while (true) {
+        $loop_count++;
+        echo B_CYAN . "  ===== Loop #{$loop_count} ===== \n\n" . RESET;
+        
+        // 1. QUESTS
+        echo B_CYAN . "  [📋] Quest\n" . RESET;
+        $quest_result = doQuests($api, $access_token);
+        if ($quest_result === 'unauthorized') {
+            echo B_RED . "  [!] Session expired. Re-login...\n" . RESET;
+            $username = doLogin($email, $pass, $api);
+            if (!$username) {
+                echo B_RED . "  [FATAL] Re-login gagal, keluar.\n" . RESET;
+                break;
+            }
+            $access_token = trim(file_get_contents('access_token.txt'));
+            sleep(2);
+            continue;
+        }
+        echo "\n";
+        
+        // 2. DAILY BONUS
+        echo B_CYAN . "  [🎁] Daily\n" . RESET;
+        $daily_result = doDaily($api, $access_token);
+        echo "\n";
+        
+        // 3. FAUCET
+        $reward_info = [];
+        $faucet_result = doFaucet($api, $access_token, $reward_info);
+        
+        if ($faucet_result === 'unauthorized') {
+            echo B_RED . "  [!] Session expired. Re-login...\n" . RESET;
+            $username = doLogin($email, $pass, $api);
+            if (!$username) {
+                echo B_RED . "  [FATAL] Re-login gagal, keluar.\n" . RESET;
+                break;
+            }
+            $access_token = trim(file_get_contents('access_token.txt'));
+            sleep(2);
+            continue;
+        }
+        
+        if ($faucet_result === true && !empty($reward_info)) {
+            echo "\n" . B_CYAN . "  ==================== REWARD ====================\n\n" . RESET;
+            echo B_WHITE . "      [+] Coins      : " . B_GREEN . "+" . $reward_info['coins'] . "⚡️\n" . RESET;
+            echo B_WHITE . "      [+] XP         : " . B_GREEN . "+" . $reward_info['xp'] . "⭐️\n" . RESET;
+            echo B_WHITE . "      [+] Balance    : " . B_YELLOW . $reward_info['balance'] . "⚡️\n" . RESET;
+            echo B_WHITE . "      [+] Level      : " . B_MAGENTA . $reward_info['level'] . "📍\n" . RESET;
+            echo B_WHITE . "      [+] Multiplier : " . B_CYAN . "x" . $reward_info['multiplier'] . "🥇\n" . RESET;
+            echo B_WHITE . "      [+] Next Claim : " . B_YELLOW . $reward_info['next_min'] . "m " . sprintf("%02d", $reward_info['next_sec']) . "s\n" . RESET;
+            echo B_CYAN . "\n  ================================================\n" . RESET;
+        }
+        
+        if ($faucet_result === 'cooldown') {
+            // Timer already handled
+        }
+        
+        if ($faucet_result === false) {
+            $fail_count++;
+            if ($fail_count >= $max_failures) {
+                echo B_RED . "  [!] Too many failures. Waiting 60s...\n" . RESET;
+                timer(60);
+                $fail_count = 0;
+            }
+            timer(10);
+        } else {
             $fail_count = 0;
         }
-        timer(10);
-    } else {
-        $fail_count = 0;
+        
+        echo "\n" . B_CYAN . "  🔄 Preparing next loop...\n\n" . RESET;
+        sleep(5);
+    }
+}
+
+// ============================================================
+//  MENU FUNCTIONS
+// ============================================================
+function clearScreen() {
+    system('clear');
+}
+
+function printMenu() {
+    clearScreen();
+    echo B_CYAN . "================================================\n";
+    echo B_CYAN . "  " . B_WHITE . "LightningQuest Auto Claim Bot" . B_CYAN . "  \n";
+    echo B_CYAN . "================================================\n";
+    echo B_CYAN . "  [1] " . B_GREEN . "Start Farming\n";
+    echo B_CYAN . "  [2] " . B_YELLOW . "Config Email & Password\n";
+    echo B_CYAN . "  [3] " . B_YELLOW . "Config Bypass API Key\n";
+    echo B_CYAN . "  [0] " . B_RED . "Exit\n";
+    echo B_CYAN . "================================================\n";
+    echo B_WHITE . "  Pilih menu: " . RESET;
+}
+
+function configEmailPassword() {
+    clearScreen();
+    echo B_CYAN . "================================================\n";
+    echo B_CYAN . "  " . B_WHITE . "Konfigurasi Akun\n";
+    echo B_CYAN . "================================================\n\n";
+    
+    echo B_WHITE . "Email: " . RESET;
+    $email = trim(fgets(STDIN));
+    echo B_WHITE . "Password: " . RESET;
+    $pass = trim(fgets(STDIN));
+    echo B_WHITE . "User-Agent (default: Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36): " . RESET;
+    $ua = trim(fgets(STDIN));
+    if (empty($ua)) {
+        $ua = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36";
     }
     
-    echo "\n" . B_CYAN . "  🔄 Preparing next loop..." . RESET . "\n\n";
-    sleep(5);
+    file_put_contents('Email', $email);
+    file_put_contents('Password', $pass);
+    file_put_contents('user-agent', $ua);
+    
+    echo B_GREEN . "\n✅ Konfigurasi disimpan!\n" . RESET;
+    echo B_WHITE . "\nTekan Enter untuk kembali...\n" . RESET;
+    fgets(STDIN);
+}
+
+function configApikey() {
+    clearScreen();
+    echo B_CYAN . "================================================\n";
+    echo B_CYAN . "  " . B_WHITE . "Konfigurasi API Key Bypass\n";
+    echo B_CYAN . "================================================\n\n";
+    echo B_YELLOW . "  Dapatkan API Key dari https://bypassallshortlinks.space\n\n" . RESET;
+    echo B_WHITE . "API Key: " . RESET;
+    $key = trim(fgets(STDIN));
+    if (!empty($key)) {
+        file_put_contents('bypass_api_key.txt', $key);
+        echo B_GREEN . "\n✅ API Key disimpan!\n" . RESET;
+    } else {
+        echo B_RED . "\n❌ API Key kosong, tidak disimpan.\n" . RESET;
+    }
+    echo B_WHITE . "\nTekan Enter untuk kembali...\n" . RESET;
+    fgets(STDIN);
+}
+
+// ============================================================
+//  MAIN MENU
+// ============================================================
+while (true) {
+    printMenu();
+    $choice = trim(fgets(STDIN));
+    
+    switch ($choice) {
+        case '1':
+            // Start Farming
+            clearScreen();
+            if (!file_exists('Email') || !file_exists('Password') || !file_exists('user-agent')) {
+                echo B_RED . "  [!] Konfigurasi belum lengkap! Silakan atur Email & Password terlebih dahulu (Menu 2).\n" . RESET;
+                echo B_WHITE . "\nTekan Enter untuk kembali...\n" . RESET;
+                fgets(STDIN);
+                break;
+            }
+            if (!file_exists('bypass_api_key.txt')) {
+                echo B_YELLOW . "  [!] API Key bypass belum diatur. Script akan tetap jalan, tapi jika captcha muncul mungkin gagal.\n" . RESET;
+                echo B_WHITE . "  Tekan Enter untuk lanjutkan, atau Ctrl+C untuk keluar dan atur API Key (Menu 3).\n" . RESET;
+                fgets(STDIN);
+            }
+            $email = trim(file_get_contents('Email'));
+            $pass = trim(file_get_contents('Password'));
+            $api = trim(file_get_contents('user-agent'));
+            startFarming($email, $pass, $api);
+            break;
+            
+        case '2':
+            configEmailPassword();
+            break;
+            
+        case '3':
+            configApikey();
+            break;
+            
+        case '0':
+            echo B_GREEN . "\nTerima kasih! Sampai jumpa.\n" . RESET;
+            exit(0);
+            
+        default:
+            echo B_RED . "\nPilihan tidak valid!\n" . RESET;
+            echo B_WHITE . "Tekan Enter untuk melanjutkan...\n" . RESET;
+            fgets(STDIN);
+    }
 }
