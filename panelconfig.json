@@ -49,8 +49,8 @@
           "runner": "php"
         },
         "10": {
-          "label": "EarnSolana",
-          "file": "Sol.php",
+          "label": "Coming Soon",
+          "file": "",
           "runner": "php"
         },
         "11": {
@@ -159,8 +159,8 @@
           "runner": "python3"
         },
         "16": {
-          "label": "TonSpark",
-          "file": "TonSpark.py",
+          "label": "Gramads.",
+          "file": "Gramads.py",
           "runner": "python3"
         },
         "17": {
