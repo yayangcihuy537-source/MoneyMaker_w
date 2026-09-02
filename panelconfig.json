@@ -24,8 +24,8 @@
           "runner": "python3"
         },
         "5": {
-          "label": "CryptoFuturev2",
-          "file": "Future.php",
+          "label": "GainLtc",
+          "file": "GainLtc.php",
           "runner": "php"
         },
         "6": {
@@ -44,8 +44,8 @@
           "runner": "php"
         },
         "9": {
-          "label": "GainLtc",
-          "file": "GainLtc.php",
+          "label": "Coming Soon",
+          "file": "",
           "runner": "php"
         },
         "10": {
