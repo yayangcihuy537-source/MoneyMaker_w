@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ╔═══════════════════════════════════════════════════════════════╗
-║   ███╗   ███╗██╗███╗   ██╗██╗ ██████╗ ██████╗  █████╗ ███╗   ███╗██╗  ║
+║   ███╗   ███╗██╗███╗   ██╗██╗ ██████╗ ██████╗  █████╗ ███╗   ██╗██╗  ║
 ║   ████╗ ████║██║████╗  ██║██║██╔════╝ ██╔══██╗██╔══██╗████╗ ████║██║  ║
 ║   ██╔████╔██║██║██╔██╗ ██║██║██║  ███╗██████╔╝███████║██╔████╔██║██║  ║
 ║   ██║╚██╔╝██║██║██║╚██╗██║██║██║   ██║██╔══██╗██╔══██║██║╚██╔╝██║██║  ║
@@ -13,6 +13,7 @@
 ║   🔐 AUTH via init_data (NO PHPSESSID)                     ║
 ║   🎲 FINGERPRINT RANDOM (acak tiap reauth)                 ║
 ║   🎁 AUTO CLAIM PENDING WIN (WITH AD PROOF)                ║
+║   🎰 LITOSHIPAY GAMES: Lucky Wheel & Coin Catch (seperti foto) ║
 ╚═══════════════════════════════════════════════════════════════╝
 """
 
@@ -34,22 +35,19 @@ LITOSHI_URL = "https://litoshipay.com"
 
 UA = "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.47 Mobile Safari/537.36 Telegram-Android/12.6.4"
 
-# ---------- Game config (MiniGramX) ----------
-MINI_GAMES = ["lucky_wheel", "coin_catch", "flappy_coin"]  # scratch dihapus sesuai foto
+# ---------- MiniGramX games ----------
+MINI_GAMES = ["lucky_wheel", "coin_catch", "flappy_coin"]
 MINI_GAME_MAP = {
     "lucky_wheel": {"display": "SPIN", "icon": "🎡"},
     "coin_catch":  {"display": "CATCH", "icon": "🪙"},
     "flappy_coin": {"display": "FLAPPY", "icon": "🐦"},
 }
 
-# ---------- LitoshiPay games (FIX: include slots) ----------
-LITOSHI_GAMES = ["lucky_wheel", "slots", "scratch", "coin_catch", "flappy_coin"]
+# ---------- LitoshiPay games (hanya 2 game sesuai foto) ----------
+LITOSHI_GAMES = ["lucky_wheel", "coin_catch"]
 LITOSHI_GAME_MAP = {
     "lucky_wheel": {"display": "SPIN", "icon": "🎡"},
-    "slots":       {"display": "SLOTS", "icon": "🎰"},
-    "scratch":     {"display": "SCRATCH", "icon": "🎫"},
     "coin_catch":  {"display": "CATCH", "icon": "🪙"},
-    "flappy_coin": {"display": "FLAPPY", "icon": "🐦"},
 }
 
 # ========== Config (only init_data) ==========
@@ -484,8 +482,6 @@ class BaseBot:
 
         if game == "lucky_wheel":
             return self.play_game(game, doubled=False)
-        elif game == "slots":
-            return self.play_game(game, doubled=False)  # no extra params needed
         elif game == "coin_catch":
             score = random.randint(0, 5)
             bombed = False
@@ -494,17 +490,6 @@ class BaseBot:
                 score = 0
             diamonds = random.randint(0, 1) if not bombed else 0
             return self.play_game(game, score=score, bombed=bombed, diamonds=diamonds)
-        elif game == "flappy_coin":
-            score = random.randint(0, 8)
-            survived = score >= 3
-            bombed = False
-            if random.random() < 0.3:
-                bombed = True
-                score = 0
-                survived = False
-            return self.play_game(game, score=score, bombed=bombed, survived=survived)
-        elif game == "scratch":
-            return self.play_game(game, doubled=False)
         return None
 
     # ---------- Claim Daily ----------
@@ -780,6 +765,7 @@ def main():
 ║   {PINK}🎲 FINGERPRINT RANDOM setiap reauth               {PURPLE}║
 ║   {PINK}🚫 AUTO SKIP LIMIT (daily + global)               {PURPLE}║
 ║   {PINK}🎁 AUTO CLAIM PENDING WIN (WITH AD PROOF)         {PURPLE}║
+║   {PINK}🎰 LITOSHIPAY: Lucky Wheel & Coin Catch (sesuai foto){PURPLE}║
 ╠══════════════════════════════════════════════════════════╣
 ║   {G}[1]{RESET} 🔄 Start MiniGramX X LitoshiPay (parallel)║
 ║   {Y}[2]{RESET} Setup initdata MiniGramX X LitoshiPay    ║
