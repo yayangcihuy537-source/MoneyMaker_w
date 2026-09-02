@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ╔═══════════════════════════════════════════════════════════════╗
-║         🚀 PEPEFLOW X COINSZON X CLOCKADS - PARALLEL BOT    ║
+║         🚀 COINSZON - AUTO BOT                              ║
 ║   AUTO CLAIM • AUTO GAMES • AUTO DOUBLE • AUTO SKIP LIMIT  ║
 ║   🔐 AUTH via init_data (NO PHPSESSID)                     ║
 ║   🎲 FINGERPRINT RANDOM (acak tiap reauth)                 ║
@@ -19,38 +19,15 @@ GOLD = '\033[38;5;220m'; PURPLE = '\033[38;5;141m'; PINK = '\033[38;5;206m'
 RESET = '\033[0m'
 
 # ========== KONFIGURASI ==========
-PEPE_CONFIG = "pepeflow_config.json"
 COIN_CONFIG  = "coinszon_config.json"
-CLOCK_CONFIG = "clockads_config.json"
-
-PEPE_URL = "https://pepeflow.com"
 COIN_URL  = "https://coinszon.com"
-CLOCK_URL = "https://clockads.in"
-
 UA = "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.47 Mobile Safari/537.36 Telegram-Android/12.6.4"
 
-# ---------- Game config per site ----------
-PEPE_GAMES = ["lucky_wheel", "slots", "scratch", "treasure_dig"]
-PEPE_GAME_MAP = {
-    "lucky_wheel": {"display": "SPIN", "icon": "🎡"},
-    "slots":       {"display": "SLOTS", "icon": "🎰"},
-    "scratch":     {"display": "SCRATCH", "icon": "🎫"},
-    "treasure_dig":{"display": "DIG", "icon": "⛏️"},
-}
-
-COIN_GAMES = ["lucky_wheel", "slots"]   # dari kode awal
+# ---------- Game config (Coinszon) ----------
+COIN_GAMES = ["lucky_wheel", "slots"]
 COIN_GAME_MAP = {
     "lucky_wheel": {"display": "SPIN", "icon": "🎡"},
     "slots":       {"display": "SLOTS", "icon": "🎰"},
-}
-
-# Clockads games (dari HTML: lucky_wheel, slots, scratch, treasure_dig)
-CLOCK_GAMES = ["lucky_wheel", "slots", "scratch", "treasure_dig"]
-CLOCK_GAME_MAP = {
-    "lucky_wheel": {"display": "SPIN", "icon": "🎡"},
-    "slots":       {"display": "SLOTS", "icon": "🎰"},
-    "scratch":     {"display": "SCRATCH", "icon": "🎫"},
-    "treasure_dig":{"display": "DIG", "icon": "⛏️"},
 }
 
 # ========== Config (only init_data) ==========
@@ -118,7 +95,7 @@ def ad_progress(seconds=30, label="📺 Watching ad"):
 
 # ========== Base Bot ==========
 class BaseBot:
-    def __init__(self, url, cfg, game_list, game_map, name, currency="PEPE"):
+    def __init__(self, url, cfg, game_list, game_map, name, currency="COIN"):
         self.url = url
         self.cfg = cfg
         self.game_list = game_list
@@ -355,7 +332,7 @@ class BaseBot:
         if resp and resp.status_code == 200:
             html = resp.text
             patterns = [
-                r'id="header-user-balance"[^>]*>([\d.,]+\s*PEPE|[\d.,]+)',
+                r'id="header-user-balance"[^>]*>([\d.,]+\s*COIN|[\d.,]+)',
                 r'id="dash-balance-coin">([\d.,]+)',
                 r'Balance:\s*([\d.,]+)',
                 r'"balance":\s*([\d.]+)',
@@ -464,19 +441,6 @@ class BaseBot:
             except: pass
         return None
 
-    def start_treasure_dig(self):
-        if not self.game_list:
-            return None
-        resp = self.post("/actions/mini_games.php", data={"action": "quiz_start", "game": "treasure_dig"})
-        if resp and resp.status_code == 200:
-            try:
-                data = resp.json()
-                if data.get('status') == 'success':
-                    self.treasure_token = data.get('quiz_token')
-                    return self.treasure_token
-            except: pass
-        return None
-
     def play_single(self, game):
         if not self.game_list:
             return None
@@ -500,17 +464,6 @@ class BaseBot:
             return self.play_game(game, doubled=False)
         elif game == "slots":
             return self.play_game("slots", doubled=False)
-        elif game == "scratch":
-            return self.play_game("scratch", doubled=False)
-        elif game == "treasure_dig":
-            token = self.start_treasure_dig()
-            if token:
-                pick = random.randint(0, 8)
-                return self.play_game("treasure_dig", pick=pick, quiz_token=token, answer_index=pick)
-            else:
-                self.log(f"{R}❌ Gagal ambil token treasure_dig{RESET}")
-                self.cooldowns["treasure_dig"] = 30
-                return None
         return None
 
     # ---------- Claim Daily ----------
@@ -686,115 +639,53 @@ class BaseBot:
             self.log(f"{R}✖ Process error: {e}{RESET}")
             return False
 
-# ========== BOT CLASSES ==========
-class PepeBot(BaseBot):
-    def __init__(self, cfg):
-        super().__init__(PEPE_URL, cfg, PEPE_GAMES, PEPE_GAME_MAP, "PepeFlow", "PEPE")
-
+# ========== BOT CLASS (Coinszon) ==========
 class CoinBot(BaseBot):
     def __init__(self, cfg):
         super().__init__(COIN_URL, cfg, COIN_GAMES, COIN_GAME_MAP, "Coinszon", "COIN")
 
-class ClockBot(BaseBot):
-    def __init__(self, cfg):
-        super().__init__(CLOCK_URL, cfg, CLOCK_GAMES, CLOCK_GAME_MAP, "Clockads", "TRX")
-
-# ========== MODE PARALLEL ==========
-def parallel_pair(bots):
-    for bot in bots:
-        if hasattr(bot, 'claim_daily'):
-            bot.claim_daily()
-    
-    while any(b.running for b in bots):
-        any_played = False
-        for bot in bots:
-            if not bot.running:
-                continue
-            if bot.has_ready_games():
-                os.system('clear')
-                for b in bots:
-                    if b.running:
-                        print(b.display_dashboard())
-                        print()
-                print(f"{C}▶️ {bot.name} ada game ready, mainkan...{RESET}")
-                bot.process_one_game()
-                any_played = True
-                time.sleep(0.5)
-        
-        if not any_played:
-            all_cds = []
-            for bot in bots:
-                if bot.running:
-                    all_cds.extend([cd for cd in bot.cooldowns.values() if cd > 0])
+# ========== SINGLE BOT LOOP ==========
+def run_single_bot(bot):
+    bot.claim_daily()
+    while bot.running:
+        if bot.has_ready_games():
+            os.system('clear')
+            print(bot.display_dashboard())
+            print(f"{C}▶️ Ada game ready, mainkan...{RESET}")
+            bot.process_one_game()
+            time.sleep(0.5)
+        else:
+            # Semua game cooldown atau limit
+            all_cds = [cd for cd in bot.cooldowns.values() if cd > 0]
             if all_cds:
                 min_cd = min(all_cds)
                 os.system('clear')
-                for b in bots:
-                    if b.running:
-                        print(b.display_dashboard())
-                        print()
-                print(f"{Y}⏳ Semua bot cooldown. Menunggu {min_cd} detik...{RESET}")
+                print(bot.display_dashboard())
+                print(f"{Y}⏳ Semua game cooldown. Menunggu {min_cd} detik...{RESET}")
                 live_timer(min_cd, f"⏳ Menunggu cooldown {min_cd}s")
             else:
                 time.sleep(1)
 
 # ========== SETUP ==========
-def setup_bots():
-    print(f"{Y}📝 Setup PepeFlow, Coinszon, dan Clockads{RESET}")
-    
-    init1 = input(f"{C}Masukkan init_data untuk PepeFlow: {W}").strip()
-    if init1:
-        cfg1 = BaseConfig(PEPE_CONFIG)
-        cfg1.init_data = init1
+def setup_bot():
+    print(f"{Y}📝 Setup Coinszon{RESET}")
+    init = input(f"{C}Masukkan init_data untuk Coinszon: {W}").strip()
+    if init:
+        cfg = BaseConfig(COIN_CONFIG)
+        cfg.init_data = init
         try:
-            parsed = urllib.parse.parse_qs(init1)
+            parsed = urllib.parse.parse_qs(init)
             user_str = parsed.get('user', [None])[0]
             if user_str:
                 u = json.loads(urllib.parse.unquote(user_str))
-                cfg1.telegram_id = str(u.get('id',''))
-                cfg1.telegram_username = u.get('username','')
+                cfg.telegram_id = str(u.get('id',''))
+                cfg.telegram_username = u.get('username','')
         except:
             pass
-        cfg1.save()
-        print(f"{G}✅ PepeFlow tersimpan{RESET}")
-    else:
-        print(f"{R}❌ PepeFlow kosong, dilewati{RESET}")
-    
-    init2 = input(f"{C}Masukkan init_data untuk Coinszon: {W}").strip()
-    if init2:
-        cfg2 = BaseConfig(COIN_CONFIG)
-        cfg2.init_data = init2
-        try:
-            parsed = urllib.parse.parse_qs(init2)
-            user_str = parsed.get('user', [None])[0]
-            if user_str:
-                u = json.loads(urllib.parse.unquote(user_str))
-                cfg2.telegram_id = str(u.get('id',''))
-                cfg2.telegram_username = u.get('username','')
-        except:
-            pass
-        cfg2.save()
+        cfg.save()
         print(f"{G}✅ Coinszon tersimpan{RESET}")
     else:
-        print(f"{R}❌ Coinszon kosong, dilewati{RESET}")
-
-    init3 = input(f"{C}Masukkan init_data untuk Clockads: {W}").strip()
-    if init3:
-        cfg3 = BaseConfig(CLOCK_CONFIG)
-        cfg3.init_data = init3
-        try:
-            parsed = urllib.parse.parse_qs(init3)
-            user_str = parsed.get('user', [None])[0]
-            if user_str:
-                u = json.loads(urllib.parse.unquote(user_str))
-                cfg3.telegram_id = str(u.get('id',''))
-                cfg3.telegram_username = u.get('username','')
-        except:
-            pass
-        cfg3.save()
-        print(f"{G}✅ Clockads tersimpan{RESET}")
-    else:
-        print(f"{R}❌ Clockads kosong, dilewati{RESET}")
+        print(f"{R}❌ Coinszon kosong, setup gagal{RESET}")
 
 # ========== MAIN ==========
 def main():
@@ -802,14 +693,14 @@ def main():
         os.system('clear')
         print(f"""
 {PURPLE}╔══════════════════════════════════════════════════════════╗
-║   {GOLD}🚀 PEPEFLOW X COINSZON X CLOCKADS - PARALLEL BOT  {PURPLE}║
+║   {GOLD}🚀 COINSZON AUTO BOT                             {PURPLE}║
 ║   {PINK}🔐 AUTH via init_data (NO PHPSESSID)              {PURPLE}║
 ║   {PINK}🎲 FINGERPRINT RANDOM setiap reauth               {PURPLE}║
 ║   {PINK}🚫 AUTO SKIP LIMIT (daily + global)               {PURPLE}║
 ║   {PINK}🎁 AUTO CLAIM PENDING WIN (WITH AD PROOF)         {PURPLE}║
 ╠══════════════════════════════════════════════════════════╣
-║   {G}[1]{RESET} 🔄 Start all bots (parallel)               ║
-║   {Y}[2]{RESET} Setup initdata semua bot                  ║
+║   {G}[1]{RESET} 🔄 Start Coinszon Bot                      ║
+║   {Y}[2]{RESET} Setup initdata Coinszon                   ║
 ║   {R}[0]{RESET} Exit                                     ║
 ╚══════════════════════════════════════════════════════════╝{RESET}
 """)
@@ -817,31 +708,19 @@ def main():
         if choice == '0':
             sys.exit(0)
         elif choice == '1':
-            pcfg = BaseConfig(PEPE_CONFIG)
-            ccfg = BaseConfig(COIN_CONFIG)
-            clcfg = BaseConfig(CLOCK_CONFIG)
-            if not pcfg.load() or not pcfg.init_data:
-                print(f"{R}❌ PepeFlow init_data belum disetup (menu 2){RESET}")
-                input("Enter...")
-                continue
-            if not ccfg.load() or not ccfg.init_data:
+            cfg = BaseConfig(COIN_CONFIG)
+            if not cfg.load() or not cfg.init_data:
                 print(f"{R}❌ Coinszon init_data belum disetup (menu 2){RESET}")
                 input("Enter...")
                 continue
-            if not clcfg.load() or not clcfg.init_data:
-                print(f"{R}❌ Clockads init_data belum disetup (menu 2){RESET}")
-                input("Enter...")
-                continue
-            pbot = PepeBot(pcfg)
-            cbot = CoinBot(ccfg)
-            clbot = ClockBot(clcfg)
+            bot = CoinBot(cfg)
             try:
-                parallel_pair([pbot, cbot, clbot])
+                run_single_bot(bot)
             except KeyboardInterrupt:
                 pass
             input("Enter...")
         elif choice == '2':
-            setup_bots()
+            setup_bot()
             input("Enter...")
         else:
             print(f"{R}❌ Invalid{RESET}")
