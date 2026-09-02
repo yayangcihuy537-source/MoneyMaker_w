@@ -94,7 +94,7 @@
           "runner": "python3"
         },
         "3": {
-          "label": "Pepeflow X CoinsZon X CloakAds ",
+          "label": "CoinsZon",
           "file": "pepe.py",
           "runner": "python3"
         },
