@@ -49,8 +49,7 @@ function printBanner() {
     echo B_CYAN . "  Mode   : " . WHITE . "Icon Captcha Bypass\n";
     echo B_CYAN . "  Website: " . WHITE . HOST . "\n";
     echo B_CYAN . "  Limit  : " . WHITE . MAX_DAILY_CLAIMS . " claim/hari (free member)\n";
-    echo B_CYAN . "  Jeda   : " . WHITE . "14-19 detik (human-like) untuk faucet biasa\n";
-    echo B_CYAN . "  Pop    : " . WHITE . "Tanpa jeda (langsung)\n";
+    echo B_CYAN . "  Jeda   : " . WHITE . "14-19 detik (human-like)\n";
     echo B_CYAN . "==================================================\n\n";
 }
 
@@ -415,111 +414,9 @@ function claimFaucet(&$rewardInfo, $retry = 0) {
 }
 
 // ============================================================
-//  CLAIM POP-UNDER FAUCET (UNLIMITED)
+//  FUNGSI FARMING (HANYA FAUCET BIASA)
 // ============================================================
-function claimPopFaucet(&$rewardInfo, $retry = 0) {
-    if ($retry > 3) {
-        echo B_RED . "  [ERROR] Gagal setelah 3 percobaan.\n" . RESET;
-        return false;
-    }
-    
-    $html = httpRequest(HOST . '/pop-faucet');
-    if (!$html) {
-        echo B_RED . "  [ERROR] Gagal mengakses pop faucet.\n" . RESET;
-        return false;
-    }
-
-    if (preg_match('/Cooldown Timer.*?<h4[^>]*>([0-9.]+)\s*Minutes?/i', $html, $m)) {
-        $minutes = (float)$m[1];
-        if ($minutes > 0) {
-            $seconds = ceil($minutes * 60);
-            echo B_YELLOW . "  [COOLDOWN] " . $seconds . "s tersisa.\n" . RESET;
-            timer($seconds);
-            return 'cooldown';
-        }
-    }
-
-    if (strpos($html, 'Pop-Under Faucet claim successful!') !== false) {
-        echo B_YELLOW . "  [INFO] Pop claim sudah berhasil sebelumnya.\n" . RESET;
-        if (preg_match('/Received \+([0-9.]+) USDT\./i', $html, $m)) {
-            $rewardInfo = ['amount' => $m[1]];
-            return true;
-        }
-        return true;
-    }
-
-    $csrf = parseCSRF($html);
-    if (!$csrf) {
-        echo B_YELLOW . "  [INFO] CSRF tidak ditemukan, refresh...\n" . RESET;
-        sleep(2);
-        return claimPopFaucet($rewardInfo, $retry + 1);
-    }
-
-    list($targetIcon, $choices) = parseIconCaptcha($html);
-    
-    if (!$targetIcon || empty($choices)) {
-        echo B_YELLOW . "  [INFO] Tidak ada captcha, claim langsung...\n" . RESET;
-        $postData = http_build_query(['csrf_token' => $csrf]);
-    } else {
-        echo B_YELLOW . "  [INFO] Captcha ditemukan, menyelesaikan...\n" . RESET;
-        $selectedKey = null;
-        foreach ($choices as $choice) {
-            $targetParts = explode(' ', $targetIcon);
-            $choiceParts = explode(' ', $choice['icon']);
-            foreach ($targetParts as $tp) {
-                foreach ($choiceParts as $cp) {
-                    if (strcasecmp($tp, $cp) === 0 && strpos($tp, 'bi-') !== false) {
-                        $selectedKey = $choice['key'];
-                        break 3;
-                    }
-                }
-            }
-            if (!$selectedKey && strcasecmp($targetIcon, $choice['icon']) === 0) {
-                $selectedKey = $choice['key'];
-            }
-        }
-        
-        if (!$selectedKey) {
-            echo B_RED . "  [ERROR] Ikon target tidak cocok.\n" . RESET;
-            return false;
-        }
-        
-        $postData = http_build_query([
-            'csrf_token' => $csrf,
-            'icon_captcha_selected' => $selectedKey
-        ]);
-    }
-    
-    $extraHeaders = [
-        'Content-Type: application/x-www-form-urlencoded',
-        'Origin: ' . HOST,
-        'Referer: ' . HOST . '/pop-faucet',
-    ];
-    $response = httpRequest(HOST . '/pop-faucet/claim', 'POST', $postData, $extraHeaders);
-    if ($response === false) {
-        echo B_RED . "  [ERROR] Claim request gagal.\n" . RESET;
-        return false;
-    }
-
-    if (preg_match('/Pop-Under Faucet claim successful! Received \+([0-9.]+) USDT\./i', $response, $m)) {
-        echo B_GREEN . "  [SUCCESS] +{$m[1]} USDT (Pop)\n" . RESET;
-        $rewardInfo = ['amount' => $m[1]];
-        return true;
-    } else {
-        if (strlen($response) < 100) {
-            echo B_YELLOW . "  [INFO] Response pendek, retry...\n" . RESET;
-            sleep(2);
-            return claimPopFaucet($rewardInfo, $retry + 1);
-        }
-        echo B_RED . "  [ERROR] Claim pop gagal.\n" . RESET;
-        return false;
-    }
-}
-
-// ============================================================
-//  FUNGSI FARMING (POP TANPA DELAY)
-// ============================================================
-function startFarming($email, $password, $mode) {
+function startFarming($email, $password) {
     if (!doLogin($email, $password)) {
         echo B_RED . "  [ERROR] Login gagal. Keluar.\n" . RESET;
         return;
@@ -530,11 +427,9 @@ function startFarming($email, $password, $mode) {
     echo B_CYAN . "  [BALANCE] " . B_WHITE . $balance . " USDT\n" . RESET;
     echo B_CYAN . "  [DAILY] " . B_WHITE . $dailyCount . " / " . MAX_DAILY_CLAIMS . " claims\n" . RESET;
 
-    $startTime = time();
     $claims = 0;
     $failures = 0;
     $maxFailures = 10;
-    $popClaims = 0;
 
     echo B_CYAN . "  [START] Bot dimulai...\n\n" . RESET;
 
@@ -555,94 +450,53 @@ function startFarming($email, $password, $mode) {
             continue;
         }
 
-        // ===== MODE 1: FAUCET BIASA =====
-        if ($mode == 1 || $mode == 3) {
-            if ($dailyCount >= MAX_DAILY_CLAIMS) {
-                echo B_RED . "  [LIMIT] Sudah mencapai " . MAX_DAILY_CLAIMS . " claim hari ini.\n" . RESET;
-                if ($mode == 3) {
-                    echo B_YELLOW . "  [INFO] Lanjut ke Pop Faucet...\n" . RESET;
-                } else {
-                    echo B_YELLOW . "  [WAIT] Tunggu hingga tengah malam untuk reset.\n" . RESET;
-                    $tomorrow = strtotime('tomorrow 00:00:00');
-                    $wait = $tomorrow - time();
-                    echo B_YELLOW . "  [WAIT] " . gmdate("H:i:s", $wait) . " tersisa.\n" . RESET;
-                    timer($wait);
-                    continue;
-                }
-            } else {
-                $rewardInfo = [];
-                $result = claimFaucet($rewardInfo);
-                if ($result === 'limit_reached') {
-                    echo B_RED . "  [STOP] Limit harian tercapai.\n" . RESET;
-                    if ($mode == 3) {
-                        // lanjut ke pop
-                    } else {
-                        break;
-                    }
-                } elseif ($result === 'cooldown' || $result === 'no_form') {
-                    $delay = rand(14, 19);
-                    echo B_YELLOW . "  ⏳ Human delay: {$delay}s\n" . RESET;
-                    sleep($delay);
-                    continue;
-                } elseif ($result === true) {
-                    $claims++;
-                    $dailyCount++;
-                    updateDailyCount($dailyCount);
-                    $failures = 0;
-                    $balance = getBalance();
-                    echo B_CYAN . "  [BALANCE] " . B_WHITE . $balance . " USDT\n" . RESET;
-                    echo B_CYAN . "  [DAILY] " . B_WHITE . $dailyCount . " / " . MAX_DAILY_CLAIMS . " claims\n" . RESET;
-                    echo B_GREEN . "  [TOTAL] Claims: {$claims}\n" . RESET;
-                } else {
-                    $failures++;
-                    echo B_RED . "  [FAIL] ({$failures}/{$maxFailures})\n" . RESET;
-                    if ($failures >= $maxFailures) {
-                        echo B_RED . "  [STOP] Terlalu banyak gagal.\n" . RESET;
-                        break;
-                    }
-                }
-                if ($result !== 'cooldown' && $result !== 'no_form') {
-                    $delay = rand(14, 19);
-                    echo B_YELLOW . "  ⏳ Human delay: {$delay}s\n" . RESET;
-                    sleep($delay);
-                }
-            }
+        if ($dailyCount >= MAX_DAILY_CLAIMS) {
+            echo B_RED . "  [LIMIT] Sudah mencapai " . MAX_DAILY_CLAIMS . " claim hari ini.\n" . RESET;
+            echo B_YELLOW . "  [WAIT] Tunggu hingga tengah malam untuk reset.\n" . RESET;
+            $tomorrow = strtotime('tomorrow 00:00:00');
+            $wait = $tomorrow - time();
+            echo B_YELLOW . "  [WAIT] " . gmdate("H:i:s", $wait) . " tersisa.\n" . RESET;
+            timer($wait);
+            continue;
         }
 
-        // ===== MODE 2: POP-UNDER FAUCET (UNLIMITED) - TANPA DELAY =====
-        if ($mode == 2 || $mode == 3) {
-            $rewardInfoPop = [];
-            $resultPop = claimPopFaucet($rewardInfoPop);
-            if ($resultPop === 'cooldown') {
-                // timer sudah di handle di dalam function
-                continue;
-            } elseif ($resultPop === true) {
-                $popClaims++;
-                $failures = 0;
-                $balance = getBalance();
-                echo B_CYAN . "  [BALANCE] " . B_WHITE . $balance . " USDT\n" . RESET;
-                echo B_CYAN . "  [POP CLAIMS] " . B_WHITE . $popClaims . "\n" . RESET;
-            } else {
-                $failures++;
-                echo B_RED . "  [FAIL] Pop ({$failures}/{$maxFailures})\n" . RESET;
-                if ($failures >= $maxFailures) {
-                    echo B_RED . "  [STOP] Terlalu banyak gagal.\n" . RESET;
-                    break;
-                }
-            }
-            // TIDAK ADA DELAY UNTUK POP
-        }
-
-        if ($mode == 1 && $dailyCount >= MAX_DAILY_CLAIMS) {
-            echo B_GREEN . "  [DONE] " . MAX_DAILY_CLAIMS . " claims selesai.\n" . RESET;
+        $rewardInfo = [];
+        $result = claimFaucet($rewardInfo);
+        if ($result === 'limit_reached') {
+            echo B_RED . "  [STOP] Limit harian tercapai.\n" . RESET;
             break;
+        } elseif ($result === 'cooldown' || $result === 'no_form') {
+            $delay = rand(14, 19);
+            echo B_YELLOW . "  ⏳ Human delay: {$delay}s\n" . RESET;
+            sleep($delay);
+            continue;
+        } elseif ($result === true) {
+            $claims++;
+            $dailyCount++;
+            updateDailyCount($dailyCount);
+            $failures = 0;
+            $balance = getBalance();
+            echo B_CYAN . "  [BALANCE] " . B_WHITE . $balance . " USDT\n" . RESET;
+            echo B_CYAN . "  [DAILY] " . B_WHITE . $dailyCount . " / " . MAX_DAILY_CLAIMS . " claims\n" . RESET;
+            echo B_GREEN . "  [TOTAL] Claims: {$claims}\n" . RESET;
+        } else {
+            $failures++;
+            echo B_RED . "  [FAIL] ({$failures}/{$maxFailures})\n" . RESET;
+            if ($failures >= $maxFailures) {
+                echo B_RED . "  [STOP] Terlalu banyak gagal.\n" . RESET;
+                break;
+            }
+        }
+        if ($result !== 'cooldown' && $result !== 'no_form') {
+            $delay = rand(14, 19);
+            echo B_YELLOW . "  ⏳ Human delay: {$delay}s\n" . RESET;
+            sleep($delay);
         }
     }
 
     $balance = getBalance();
     echo B_CYAN . "\n  [FINAL BALANCE] " . B_WHITE . $balance . " USDT\n" . RESET;
-    echo B_CYAN . "  Total claims (biasa): " . B_WHITE . $claims . "\n" . RESET;
-    echo B_CYAN . "  Pop claims: " . B_WHITE . $popClaims . "\n" . RESET;
+    echo B_CYAN . "  Total claims: " . B_WHITE . $claims . "\n" . RESET;
 }
 
 // ============================================================
@@ -654,9 +508,7 @@ function printMenu() {
     echo B_CYAN . "  " . B_WHITE . "ClaimX Auto Claim Bot" . B_CYAN . "  \n";
     echo B_CYAN . "==================================================\n";
     echo B_CYAN . "  [1] " . B_GREEN . "Claim Faucet (100 limit/hari)\n";
-    echo B_CYAN . "  [2] " . B_GREEN . "Unlimited Pop-Under Faucet (tanpa delay)\n";
-    echo B_CYAN . "  [3] " . B_GREEN . "All (Faucet + Pop)\n";
-    echo B_CYAN . "  [4] " . B_YELLOW . "Config Email & Password\n";
+    echo B_CYAN . "  [2] " . B_YELLOW . "Config Email & Password\n";
     echo B_CYAN . "  [0] " . B_RED . "Exit\n";
     echo B_CYAN . "==================================================\n";
     echo B_WHITE . "  Pilih menu: " . RESET;
@@ -699,21 +551,11 @@ while (true) {
     
     switch ($choice) {
         case '1':
-            startFarming($email, $password, 1);
+            startFarming($email, $password);
             echo B_WHITE . "\nTekan Enter untuk kembali ke menu...\n" . RESET;
             fgets(STDIN);
             break;
         case '2':
-            startFarming($email, $password, 2);
-            echo B_WHITE . "\nTekan Enter untuk kembali ke menu...\n" . RESET;
-            fgets(STDIN);
-            break;
-        case '3':
-            startFarming($email, $password, 3);
-            echo B_WHITE . "\nTekan Enter untuk kembali ke menu...\n" . RESET;
-            fgets(STDIN);
-            break;
-        case '4':
             configEmailPassword();
             $config = json_decode(file_get_contents(CONFIG_FILE), true);
             $email = $config['email'];
