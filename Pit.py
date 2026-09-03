@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Pitcoin Auto Claim & Boost Bot - ONLY INIT_DATA
-- Auto Claim Mining setiap 10 menit
-- Auto Boost (Watch Ads) setiap 10 menit
+Pitcoin Auto Claim & Boost Bot - V2
+- Auto Claim Mining SETIAP 10 MENIT (otomatis claim jika ada saldo)
+- Auto Boost (Watch Ads) setiap 10 menit (jika boost mati)
 - Auto Claim Quests (1x per hari)
 - Cukup paste init_data sekali, langsung jalan
 
@@ -176,6 +176,7 @@ class PitcoinBot:
         self.active_th_s = 0.2
         self.quests_attempted_today: Set[str] = set()
         self.last_quest_date: str = ""
+        self.total_claimed_today = 0.0
 
     def update_user_data(self) -> bool:
         res = self.bot.get_user()
@@ -191,6 +192,16 @@ class PitcoinBot:
         self.is_ad_boost_active = mining.get("isAdBoostActive", False)
         self.ad_boost_end_time = mining.get("adBoostTimeRemainingMs", 0)
         self.active_th_s = mining.get("activeTHs", 0.2)
+        
+        # Update total claimed from pnlHistory
+        pnl = user.get("pnlHistory", [])
+        if pnl:
+            today = date.today().isoformat()
+            for entry in pnl:
+                if entry.get("date") == today:
+                    self.total_claimed_today = entry.get("mined", 0.0)
+                    break
+        
         return True
 
     def get_claimable_amount(self) -> float:
@@ -210,8 +221,10 @@ class PitcoinBot:
             amount = res.get("claimedAmount", 0)
             new_balance = res.get("newBalance", self.balance)
             self.balance = new_balance
-            print_success(f"+{amount:.4f} PIT")
-            print_ok(f"Balance: {self.balance:.4f} PIT")
+            self.total_claimed_today += amount
+            print_success(f"✅ Claim +{amount:.4f} PIT")
+            print_ok(f"💰 Balance: {self.balance:.4f} PIT")
+            print_ok(f"📊 Hari ini: +{self.total_claimed_today:.4f} PIT")
             return True
         return False
 
@@ -227,10 +240,10 @@ class PitcoinBot:
             self.is_ad_boost_active = mining.get("isAdBoostActive", False)
             self.ad_boost_end_time = mining.get("adBoostTimeRemainingMs", 0)
             self.active_th_s = mining.get("activeTHs", 0.2)
-            print_ok(f"Boost aktif! Speed: {self.active_th_s:.2f} TH/s")
+            print_ok(f"⚡ Boost aktif! Speed: {self.active_th_s:.2f} TH/s")
             if self.ad_boost_end_time > 0:
                 remaining_sec = ms_to_seconds(self.ad_boost_end_time)
-                print_wait(f"Boost: {remaining_sec//60}m {remaining_sec%60}s")
+                print_wait(f"⏱️ Boost: {remaining_sec//60}m {remaining_sec%60}s")
             return True
         return False
 
@@ -279,7 +292,7 @@ class PitcoinBot:
             if res.get("success"):
                 self.balance = res.get("user", {}).get("claimedPITBalance", self.balance)
                 self.completed_quests.append(quest_id)
-                print_success(f"Quest +{reward} PIT")
+                print_success(f"✅ Quest +{reward} PIT")
                 claimed_any = True
             else:
                 print_wait(f"Quest belum bisa")
@@ -297,24 +310,34 @@ class PitcoinBot:
 
         print_info(f"💰 Balance: {self.balance:.4f} PIT")
         print_info(f"⚡ Speed: {self.active_th_s:.2f} TH/s")
+        print_info(f"📊 Hari ini: +{self.total_claimed_today:.4f} PIT")
 
+        # 1. Quests (1x per hari)
         self.check_and_claim_quests()
 
+        # 2. Boost (Watch Ads) - jika boost mati
         if not self.is_ad_boost_active:
             print_info("⚡ Boost tidak aktif, watch ads...")
             if self.boost_overclock():
+                print_wait("⏳ Tunggu 5 detik setelah boost...")
                 time.sleep(5)
         else:
-            print_info("⚡ Boost masih aktif")
+            remaining = ms_to_seconds(self.ad_boost_end_time)
+            print_info(f"⚡ Boost aktif: {remaining//60}m {remaining%60}s tersisa")
 
+        # 3. CLAIM MINING (SETIAP SIKLUS)
+        print_info("⛏️ Cek saldo mining...")
         claimable = self.get_claimable_amount()
         if claimable > 0:
+            print_info(f"💎 Saldo siap claim: {claimable:.4f} PIT")
             self.claim_mining()
         else:
-            print_wait("Belum ada PIT yang bisa di-claim")
+            print_wait("⏳ Belum ada PIT yang bisa di-claim")
+            # Coba claim tetap (mungkin ada error)
+            # Tapi kalau memang 0, skip
 
         self.update_user_data()
-        print_ok(f"💰 Balance: {self.balance:.4f} PIT")
+        print_ok(f"💰 Balance akhir: {self.balance:.4f} PIT")
         print_sep()
         return True
 
@@ -322,15 +345,17 @@ class PitcoinBot:
         cycle_count = 0
 
         print_header()
-        print_ok(f"Login: @{self.full_name} (ID: {self.tg_id})")
+        print_ok(f"👤 Login: @{self.full_name} (ID: {self.tg_id})")
         print_sep()
 
         self.update_user_data()
-        print_ok(f"💰 Balance: {self.balance:.4f} PIT")
+        print_ok(f"💰 Balance awal: {self.balance:.4f} PIT")
         print_ok(f"⚡ Speed: {self.active_th_s:.2f} TH/s")
         print_sep()
         print_info("🚀 Bot running! Claim setiap 10 menit")
-        print_wait("Tekan Ctrl+C untuk berhenti")
+        print_info("📌 Boost otomatis jika mati")
+        print_info("📌 Quest 1x per hari")
+        print_wait("⏹️ Tekan Ctrl+C untuk berhenti")
         print_sep()
 
         while True:
@@ -341,28 +366,30 @@ class PitcoinBot:
                 success = self.run_cycle()
                 if not success:
                     print_wait("Gagal, tunggu 30 detik...")
-                    countdown(30, "⏳ Cooldown")
+                    countdown(30, "⏳ Cooldown error")
                     continue
 
-                wait_time = 600
+                # Hitung waktu tunggu (10 menit atau sampai boost habis)
+                wait_time = 600  # 10 menit default
                 if self.ad_boost_end_time > 0:
                     remaining_sec = ms_to_seconds(self.ad_boost_end_time)
                     if remaining_sec > 0 and remaining_sec < wait_time:
-                        wait_time = remaining_sec + 5
+                        wait_time = remaining_sec + 5  # +5 detik buffer
 
                 print_wait(f"⏳ Jeda {wait_time//60}m {wait_time%60}s...")
                 countdown(wait_time, "⏳ Menunggu")
 
             except KeyboardInterrupt:
                 print("\n")
-                print_wait("⏹️ Bot dihentikan")
+                print_wait("⏹️ Bot dihentikan user")
                 break
             except Exception as e:
-                print_error(f"Error: {e}")
+                print_error(f"❌ Error: {e}")
                 countdown(30, "⏳ Cooldown error")
 
         print_sep()
         print_ok(f"💰 Balance akhir: {self.balance:.4f} PIT")
+        print_ok(f"📊 Total hari ini: +{self.total_claimed_today:.4f} PIT")
         print_sep()
 
 # ============================================================
@@ -372,7 +399,7 @@ def print_header():
     print(f"""
 {BLUE}╔══════════════════════════════════════════════════════════════╗
 ║{WHITE}  Pitcoin Auto Claim & Boost Bot - {CYAN}Premium{WHITE}                    ║
-║{WHITE}  Auto Claim Mining, Boost, Quests (1x/hari)              ║
+║{WHITE}  Auto Claim SETIAP 10 MENIT + Boost + Quests             ║
 ╚══════════════════════════════════════════════════════════════╝{RESET}
 {BLUE}============================================================{RESET}
 {CYAN}👨‍💻 ScriptMaker : {WHITE}@JoshuaXSupport{RESET}
@@ -390,7 +417,7 @@ def get_init_data_from_user() -> str:
     print_sep()
     init_data = input(f"\n📝 {BOLD}Paste init_data:{RESET} ").strip()
     if not init_data:
-        print_error("Init data tidak boleh kosong!")
+        print_error("❌ Init data tidak boleh kosong!")
         return get_init_data_from_user()
     return init_data
 
@@ -407,6 +434,6 @@ if __name__ == "__main__":
         print("\n")
         print_wait("⏹️ Dibatalkan")
     except Exception as e:
-        print_error(f"Error: {e}")
+        print_error(f"❌ Error: {e}")
         import traceback
         traceback.print_exc()
