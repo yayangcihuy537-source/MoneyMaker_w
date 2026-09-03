@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Pitcoin Auto Claim & Boost Bot
+Pitcoin Auto Claim & Boost Bot - FIXED (Error JSON handling)
 - Auto Claim Mining setiap 10 menit
 - Auto Boost (Watch Ads) setiap 10 menit
-- Auto Claim Quests (Daily Check-in, Join Channel, dll.)
-- Watch Ads 30 detik untuk speed boost +0.5 TH/s
+- Auto Claim Quests (1x per hari)
+- Retry mechanism untuk error JSON / server down
 
 ============================================================
 👨‍💻 ScriptMaker : @JoshuaXSupport
@@ -17,8 +17,8 @@ import requests
 import json
 import time
 import urllib.parse
-from datetime import datetime
-from typing import Dict, Optional
+from datetime import datetime, date
+from typing import Dict, Optional, Set
 
 # ============================================================
 # WARNA ANSI
@@ -53,6 +53,9 @@ def print_error(msg):
 
 def print_success(msg):
     print(f"{GREEN}💰 [REWARD]{RESET} {msg}")
+
+def print_quest_info(msg):
+    print(f"{CYAN}📋 [QUEST]{RESET} {msg}")
 
 def countdown(seconds, msg="⏳ Menunggu"):
     while seconds > 0:
@@ -95,15 +98,34 @@ class Pitcoin:
             "Content-Type": "application/json",
         })
 
-    def _request(self, method: str, endpoint: str, json_data: Optional[Dict] = None):
+    def _request(self, method: str, endpoint: str, json_data: Optional[Dict] = None, retries: int = 3) -> Dict:
+        """Request dengan retry jika terjadi error JSON atau koneksi."""
         url = self.BASE_URL + endpoint
-        try:
-            resp = self.session.request(method, url, json=json_data, timeout=30)
-            if resp.status_code != 200:
-                return {"error": resp.status_code, "text": resp.text[:200]}
-            return resp.json()
-        except Exception as e:
-            return {"error": "exception", "text": str(e)}
+        for attempt in range(retries):
+            try:
+                resp = self.session.request(method, url, json=json_data, timeout=30)
+                if resp.status_code != 200:
+                    # Jika status bukan 200, coba baca text sebagai error
+                    return {"error": resp.status_code, "text": resp.text[:200]}
+                
+                # Coba parse JSON
+                try:
+                    return resp.json()
+                except json.JSONDecodeError as e:
+                    print_wait(f"JSON decode error (attempt {attempt+1}/{retries}): {e}")
+                    if attempt < retries - 1:
+                        time.sleep(2)
+                        continue
+                    else:
+                        return {"error": "json_decode", "text": resp.text[:200]}
+            except requests.exceptions.RequestException as e:
+                print_wait(f"Request error (attempt {attempt+1}/{retries}): {e}")
+                if attempt < retries - 1:
+                    time.sleep(3)
+                    continue
+                else:
+                    return {"error": "exception", "text": str(e)}
+        return {"error": "max_retries", "text": "Failed after multiple retries"}
 
     # ===== API ENDPOINTS =====
     def get_user(self) -> Dict:
@@ -163,10 +185,15 @@ class PitcoinBot:
         self.is_ad_boost_active = False
         self.active_th_s = 0.2
 
+        # Quest tracking (hanya 1x per hari)
+        self.quests_attempted_today: Set[str] = set()
+        self.last_quest_date: str = ""
+
     def update_user_data(self) -> bool:
         res = self.bot.get_user()
         if res.get("error"):
-            print_error(f"Gagal ambil user: {res}")
+            # Jika error karena JSON, coba lagi nanti
+            print_wait(f"Error get user: {res}")
             return False
 
         user = res.get("user", {})
@@ -210,7 +237,6 @@ class PitcoinBot:
             return False
 
         if res.get("success"):
-            message = res.get("message", "")
             mining = res.get("miningState", {})
             self.is_ad_boost_active = mining.get("isAdBoostActive", False)
             self.ad_boost_end_time = mining.get("adBoostTimeRemainingMs", 0)
@@ -224,6 +250,20 @@ class PitcoinBot:
         return False
 
     def check_and_claim_quests(self) -> bool:
+        """Claim quests, but only once per day."""
+        today = date.today().isoformat()
+
+        # Reset jika hari berganti
+        if self.last_quest_date != today:
+            self.quests_attempted_today.clear()
+            self.last_quest_date = today
+            print_info("📅 Hari baru, reset daftar quest")
+
+        # Jika sudah pernah coba hari ini, skip
+        if self.quests_attempted_today:
+            print_wait("Quest sudah dicoba hari ini, skip")
+            return False
+
         print_info("📋 Mengecek Quests...")
         res = self.bot.get_quests()
         if res.get("error"):
@@ -241,19 +281,25 @@ class PitcoinBot:
             if not quest_id:
                 continue
             if quest_id in self.completed_quests:
+                print_quest_info(f"✅ {quest.get('title', quest_id)} sudah diklaim sebelumnya, skip")
                 continue
 
             title = quest.get("title", quest_id)
             reward = quest.get("reward", 0)
-            print_info(f"🔄 Mencoba quest: {title} (reward: {reward})")
+            print_quest_info(f"🔄 Mencoba quest: {title} (reward: {reward})")
 
             res = self.bot.complete_quest(quest_id)
             if res.get("error"):
-                print_error(f"Gagal complete quest: {res}")
+                error_text = str(res.get("text", ""))
+                if "already completed" in error_text:
+                    print_quest_info(f"⏭️ Quest {title} sudah diklaim (server)")
+                elif "cooldown" in error_text:
+                    print_quest_info(f"⏭️ Quest {title} dalam cooldown (coba besok)")
+                else:
+                    print_error(f"Gagal complete quest: {res}")
                 continue
 
             if res.get("success"):
-                # Update balance dari response
                 user = res.get("user", {})
                 self.balance = user.get("claimedPITBalance", self.balance)
                 self.completed_quests.append(quest_id)
@@ -262,29 +308,36 @@ class PitcoinBot:
             else:
                 print_wait(f"Quest {title} belum bisa di-claim")
 
+        # Tandai sudah dicoba hari ini (baik sukses maupun gagal)
+        self.quests_attempted_today.add("done")
         return claimed_any
 
     def run_cycle(self) -> bool:
         print_sep()
         print_info(f"🔄 Siklus baru - {datetime.now().strftime('%H:%M:%S')}")
 
+        # Coba update user data, jika gagal, skip cycle ini
         if not self.update_user_data():
-            print_error("Gagal update data user, lanjut...")
+            print_error("Gagal update data user, akan coba lagi di siklus berikutnya")
+            # Jangan lanjut, langsung tunggu
+            return False
 
         print_info(f"💰 Balance: {self.balance:.4f} PIT")
         print_info(f"⚡ Speed: {self.active_th_s:.2f} TH/s")
 
-        # 1. Quests
+        # 1. Quests (hanya 1x per hari)
         self.check_and_claim_quests()
 
         # 2. Boost (Watch Ads) - jika belum aktif
         if not self.is_ad_boost_active:
             print_info("⚡ Boost tidak aktif, menonton iklan...")
-            self.boost_overclock()
-            print_wait("Jeda 5 detik setelah boost...")
-            time.sleep(5)
+            if self.boost_overclock():
+                print_wait("Jeda 5 detik setelah boost...")
+                time.sleep(5)
+        else:
+            print_info("⚡ Boost masih aktif, skip watch ads")
 
-        # 3. Claim Mining
+        # 3. Claim Mining (setelah boost)
         claimable = self.get_claimable_amount()
         if claimable > 0:
             self.claim_mining()
@@ -309,6 +362,7 @@ class PitcoinBot:
         print_sep()
         print_info("🚀 Bot siap berjalan!")
         print_info("📌 Claim setiap 10 menit, Boost otomatis")
+        print_info("📌 Quest hanya dicoba 1x per hari")
         print_wait("Tekan Ctrl+C untuk berhenti")
         print_sep()
 
@@ -317,7 +371,12 @@ class PitcoinBot:
                 cycle_count += 1
                 print_info(f"📊 Siklus #{cycle_count}")
 
-                self.run_cycle()
+                success = self.run_cycle()
+                if not success:
+                    # Jika siklus gagal (misal error), tunggu 30 detik lalu coba lagi
+                    print_wait("Siklus gagal, tunggu 30 detik sebelum retry...")
+                    countdown(30, "⏳ Cooldown error")
+                    continue
 
                 # Hitung waktu tunggu hingga 10 menit atau sampai boost habis
                 wait_time = 600  # 10 menit default
@@ -351,7 +410,7 @@ def print_header():
     print(f"""
 {BLUE}╔══════════════════════════════════════════════════════════════╗
 ║{WHITE}  Pitcoin Auto Claim & Boost Bot - {CYAN}Premium{WHITE}                    ║
-║{WHITE}  Auto Claim Mining, Boost, Quests                        ║
+║{WHITE}  Auto Claim Mining, Boost, Quests (1x/hari)              ║
 ╚══════════════════════════════════════════════════════════════╝{RESET}
 {BLUE}============================================================{RESET}
 {CYAN}👨‍💻 ScriptMaker : {WHITE}@JoshuaXSupport{RESET}
