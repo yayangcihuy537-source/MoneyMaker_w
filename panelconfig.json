@@ -189,8 +189,8 @@
           "runner": "python3"
         },
         "19": {
-          "label": "Coming Soon",
-          "file": "",
+          "label": "PitCoinMiner",
+          "file": "Pit.py",
           "runner": "python3"
         }
       }
