@@ -9,6 +9,7 @@ Pitcoin Auto Claim & Boost Bot - FIXED (Headers & JSON handling)
 
 ============================================================
 👨‍💻 ScriptMaker : @JoshuaXSupport
+📝 FIXED       : @bgiyannn
 📢 TG          : https://t.me/+f3QBLkR5D8k4YzNl
 ============================================================
 """
