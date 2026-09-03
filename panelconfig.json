@@ -34,13 +34,13 @@
           "runner": "python3"
         },
         "7": {
-          "label": "FomoEarn",
-          "file": "fomo.py",
-          "runner": "python3"
-        },
-        "8": {
           "label": "ClaimX",
           "file": "ClaimX.php",
+          "runner": "php"
+        },
+        "8": {
+          "label": "Coming Soon",
+          "file": "",
           "runner": "php"
         },
         "9": {
