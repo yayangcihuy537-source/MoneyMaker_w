@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Pitcoin Auto Claim & Boost Bot - V2
-- Auto Claim Mining SETIAP 10 MENIT (otomatis claim jika ada saldo)
-- Auto Boost (Watch Ads) setiap 10 menit (jika boost mati)
-- Auto Claim Quests (1x per hari)
-- Cukup paste init_data sekali, langsung jalan
+Pitcoin Auto Claim & Boost Bot - FIXED (Headers & JSON handling)
+- Auto Claim SETIAP 10 MENIT
+- Auto Boost (Watch Ads)
+- Auto Quests 1x/hari
+- Fix: hapus Accept-Encoding, unquote init_data, fallback JSON
 
 ============================================================
 👨‍💻 ScriptMaker : @JoshuaXSupport
@@ -72,19 +72,23 @@ def countdown(seconds, msg="⏳ Menunggu"):
     print(f"\r{msg} selesai!     ")
 
 # ============================================================
-# CLASS PITCOIN
+# CLASS PITCOIN (Fix headers & JSON handling)
 # ============================================================
 class Pitcoin:
     BASE_URL = "https://pitcoin.onrender.com"
 
     def __init__(self, init_data: str):
-        self.init_data = init_data
+        # Unquote init_data biar gak double-encoded
+        self.init_data = urllib.parse.unquote(init_data)
         self.session = requests.Session()
+        
+        # Headers tanpa Accept-Encoding biar requests handle sendiri
         self.session.headers.update({
             "User-Agent": "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.199 Mobile Safari/537.36 Telegram-Android/12.9.2 (Samsung SM-A556E; Android 16; SDK 36; HIGH)",
             "Accept": "*/*",
             "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Accept-Encoding": "gzip, deflate, br, zstd",
+            # HAPUS Accept-Encoding biar requests otomatis
+            # "Accept-Encoding": "gzip, deflate, br, zstd",  <-- dihapus
             "Origin": self.BASE_URL,
             "Referer": self.BASE_URL + "/app",
             "X-Requested-With": "org.telegram.messenger.web",
@@ -94,7 +98,7 @@ class Pitcoin:
             "Sec-Ch-Ua": '"Not=A?Brand";v="99", "Android WebView";v="151", "Chromium";v="151"',
             "Sec-Ch-Ua-Mobile": "?1",
             "Sec-Ch-Ua-Platform": '"Android"',
-            "X-Telegram-Init-Data": init_data,
+            "X-Telegram-Init-Data": self.init_data,
             "Content-Type": "application/json",
         })
 
@@ -104,15 +108,22 @@ class Pitcoin:
             try:
                 resp = self.session.request(method, url, json=json_data, timeout=30)
                 if resp.status_code != 200:
+                    # Coba baca text
                     return {"error": resp.status_code, "text": resp.text[:200]}
+                
+                # Coba parse JSON dengan fallback
                 try:
                     return resp.json()
-                except json.JSONDecodeError as e:
-                    print_wait(f"JSON decode error (attempt {attempt+1}/{retries}): {e}")
-                    if attempt < retries - 1:
-                        time.sleep(2)
-                        continue
-                    else:
+                except json.JSONDecodeError:
+                    # Jika gagal, coba decode manual (mungkin karena brotli)
+                    try:
+                        # Coba pakai text (requests sudah handle decompress otomatis)
+                        text = resp.text
+                        if text.startswith('{'):
+                            return json.loads(text)
+                        else:
+                            return {"error": "non_json", "text": text[:200]}
+                    except:
                         return {"error": "json_decode", "text": resp.text[:200]}
             except requests.exceptions.RequestException as e:
                 print_wait(f"Request error (attempt {attempt+1}/{retries}): {e}")
@@ -142,7 +153,9 @@ class Pitcoin:
 # FUNGSI BANTU
 # ============================================================
 def parse_init_data(init_data: str) -> Dict:
-    parsed = urllib.parse.parse_qs(init_data)
+    # Unquote dulu biar aman
+    decoded = urllib.parse.unquote(init_data)
+    parsed = urllib.parse.parse_qs(decoded)
     user_str = parsed.get("user", [""])[0]
     try:
         user_obj = json.loads(user_str)
@@ -181,7 +194,7 @@ class PitcoinBot:
     def update_user_data(self) -> bool:
         res = self.bot.get_user()
         if res.get("error"):
-            print_wait(f"Error get user: {res}")
+            print_wait(f"Error get user: {res.get('text', res)}")
             return False
 
         user = res.get("user", {})
@@ -193,7 +206,6 @@ class PitcoinBot:
         self.ad_boost_end_time = mining.get("adBoostTimeRemainingMs", 0)
         self.active_th_s = mining.get("activeTHs", 0.2)
         
-        # Update total claimed from pnlHistory
         pnl = user.get("pnlHistory", [])
         if pnl:
             today = date.today().isoformat()
@@ -204,14 +216,8 @@ class PitcoinBot:
         
         return True
 
-    def get_claimable_amount(self) -> float:
-        res = self.bot.get_user()
-        if res.get("error"):
-            return 0.0
-        return res.get("user", {}).get("accumulatedPIT", 0.0)
-
     def claim_mining(self) -> bool:
-        print_info("🔄 Claim mining...")
+        print_info("🔄 CLAIM MINING...")
         res = self.bot.claim_mine()
         if res.get("error"):
             print_error(f"Gagal claim: {res}")
@@ -222,14 +228,17 @@ class PitcoinBot:
             new_balance = res.get("newBalance", self.balance)
             self.balance = new_balance
             self.total_claimed_today += amount
-            print_success(f"✅ Claim +{amount:.4f} PIT")
+            print_success(f"✅ +{amount:.4f} PIT")
             print_ok(f"💰 Balance: {self.balance:.4f} PIT")
             print_ok(f"📊 Hari ini: +{self.total_claimed_today:.4f} PIT")
             return True
-        return False
+        else:
+            msg = res.get("message", "Unknown")
+            print_wait(f"⏳ {msg}")
+            return False
 
     def boost_overclock(self) -> bool:
-        print_info("📺 Watch Ads untuk Boost...")
+        print_info("📺 WATCH ADS BOOST...")
         res = self.bot.boost_overclock()
         if res.get("error"):
             print_error(f"Gagal boost: {res}")
@@ -310,7 +319,6 @@ class PitcoinBot:
 
         print_info(f"💰 Balance: {self.balance:.4f} PIT")
         print_info(f"⚡ Speed: {self.active_th_s:.2f} TH/s")
-        print_info(f"📊 Hari ini: +{self.total_claimed_today:.4f} PIT")
 
         # 1. Quests (1x per hari)
         self.check_and_claim_quests()
@@ -325,16 +333,9 @@ class PitcoinBot:
             remaining = ms_to_seconds(self.ad_boost_end_time)
             print_info(f"⚡ Boost aktif: {remaining//60}m {remaining%60}s tersisa")
 
-        # 3. CLAIM MINING (SETIAP SIKLUS)
-        print_info("⛏️ Cek saldo mining...")
-        claimable = self.get_claimable_amount()
-        if claimable > 0:
-            print_info(f"💎 Saldo siap claim: {claimable:.4f} PIT")
-            self.claim_mining()
-        else:
-            print_wait("⏳ Belum ada PIT yang bisa di-claim")
-            # Coba claim tetap (mungkin ada error)
-            # Tapi kalau memang 0, skip
+        # 3. CLAIM MINING
+        print_info("⛏️ CLAIM MINING...")
+        self.claim_mining()
 
         self.update_user_data()
         print_ok(f"💰 Balance akhir: {self.balance:.4f} PIT")
@@ -352,7 +353,7 @@ class PitcoinBot:
         print_ok(f"💰 Balance awal: {self.balance:.4f} PIT")
         print_ok(f"⚡ Speed: {self.active_th_s:.2f} TH/s")
         print_sep()
-        print_info("🚀 Bot running! Claim setiap 10 menit")
+        print_info("🚀 Bot running! Claim SETIAP 10 MENIT")
         print_info("📌 Boost otomatis jika mati")
         print_info("📌 Quest 1x per hari")
         print_wait("⏹️ Tekan Ctrl+C untuk berhenti")
@@ -369,12 +370,11 @@ class PitcoinBot:
                     countdown(30, "⏳ Cooldown error")
                     continue
 
-                # Hitung waktu tunggu (10 menit atau sampai boost habis)
-                wait_time = 600  # 10 menit default
+                wait_time = 600
                 if self.ad_boost_end_time > 0:
                     remaining_sec = ms_to_seconds(self.ad_boost_end_time)
                     if remaining_sec > 0 and remaining_sec < wait_time:
-                        wait_time = remaining_sec + 5  # +5 detik buffer
+                        wait_time = remaining_sec + 5
 
                 print_wait(f"⏳ Jeda {wait_time//60}m {wait_time%60}s...")
                 countdown(wait_time, "⏳ Menunggu")
