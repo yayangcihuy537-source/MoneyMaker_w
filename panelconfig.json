@@ -14,8 +14,8 @@
           "runner": "python3"
         },
         "3": {
-          "label": "LightQuest",
-          "file": "light.php",
+          "label": "ClaimX",
+          "file": "ClaimX.php",
           "runner": "php"
         },
         "4": {
@@ -34,8 +34,8 @@
           "runner": "python3"
         },
         "7": {
-          "label": "ClaimX",
-          "file": "ClaimX.php",
+          "label": "Coming Soon",
+          "file": "",
           "runner": "php"
         },
         "8": {
@@ -76,6 +76,21 @@
         "3": {
           "label": "AdCoins",
           "file": "ad.py",
+          "runner": "python3"
+        },
+        "4": {
+          "label": "LightQuest",
+          "file": "light.php",
+          "runner": "php"
+        },
+        "5": {
+          "label": "ComingSoon",
+          "file": "",
+          "runner": "python3"
+        },
+        "6": {
+          "label": "Coming Soon",
+          "file": "",
           "runner": "python3"
         }
       }
