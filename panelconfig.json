@@ -25,8 +25,8 @@
         },
         "5": {
           "label": "GainLtc",
-          "file": "GainLtc.php",
-          "runner": "php"
+          "file": "GainLtc.py",
+          "runner": "python3"
         },
         "6": {
           "label": "DogeMiner",
