@@ -4,32 +4,32 @@
       "name": "NonApikey",
       "items": {
         "1": {
-          "label": "TronBlow",
+          "label": "TronBlow 🟢",
           "file": "Tronblow.php",
           "runner": "php"
         },
         "2": {
-          "label": "luckywatch",
+          "label": "luckywatch 🟢",
           "file": "luckywatch.py",
           "runner": "python3"
         },
         "3": {
-          "label": "ClaimX",
+          "label": "ClaimX 🟢",
           "file": "ClaimX.php",
           "runner": "php"
         },
         "4": {
-          "label": "Skyfreecoins",
+          "label": "Skyfreecoins 🟡",
           "file": "sky.py",
           "runner": "python3"
         },
         "5": {
-          "label": "GainLtc",
+          "label": "GainLtc 🟡",
           "file": "GainLtc.php",
           "runner": "php"
         },
         "6": {
-          "label": "DogeMiner",
+          "label": "DogeMiner 🟢",
           "file": "Doge.py",
           "runner": "python3"
         },
@@ -54,27 +54,27 @@
       "name": "Apikey",
       "items": {
         "1": {
-          "label": "99faucetv2",
+          "label": "99faucetv2 🟢",
           "file": "99faucet.php",
           "runner": "php"
         },
         "2": {
-          "label": "CoinPayuFree",
+          "label": "CoinPayuFree 🟢",
           "file": "payu.py",
           "runner": "python3"
         },
         "3": {
-          "label": "AdCoins",
+          "label": "AdCoins 🟡",
           "file": "ad.py",
           "runner": "python3"
         },
         "4": {
-          "label": "LightQuest",
+          "label": "LightQuest 🟡",
           "file": "light.php",
           "runner": "php"
         },
         "5": {
-          "label": "Makeyoutask",
+          "label": "Makeyoutask 🟢",
           "file": "myt.php",
           "runner": "php"
         },
@@ -89,97 +89,97 @@
       "name": "Telegram",
       "items": {
         "1": {
-          "label": "Gdropappbot",
+          "label": "Gdropappbot 🟡",
           "file": "fruit.py",
           "runner": "python3"
         },
         "2": {
-          "label": "4In1 Gamerle Vipfaucet miniapp faucet",
+          "label": "4In1 Gamerle Vipfaucet miniapp faucet 🔴",
           "file": "4in1.py",
           "runner": "python3"
         },
         "3": {
-          "label": "CoinsZon",
+          "label": "CoinsZon 🔴",
           "file": "pepe.py",
           "runner": "python3"
         },
         "4": {
-          "label": "MiniGram X ListohiPay",
+          "label": "MiniGram X ListohiPay 🟡",
           "file": "mili.py",
           "runner": "python3"
         },
         "5": {
-          "label": "SpeedKick",
+          "label": "SpeedKick 🟢",
           "file": "speedkick.py",
           "runner": "python3"
         },
         "6": {
-          "label": "Bossdogearnbot",
+          "label": "Bossdogearnbot 🔴",
           "file": "bos.py",
           "runner": "python3"
-        },
+        }, 
         "7": {
-          "label": "CloudEarnBot",
+          "label": "CloudEarnBot 🟢",
           "file": "Cloud.py",
           "runner": "python3"
         },
         "8": {
-          "label": "Helix",
+          "label": "Helix 🟢",
           "file": "helix.py",
           "runner": "python3"
         },
         "9": {
-          "label": "NewTube",
+          "label": "NewTube 🟢",
           "file": "newtube.py",
           "runner": "python3"
         },
         "10": {
-          "label": "RedTube",
+          "label": "RedTube 🟢",
           "file": "Red.py",
           "runner": "python3"
         },
         "11": {
-          "label": "OpenEarnApp",
+          "label": "OpenEarnApp 🟡",
           "file": "OpenEarnApp.py",
           "runner": "python3"
         },
         "12": {
-          "label": "Faucet Btc",
+          "label": "Faucet Btc 🟡",
           "file": "Btc.php",
           "runner": "php"
         },
         "13": {
-          "label": "LtcMiner",
+          "label": "LtcMiner 🟡",
           "file": "LtcMiner.py",
           "runner": "python3"
         },
         "14": {
-          "label": "AuctionAstrabot",
+          "label": "AuctionAstrabot 🟢",
           "file": "AuctionAstra.py",
           "runner": "python3"
         },
         "15": {
-          "label": "ATFMiner",
+          "label": "ATFMiner 🟢",
           "file": "atf.py",
           "runner": "python3"
         },
         "16": {
-          "label": "GramAds2",
+          "label": "GramAds 🟢",
           "file": "Gramads.py",
           "runner": "python3"
         },
         "17": {
-          "label": "BabyDOGETapbot",
+          "label": "BabyDOGETapbot 🟢",
           "file": "baby.py",
           "runner": "python3"
         },
         "18": {
-          "label": "NotBux",
+          "label": "NotBux 🟢",
           "file": "notbux.py",
           "runner": "python3"
         },
         "19": {
-          "label": "PitCoinMiner",
+          "label": "PitCoinMiner 🟢",
           "file": "Pit.py",
           "runner": "python3"
         }
@@ -189,12 +189,12 @@
       "name": "Tools",
       "items": {
         "1": {
-          "label": "Get PHPSESSID",
+          "label": "Get PHPSESSID 🟢",
           "file": "cookie.py",
           "runner": "python3"
         },
         "2": {
-          "label": "Get Query_ID / Init data",
+          "label": "Get Query_ID / Init data 🟢",
           "file": "query.py",
           "runner": "python3"
         }
