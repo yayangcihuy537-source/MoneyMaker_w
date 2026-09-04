@@ -99,13 +99,13 @@
           "runner": "python3"
         },
         "3": {
-          "label": "CoinsZon 🔴",
+          "label": "Pepeflow X CloakAds X MiniGramX 🟢",
           "file": "pepe.py",
           "runner": "python3"
         },
         "4": {
-          "label": "MiniGram X ListohiPay 🟡",
-          "file": "mili.py",
+          "label": "PitCoinMiner 🟢",
+          "file": "Pit.py",
           "runner": "python3"
         },
         "5": {
@@ -179,8 +179,8 @@
           "runner": "python3"
         },
         "19": {
-          "label": "PitCoinMiner 🟢",
-          "file": "Pit.py",
+          "label": "Coming Soon",
+          "file": "",
           "runner": "python3"
         }
       }
