@@ -5,11 +5,11 @@ import os
 import sys
 import time
 import json
-import re
 import random
 import urllib.parse
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime
+from collections import deque
 
 # ============================================================
 # COLOR
@@ -41,7 +41,7 @@ BANNER = f"""
 ║  {Colors.HEADER}███████╗   ██║   ╚██████╗   ██║   ██║  ██║███████╗   ██║   ║
 ║  {Colors.HEADER}╚══════╝   ╚═╝    ╚═════╝   ╚═╝   ╚═╝  ╚═╝╚══════╝   ╚═╝   ║
 ║                                                                          ║
-║  {Colors.PINK}🔥 LTC MINER BOT   {Colors.CYAN}│ {Colors.GREEN}v2.2 {Colors.CYAN}│ {Colors.YELLOW}Telegram Mini App ║
+║  {Colors.PINK}🔥 LTC MINER BOT   {Colors.CYAN}│ {Colors.GREEN}v3.4 {Colors.CYAN}│ {Colors.YELLOW}Auto Cycle {Colors.PINK}5S→3P→2M{Colors.END} ║
 ║                                                                          ║
 ╚════════════════════════════════════════════════════════════════════════════╝{Colors.END}
 """
@@ -64,6 +64,16 @@ def print_box(title, lines, color=Colors.CYAN):
         print(f"{color}│{Colors.END} {line:<50} {color}│{Colors.END}")
     print(f"{color}╰{'─' * 52}╯{Colors.END}")
 
+def ad_progress(seconds=30, label="📺 Watching ad"):
+    for i in range(seconds, 0, -1):
+        bar_len = 20
+        filled = int((seconds - i) / seconds * bar_len)
+        bar = '█' * filled + '░' * (bar_len - filled)
+        sys.stdout.write(f"\r{Colors.GREEN}{label} [{bar}] {i}s left{Colors.END}")
+        sys.stdout.flush()
+        time.sleep(1)
+    print()
+
 # ============================================================
 # MAIN BOT
 # ============================================================
@@ -73,53 +83,26 @@ class LTCMinerBot:
         self.init_data = ""
         self.telegram_id = None
         self.username = None
-        self.balance = 0
+        self.balance = 0.0
         self.xp = 0
         self.level = 1
-        self.total_earned = 0
+        self.total_earned = 0.0
         self.daily_ad_count = 0
         self.daily_ad_limit = 10
         self.boost_active = False
-        self.running = False
-        self.ads_watched = 0
-        self.ads_claimed = 0
-        self.total_gain = 0
-        
-        self.logs = []
-        
+        self.mining_active = False
+        self.boost_expires = None
+
+        self.logs = deque(maxlen=8)
+        self.total_gain_session = 0.0
+        self.cycle_count = 0
+
         self.base_url = "https://supabase.ltcminer.xyz"
         self.api_url = f"{self.base_url}/functions/v1"
-        self.adsgram_base = "https://api.adsgram.ai"
-        
         self.token = self.load_token()
-        self.headers = self.build_headers()
-        
         self.session = requests.Session()
-        self.session.headers.update(self.headers)
-        
-        self.ads_headers = {
-            "cache-control": "max-age=0",
-            "x-color-scheme": "light",
-            "x-viewport-height": "680",
-            "x-is-fullscreen": "false",
-            "x-accelerometer": '{"x":-0.5359500050544739,"y":-6.933000564575195,"z":-7.120950222015381,"isStarted":false}',
-            "x-gyroscope": '{"x":0.30717501044273376,"y":1.7766374349594116,"z":-1.0481624603271484,"isStarted":false}',
-            "x-device-orientation": '{"absolute":false,"alpha":-2.1036267280578613,"beta":0.7557645440101624,"gamma":-0.0704130306839943,"isStarted":false}',
-            "sec-ch-ua": '"Not;A=Brand";v="8", "Chromium";v="150", "Android WebView";v="150"',
-            "sec-ch-ua-mobile": "?1",
-            "sec-ch-ua-platform": '"Android"',
-            "accept": "*/*",
-            "origin": "https://tgltcminer.vercel.app",
-            "x-requested-with": "org.telegram.messenger",
-            "sec-fetch-site": "cross-site",
-            "sec-fetch-mode": "cors",
-            "sec-fetch-dest": "empty",
-            "referer": "https://tgltcminer.vercel.app/",
-            "accept-encoding": "gzip, deflate, br, zstd",
-            "accept-language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-            "priority": "u=1, i"
-        }
-        
+        self.session.headers.update(self.build_headers())
+
         self.load_init_data()
         self.menu()
 
@@ -128,10 +111,6 @@ class LTCMinerBot:
             with open(TOKEN_FILE, 'r') as f:
                 return f.read().strip()
         return "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc4NjcxNzIwMCwiZXhwIjo0OTQyMzkwODAwLCJyb2xlIjoiYW5vbiJ9.sUtI3lKmtdBpXDW4StLp_wtdYzUPOZuGEZuMt2tnWZM"
-
-    def save_token(self, token):
-        with open(TOKEN_FILE, 'w') as f:
-            f.write(token)
 
     def build_headers(self):
         return {
@@ -145,6 +124,7 @@ class LTCMinerBot:
             "accept": "*/*"
         }
 
+    # ========== INIT DATA ==========
     def load_init_data(self):
         if os.path.exists(INIT_FILE):
             with open(INIT_FILE, 'r') as f:
@@ -169,422 +149,405 @@ class LTCMinerBot:
         except:
             pass
 
+    # ========== LOG & DASHBOARD ==========
     def add_log(self, icon, message, color=Colors.WHITE):
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.logs.append(f"{Colors.DIM}[{timestamp}]{Colors.END} {icon} {color}{message}{Colors.END}")
-        if len(self.logs) > 6:
-            self.logs.pop(0)
+        if len(self.logs) > 8:
+            self.logs.popleft()
 
     def show_status(self):
         clear_screen()
         print_banner()
+        mining_status = "🟢 ON" if self.mining_active else "🔴 OFF"
+        boost_status = "🟢 ON" if self.boost_active else "🔴 OFF"
         lines = [
             f"{Colors.GREEN}● SYSTEM{Colors.END}                 {Colors.GREEN}ONLINE{Colors.END}",
             f"{Colors.CYAN}◈ ENGINE{Colors.END}                 {Colors.GREEN}READY{Colors.END}",
             f"{Colors.PINK}◉ NETWORK{Colors.END}                {Colors.GREEN}ACTIVE{Colors.END}",
             f"{Colors.GREEN}💰 BALANCE{Colors.END}              {Colors.YELLOW}{self.balance:.8f} LTC{Colors.END}",
-            f"{Colors.PURPLE}📈 LEVEL{Colors.END}               {Colors.GREEN}{self.level}{Colors.END}",
+            f"{Colors.PURPLE}📈 LEVEL{Colors.END}               {Colors.GREEN}{self.level}{Colors.END} (XP: {self.xp})",
             f"{Colors.CYAN}📺 ADS TODAY{Colors.END}             {Colors.YELLOW}{self.daily_ad_count}/{self.daily_ad_limit}{Colors.END}",
+            f"{Colors.MAGENTA}⛏️ MINING{Colors.END}              {Colors.GREEN}{mining_status}{Colors.END}",
+            f"{Colors.PINK}🚀 BOOST{Colors.END}                 {Colors.GREEN}{boost_status}{Colors.END}",
+            f"{Colors.ORANGE}🔄 SIKLUS{Colors.END}               {Colors.WHITE}{self.cycle_count}{Colors.END}",
         ]
         if self.init_data:
             lines.append(f"{Colors.GREEN}◈ INIT DATA{Colors.END}            {Colors.GREEN}LOADED{Colors.END}")
             lines.append(f"{Colors.CYAN}👤 USER{Colors.END}                {Colors.WHITE}{self.username}{Colors.END}")
         else:
             lines.append(f"{Colors.RED}◈ INIT DATA{Colors.END}            {Colors.RED}EMPTY{Colors.END}")
-        
+
         print_box("LTC MINER BOT", lines, Colors.PINK)
         print()
-        
+
         print(f"{Colors.CYAN}╭{'─' * 52}╮{Colors.END}")
         print(f"{Colors.CYAN}│{Colors.END} {Colors.BOLD}{Colors.WHITE}{'L I V E   L O G':^50}{Colors.END} {Colors.CYAN}│{Colors.END}")
         print(f"{Colors.CYAN}├{'─' * 52}┤{Colors.END}")
-        for log in self.logs[-6:]:
+        for log in list(self.logs)[-8:]:
             print(f"{Colors.CYAN}│{Colors.END} {log:<50} {Colors.CYAN}│{Colors.END}")
         print(f"{Colors.CYAN}╰{'─' * 52}╯{Colors.END}")
 
-    # ==================== API CALLS ====================
-    
-    def call_api(self, action, data=None):
-        url = f"{self.api_url}/{action}"
+    # ========== API CALLS ==========
+    def _post(self, endpoint, data):
+        url = f"{self.base_url}{endpoint}"
         try:
-            response = self.session.post(url, json=data or {})
-            if response.status_code == 200:
-                return response.json()
+            resp = self.session.post(url, json=data, timeout=30)
+            if resp.status_code == 200:
+                return resp.json()
             return None
         except:
             return None
 
+    def _get(self, endpoint, params=None):
+        url = f"{self.base_url}{endpoint}"
+        try:
+            resp = self.session.get(url, params=params, timeout=30)
+            if resp.status_code == 200:
+                return resp.json()
+            return None
+        except:
+            return None
+
+    # ========== AUTH & USER ==========
     def login(self):
         if not self.init_data:
             return False
-        
         payload = {
             "action": "register_or_login",
             "telegram_id": self.telegram_id,
-            "username": self.username,
-            "first_name": self.username,
+            "username": self.username or "",
+            "first_name": self.username or "",
             "last_name": "",
             "language_code": "id",
             "ip_address": "36.71.173.183",
             "_init_data": self.init_data,
             "_ts": int(time.time() * 1000)
         }
-        
-        result = self.call_api("user-operations", payload)
+        result = self._post("/functions/v1/user-operations", payload)
         if result and result.get('success'):
             user = result.get('user', {})
-            self.balance = user.get('balance', 0)
+            self.balance = user.get('balance', 0.0)
             self.xp = user.get('xp', 0)
             self.level = user.get('level', 1)
-            self.total_earned = user.get('total_earned', 0)
+            self.total_earned = user.get('total_earned', 0.0)
             self.daily_ad_count = user.get('daily_ad_count', 0)
+            self.mining_active = user.get('mining_active', False)
             self.boost_active = user.get('boost_active', False)
+            self.boost_expires = user.get('boost_expires_at')
+            self.add_log("✅", "Login berhasil", Colors.GREEN)
             return True
-        return False
+        else:
+            self.add_log("❌", "Login gagal", Colors.RED)
+            return False
 
-    def do_boost(self):
+    def start_mining(self):
+        if self.mining_active:
+            return True
+        payload = {
+            "action": "start_mining",
+            "telegram_id": self.telegram_id,
+            "_init_data": self.init_data,
+            "_ts": int(time.time() * 1000)
+        }
+        result = self._post("/functions/v1/user-operations", payload)
+        if result and result.get('success'):
+            self.mining_active = True
+            self.add_log("⛏️", "Mining diaktifkan", Colors.GREEN)
+            return True
+        else:
+            self.add_log("❌", "Gagal start mining", Colors.RED)
+            return False
+
+    def activate_boost(self):
         if self.boost_active:
             return True
-        
         payload = {
             "action": "activate_boost",
             "telegram_id": self.telegram_id,
             "_init_data": self.init_data,
             "_ts": int(time.time() * 1000)
         }
-        
-        result = self.call_api("user-operations", payload)
+        result = self._post("/functions/v1/user-operations", payload)
         if result and result.get('success'):
             self.boost_active = True
+            self.add_log("🚀", "Boost diaktifkan", Colors.GREEN)
             return True
-        return False
+        else:
+            self.add_log("❌", "Gagal activate boost", Colors.RED)
+            return False
 
-    # ==================== FIX: SHORT AD ====================
-    
-    def _send_ad_reward(self):
-        """Trigger reward via user-operations dengan action ad_watch_reward"""
-        url = f"{self.api_url}/user-operations"
+    # ========== SHORT AD ==========
+    def watch_short_ad(self):
+        if self.daily_ad_count >= self.daily_ad_limit:
+            return False
+
+        # Progress 30 detik
+        ad_progress(30, "📺 Short ad")
+
         payload = {
             "action": "ad_watch_reward",
             "telegram_id": self.telegram_id,
             "_init_data": self.init_data,
             "_ts": int(time.time() * 1000)
         }
-        try:
-            response = self.session.post(url, json=payload)
-            if response.status_code == 200:
-                data = response.json()
-                if data.get('success'):
-                    # Update balance dari response user
-                    user = data.get('user', {})
-                    self.balance = user.get('balance', self.balance)
-                    self.xp = user.get('xp', self.xp)
-                    self.level = user.get('level', self.level)
-                    self.daily_ad_count = user.get('daily_ad_count', self.daily_ad_count)
-                    return True, data.get('reward', 0)
-            return False, 0
-        except:
-            return False, 0
+        result = self._post("/functions/v1/user-operations", payload)
+        if result and result.get('success'):
+            reward = result.get('reward', 0.0)
+            if reward > 0:
+                self.balance += reward
+                self.total_gain_session += reward
+                self.daily_ad_count += 1
+                print(f"\n{Colors.GREEN}💰 +{reward:.8f} LTC (Short){Colors.END}")
+                self.add_log(f"💰 +{reward:.8f} LTC", Colors.GREEN)
+                # Jeda 20 detik setelah nonton
+                self._cooldown(20, "⏳ Cooldown 20s")
+                return True
+        self.add_log("❌", "Short ad gagal", Colors.RED)
+        return False
 
-    def watch_short_ad(self):
-        """Nonton short ad + trigger reward via user-operations"""
-        if self.daily_ad_count >= self.daily_ad_limit:
-            return False
-        
-        print(f"\n{Colors.PINK}📺 Iklan Pendek ({self.daily_ad_count+1}/{self.daily_ad_limit}){Colors.END}")
-        
-        # Countdown 15-25 detik
-        duration = random.randint(15, 25)
-        for i in range(duration, 0, -1):
-            percent = int(((duration - i) / duration) * 100)
-            bar = f"{Colors.GREEN}{'█' * int(percent/4)}{Colors.DIM}{'░' * (25 - int(percent/4))}{Colors.END}"
-            print(f"\r   {Colors.CYAN}⏱️ {i:2d} detik tersisa {Colors.END}{bar} {percent}%", end="")
-            time.sleep(1)
-        print()
-        
-        # Trigger reward via user-operations
-        success, reward = self._send_ad_reward()
-        
-        if success and reward > 0:
-            self.daily_ad_count += 1
-            self.ads_watched += 1
-            self.total_gain += reward
-            print(f"   {Colors.GREEN}💰 +{reward:.8f} LTC (Balance: {self.balance:.8f}){Colors.END}")
-            return True
-        else:
-            print(f"   {Colors.RED}❌ Gagal claim reward{Colors.END}")
-            # Refresh balance anyway
-            self.login()
-            return False
-
-    # ==================== POP-UP AD ====================
-    
-    def start_pop_ad(self):
-        url = f"{self.api_url}/pop-ad-start"
+    # ========== POP AD ==========
+    def pop_ad_start(self):
         payload = {
             "telegram_id": self.telegram_id,
             "_init_data": self.init_data,
             "_ts": int(time.time() * 1000)
         }
-        try:
-            response = self.session.post(url, json=payload)
-            if response.status_code == 200:
-                data = response.json()
-                if data.get('ok'):
-                    return data.get('session_id')
-                elif data.get('reason') == 'cooldown':
-                    wait = data.get('wait_seconds', 10)
-                    print(f"   {Colors.YELLOW}⏳ Cooldown {wait}s{Colors.END}")
-                    time.sleep(wait)
-                    return self.start_pop_ad()
-            return None
-        except:
-            return None
+        result = self._post("/functions/v1/pop-ad-start", payload)
+        if result and result.get('ok'):
+            return result.get('session_id')
+        return None
 
-    def claim_pop_ad(self, session_id):
-        url = f"{self.api_url}/pop-ad-claim"
-        elapsed_ms = random.randint(15000, 25000)
+    def pop_ad_claim(self, session_id):
         payload = {
             "telegram_id": self.telegram_id,
             "session_id": session_id,
-            "blur_total_ms": 0,
-            "elapsed_ms": elapsed_ms,
+            "blur_total_ms": random.randint(2000, 8000),
+            "elapsed_ms": random.randint(25000, 35000),
             "ad_done": True,
             "_init_data": self.init_data,
             "_ts": int(time.time() * 1000)
         }
-        try:
-            response = self.session.post(url, json=payload)
-            if response.status_code == 200:
-                data = response.json()
-                if data.get('ok'):
-                    reward = data.get('reward', 0)
-                    self.balance += reward
-                    self.total_gain += reward
-                    return reward
-            return 0
-        except:
-            return 0
+        result = self._post("/functions/v1/pop-ad-claim", payload)
+        if result and result.get('ok'):
+            reward = result.get('reward', 0.0)
+            if reward > 0:
+                self.balance += reward
+                self.total_gain_session += reward
+                self.daily_ad_count += 1
+                return reward
+        return 0
 
     def watch_pop_ad(self):
-        """Nonton Pop-up + claim + refresh balance"""
         if self.daily_ad_count >= self.daily_ad_limit:
             return False
-        
-        print(f"\n{Colors.PINK}📺 Pop-up ({self.daily_ad_count+1}/{self.daily_ad_limit}){Colors.END}")
-        
-        # Start session
-        session_id = self.start_pop_ad()
+        session_id = self.pop_ad_start()
         if not session_id:
             return False
-        
-        # Countdown 20-30 detik
-        duration = random.randint(20, 30)
-        for i in range(duration, 0, -1):
-            percent = int(((duration - i) / duration) * 100)
-            bar = f"{Colors.GREEN}{'█' * int(percent/4)}{Colors.DIM}{'░' * (25 - int(percent/4))}{Colors.END}"
-            print(f"\r   {Colors.CYAN}⏱️ {i:2d} detik tersisa {Colors.END}{bar} {percent}%", end="")
-            time.sleep(1)
-        print()
-        
-        # Claim reward
-        reward = self.claim_pop_ad(session_id)
+        ad_progress(30, "📺 Pop ad")
+        reward = self.pop_ad_claim(session_id)
         if reward > 0:
-            self.daily_ad_count += 1
-            self.ads_watched += 1
-            print(f"   {Colors.GREEN}💰 +{reward:.8f} LTC (Balance: {self.balance:.8f}){Colors.END}")
+            print(f"\n{Colors.PURPLE}💰 +{reward:.8f} LTC (Pop){Colors.END}")
+            self.add_log(f"💰 +{reward:.8f} LTC", Colors.GREEN)
+            self._cooldown(20, "⏳ Cooldown 20s")
             return True
         else:
-            print(f"   {Colors.RED}❌ Gagal claim reward{Colors.END}")
+            self.add_log("❌", "Pop claim gagal", Colors.RED)
             return False
 
-    # ==================== MEGA POP-UP ====================
-    
-    def start_mega_pop_ad(self):
-        url = f"{self.api_url}/mega-pop-ad-start"
+    # ========== MEGA POP AD ==========
+    def mega_pop_ad_start(self):
         payload = {
             "telegram_id": self.telegram_id,
             "_init_data": self.init_data,
             "_ts": int(time.time() * 1000)
         }
-        try:
-            response = self.session.post(url, json=payload)
-            if response.status_code == 200:
-                data = response.json()
-                if data.get('ok'):
-                    return data.get('session_id')
-                elif data.get('reason') == 'cooldown':
-                    wait = data.get('wait_seconds', 10)
-                    print(f"   {Colors.YELLOW}⏳ Cooldown {wait}s{Colors.END}")
-                    time.sleep(wait)
-                    return self.start_mega_pop_ad()
-            return None
-        except:
-            return None
+        result = self._post("/functions/v1/mega-pop-ad-start", payload)
+        if result and result.get('ok'):
+            return result.get('session_id')
+        return None
 
-    def claim_mega_pop_ad(self, session_id):
-        url = f"{self.api_url}/mega-pop-ad-claim"
-        blur_ms = random.randint(20000, 35000)
-        elapsed_ms = blur_ms + random.randint(1000, 5000)
+    def mega_pop_ad_claim(self, session_id):
         payload = {
             "telegram_id": self.telegram_id,
             "session_id": session_id,
-            "blur_total_ms": blur_ms,
-            "elapsed_ms": elapsed_ms,
+            "blur_total_ms": random.randint(3000, 10000),
+            "elapsed_ms": random.randint(25000, 40000),
             "ad_done": True,
             "_init_data": self.init_data,
             "_ts": int(time.time() * 1000)
         }
-        try:
-            response = self.session.post(url, json=payload)
-            if response.status_code == 200:
-                data = response.json()
-                if data.get('ok'):
-                    reward = data.get('reward', 0)
-                    self.balance += reward
-                    self.total_gain += reward
-                    return reward
-            return 0
-        except:
-            return 0
+        result = self._post("/functions/v1/mega-pop-ad-claim", payload)
+        if result and result.get('ok'):
+            reward = result.get('reward', 0.0)
+            if reward > 0:
+                self.balance += reward
+                self.total_gain_session += reward
+                self.daily_ad_count += 1
+                return reward
+        return 0
 
     def watch_mega_pop_ad(self):
-        """Nonton Mega Pop-up + claim + refresh balance"""
         if self.daily_ad_count >= self.daily_ad_limit:
             return False
-        
-        print(f"\n{Colors.PURPLE}⭐ Mega Pop-up ({self.daily_ad_count+1}/{self.daily_ad_limit}){Colors.END}")
-        
-        # Start session
-        session_id = self.start_mega_pop_ad()
+        session_id = self.mega_pop_ad_start()
         if not session_id:
             return False
-        
-        # Countdown 25-40 detik
-        duration = random.randint(25, 40)
-        for i in range(duration, 0, -1):
-            percent = int(((duration - i) / duration) * 100)
-            bar = f"{Colors.GREEN}{'█' * int(percent/4)}{Colors.DIM}{'░' * (25 - int(percent/4))}{Colors.END}"
-            print(f"\r   {Colors.CYAN}⏱️ {i:2d} detik tersisa {Colors.END}{bar} {percent}%", end="")
-            time.sleep(1)
-        print()
-        
-        # Claim reward
-        reward = self.claim_mega_pop_ad(session_id)
+        ad_progress(30, "📺 Mega Pop")
+        reward = self.mega_pop_ad_claim(session_id)
         if reward > 0:
-            self.daily_ad_count += 1
-            self.ads_watched += 1
-            print(f"   {Colors.PURPLE}💰 +{reward:.8f} LTC (Balance: {self.balance:.8f}){Colors.END}")
+            print(f"\n{Colors.PINK}💰 +{reward:.8f} LTC (Mega){Colors.END}")
+            self.add_log(f"💰 +{reward:.8f} LTC", Colors.GREEN)
+            self._cooldown(20, "⏳ Cooldown 20s")
             return True
         else:
-            print(f"   {Colors.RED}❌ Gagal claim reward{Colors.END}")
+            self.add_log("❌", "Mega claim gagal", Colors.RED)
             return False
 
+    # ========== COOLDOWN HELPER ==========
+    def _cooldown(self, seconds, label="⏳ Cooldown"):
+        for i in range(seconds, 0, -1):
+            sys.stdout.write(f"\r{Colors.YELLOW}{label} {i}s left{Colors.END}")
+            sys.stdout.flush()
+            time.sleep(1)
+        print()  # newline
+
+    # ========== DAILY TASK ==========
+    def claim_daily_task(self):
+        payload = {
+            "action": "claim_daily_ad_task",
+            "telegram_id": self.telegram_id,
+            "task_type": "watch_3",
+            "_init_data": self.init_data,
+            "_ts": int(time.time() * 1000)
+        }
+        result = self._post("/functions/v1/user-operations", payload)
+        if result and result.get('success'):
+            self.add_log("✅", "Daily task claimed", Colors.GREEN)
+            return True
+        return False
+
+    # ========== CYCLE ==========
     def run_cycle(self):
-        """Satu siklus auto claim"""
-        if not self.login():
-            print(f"{Colors.RED}❌ Login gagal!{Colors.END}")
-            return False
-        
-        self.do_boost()
-        
-        # Urutan iklan: short → pop → mega
-        ads = [
-            ("short", 5),
-            ("pop", 3),
-            ("mega", 2),
-        ]
-        
-        total_success = 0
-        for ad_type, count in ads:
-            for i in range(count):
-                if self.daily_ad_count >= self.daily_ad_limit:
-                    break
-                if ad_type == "short":
-                    if self.watch_short_ad():
-                        total_success += 1
-                elif ad_type == "pop":
-                    if self.watch_pop_ad():
-                        total_success += 1
-                elif ad_type == "mega":
-                    if self.watch_mega_pop_ad():
-                        total_success += 1
-                time.sleep(2)
-        
-        return total_success > 0
+        self.cycle_count += 1
+        print(f"\n{Colors.CYAN}{'═' * 50}{Colors.END}")
+        print(f"{Colors.CYAN}🔄 SIKLUS #{self.cycle_count}{Colors.END}")
+        print(f"{Colors.CYAN}{'─' * 50}{Colors.END}")
 
-    def start_all(self):
-        """Main loop auto claim"""
-        if not self.init_data:
-            print(f"{Colors.RED}❌ InitData kosong! Set dulu menu [2]{Colors.END}")
-            return
-        
-        self.ads_watched = 0
-        self.total_gain = 0
-        cycle = 0
-        
-        print(f"\n{Colors.GREEN}{Colors.BOLD}🚀 START AUTO CLAIM{Colors.END}")
-        print(f"{Colors.CYAN}{'═' * 50}{Colors.END}")
-        
-        while True:
-            cycle += 1
-            print(f"\n{Colors.CYAN}🔄 SIKLUS #{cycle}{Colors.END}")
-            print(f"{Colors.DIM}{'─' * 50}{Colors.END}")
-            
-            self.run_cycle()
-            
+        # Short 5x
+        for i in range(5):
             if self.daily_ad_count >= self.daily_ad_limit:
-                print(f"\n{Colors.YELLOW}⏹️ Kuota iklan habis! ({self.daily_ad_count}/{self.daily_ad_limit}){Colors.END}")
-                print(f"{Colors.CYAN}⏳ Lanjut besok...{Colors.END}")
-                break
-            
-            wait = 10 * 60
+                print(f"\n{Colors.YELLOW}⏹️ Kuota harian habis (limit {self.daily_ad_limit}){Colors.END}")
+                return False
+            print(f"\n{Colors.CYAN}📺 Short #{i+1}/5{Colors.END}")
+            if not self.watch_short_ad():
+                time.sleep(2)
+            # jeda sudah di dalam watch_short_ad
+
+        # Pop 3x
+        for i in range(3):
+            if self.daily_ad_count >= self.daily_ad_limit:
+                print(f"\n{Colors.YELLOW}⏹️ Kuota harian habis{Colors.END}")
+                return False
+            print(f"\n{Colors.PURPLE}📺 Pop #{i+1}/3{Colors.END}")
+            if not self.watch_pop_ad():
+                time.sleep(2)
+
+        # Mega 2x
+        for i in range(2):
+            if self.daily_ad_count >= self.daily_ad_limit:
+                print(f"\n{Colors.YELLOW}⏹️ Kuota harian habis{Colors.END}")
+                return False
+            print(f"\n{Colors.PINK}📺 Mega #{i+1}/2{Colors.END}")
+            if not self.watch_mega_pop_ad():
+                time.sleep(2)
+
+        # Claim daily task (opsional)
+        self.claim_daily_task()
+
+        print(f"\n{Colors.GREEN}✅ Siklus #{self.cycle_count} selesai!{Colors.END}")
+        print(f"{Colors.CYAN}💰 Gain siklus ini: {self.total_gain_session:.8f} LTC{Colors.END}")
+        print(f"{Colors.CYAN}💰 Balance: {self.balance:.8f} LTC{Colors.END}")
+        return True
+
+    def main_loop(self):
+        if not self.init_data:
+            self.add_log("❌", "InitData kosong! Set dulu.", Colors.RED)
+            return
+
+        self.add_log("🚀", "Memulai LTC Miner Auto Cycle", Colors.CYAN)
+        if not self.login():
+            return
+
+        if not self.mining_active:
+            self.start_mining()
+        else:
+            self.add_log("⛏️", "Mining sudah aktif", Colors.CYAN)
+
+        if not self.boost_active:
+            self.activate_boost()
+        else:
+            self.add_log("🚀", "Boost sudah aktif", Colors.CYAN)
+
+        while True:
+            if self.daily_ad_count >= self.daily_ad_limit:
+                print(f"\n{Colors.YELLOW}⏹️ Kuota harian habis! ({self.daily_ad_count}/{self.daily_ad_limit}){Colors.END}")
+                print(f"{Colors.CYAN}⏳ Menunggu 10 menit untuk reset...{Colors.END}")
+                for _ in range(10 * 60):
+                    time.sleep(1)
+                    if _ % 30 == 0:
+                        rem = 10 * 60 - _
+                        print(f"\r   {Colors.CYAN}⏱️ {rem//60}m {rem%60}s tersisa{Colors.END}", end="")
+                print()
+                self.daily_ad_count = 0
+                self.login()
+                continue
+
+            if not self.run_cycle():
+                time.sleep(10)
+                continue
+
+            # Tunggu 10 menit sebelum siklus berikutnya
             print(f"\n{Colors.YELLOW}⏳ Menunggu 10 menit...{Colors.END}")
-            for _ in range(wait):
+            for _ in range(10 * 60):
                 time.sleep(1)
                 if _ % 30 == 0:
-                    rem = wait - _
+                    rem = 10 * 60 - _
                     print(f"\r   {Colors.CYAN}⏱️ {rem//60}m {rem%60}s tersisa{Colors.END}", end="")
             print()
-        
-        print(f"\n{Colors.GREEN}{Colors.BOLD}✅ SELESAI!{Colors.END}")
-        print(f"{Colors.CYAN}📊 Total ads ditonton: {self.ads_watched}{Colors.END}")
-        print(f"{Colors.YELLOW}💰 Total gain: {self.total_gain:.8f} LTC{Colors.END}")
-        print(f"{Colors.YELLOW}💰 Balance akhir: {self.balance:.8f} LTC{Colors.END}")
-        print(f"{Colors.CYAN}{'═' * 50}{Colors.END}")
 
+    def start_all(self):
+        self.main_loop()
+        input(f"\n{Colors.CYAN}Press Enter to continue...{Colors.END}")
+
+    # ========== SET INIT DATA ==========
     def set_init_data(self):
         print(f"\n{Colors.CYAN}{Colors.BOLD}📝 MASUKKAN TELEGRAM INIT DATA{Colors.END}")
         print(f"{Colors.YELLOW}(copy dari network log atau WebView){Colors.END}")
         print(f"{Colors.DIM}{'─' * 50}{Colors.END}")
         new_data = input(f"{Colors.CYAN}➜ {Colors.END}").strip()
-        
         if not new_data:
             print(f"{Colors.RED}❌ InitData tidak boleh kosong!{Colors.END}")
             return
-        
         self.save_init_data(new_data)
         print(f"{Colors.GREEN}✅ InitData saved!{Colors.END}")
 
+    # ========== MENU ==========
     def menu(self):
         while True:
             self.show_status()
-            
             print(f"\n{Colors.CYAN}╭{'─' * 52}╮{Colors.END}")
-            print(f"{Colors.CYAN}│{Colors.END} {Colors.BOLD}{Colors.GREEN}[1]{Colors.END} {Colors.WHITE}Start Auto Claim{Colors.END}                        {Colors.CYAN}│{Colors.END}")
+            print(f"{Colors.CYAN}│{Colors.END} {Colors.BOLD}{Colors.GREEN}[1]{Colors.END} {Colors.WHITE}Start Auto Cycle (5S→3P→2M){Colors.END}     {Colors.CYAN}│{Colors.END}")
             print(f"{Colors.CYAN}│{Colors.END} {Colors.BOLD}{Colors.YELLOW}[2]{Colors.END} {Colors.WHITE}Set InitData{Colors.END}                             {Colors.CYAN}│{Colors.END}")
             print(f"{Colors.CYAN}│{Colors.END} {Colors.BOLD}{Colors.RED}[0]{Colors.END} {Colors.WHITE}Exit{Colors.END}                                      {Colors.CYAN}│{Colors.END}")
             print(f"{Colors.CYAN}╰{'─' * 52}╯{Colors.END}")
             print()
-            
             choice = input(f"{Colors.CYAN}  Select option → {Colors.END}").strip()
-            
             if choice == "0":
                 print(f"\n{Colors.GREEN}👋 Goodbye!{Colors.END}")
                 sys.exit(0)
             elif choice == "1":
                 self.start_all()
-                input(f"\n{Colors.CYAN}Press Enter to continue...{Colors.END}")
             elif choice == "2":
                 self.set_init_data()
                 input(f"\n{Colors.CYAN}Press Enter to continue...{Colors.END}")
