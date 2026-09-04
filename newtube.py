@@ -54,8 +54,8 @@ MENU = f"""
 # ============================================================
 CONFIG_FILE = "newtube_config.json"
 BASE_URL = "https://newtube-ton.vercel.app"
-# Network yang valid (dari observasi)
-VALID_NETWORKS = ["adsgramDaily", "adsgramSpecial", "monetag", "giga"]
+# Network yang valid (dari observasi) – tambah 'usl'
+VALID_NETWORKS = ["adsgramDaily", "adsgramSpecial", "monetag", "giga", "usl"]  # + usl
 MIN_DURATION = 18
 MAX_DURATION = 21
 
