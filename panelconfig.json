@@ -144,9 +144,9 @@
           "runner": "python3"
         },
         "12": {
-          "label": "Faucet Btc 🔴",
-          "file": "Btc.php",
-          "runner": "php"
+          "label": "DataMiner 🟢",
+          "file": "data.py",
+          "runner": "python3"
         },
         "13": {
           "label": "LtcMiner 🟢",
