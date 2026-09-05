@@ -1,440 +1,322 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Pitcoin Auto Claim & Boost Bot - FIXED (Headers & JSON handling)
-- Auto Claim SETIAP 10 MENIT
-- Auto Boost (Watch Ads)
-- Auto Quests 1x/hari
-- Fix: hapus Accept-Encoding, unquote init_data, fallback JSON
 
-============================================================
-👨‍💻 ScriptMaker : @JoshuaXSupport
-📝 FIXED       : @bgiyannn
-📢 TG          : https://t.me/+f3QBLkR5D8k4YzNl
-============================================================
+"""
+PITCoinDrop Auto Bot
+- Daily quest claim
+- Boost overclock setiap 10 menit
+- Claim mining setiap 10 menit
+- Watch ad boost (hanya jika boost belum aktif)
+- Portable untuk Termux/Windows/Linux
 """
 
-import requests
-import json
+import sys
+import os
 import time
-import urllib.parse
-from datetime import datetime, date
-from typing import Dict, Optional, Set
+import json
+from datetime import datetime
 
-# ============================================================
-# WARNA ANSI
-# ============================================================
-RESET = "\033[0m"
-BOLD = "\033[1m"
-RED = "\033[91m"
-GREEN = "\033[92m"
-YELLOW = "\033[93m"
-BLUE = "\033[94m"
-CYAN = "\033[96m"
-WHITE = "\033[97m"
-GRAY = "\033[90m"
+# ============ DEPENDENCY CHECK ============
+try:
+    import requests
+except ImportError:
+    print("❌ Module 'requests' belum terinstall.")
+    print("   Install: pip install requests")
+    sys.exit(1)
 
-def pprint(msg, color=GREEN):
-    print(f"{color}{msg}{RESET}")
+try:
+    from colorama import init, Fore, Style
+    init(autoreset=True)
+except ImportError:
+    class DummyFore:
+        BLACK = RED = GREEN = YELLOW = BLUE = MAGENTA = CYAN = WHITE = RESET = ''
+        LIGHTBLACK_EX = LIGHTRED_EX = LIGHTGREEN_EX = LIGHTYELLOW_EX = ''
+        LIGHTBLUE_EX = LIGHTMAGENTA_EX = LIGHTCYAN_EX = LIGHTWHITE_EX = ''
+    Fore = DummyFore()
+    Style = type('Style', (), {'BRIGHT': '', 'RESET_ALL': ''})()
 
-def print_sep():
-    print(f"{GRAY}{'='*60}{RESET}")
+# ============ KONFIGURASI ============
+BASE_URL = "https://api.pitcoindrop.com"
+INTERVAL_BOOST = 600          # 10 menit
+DELAY_AFTER_AD = 30           # jeda 30 detik setelah watch ad
+REQUEST_TIMEOUT = 15
 
-def print_info(msg):
-    print(f"{BLUE}🚀 [INFO]{RESET} {msg}")
+BASE_HEADERS = {
+    "host": "api.pitcoindrop.com",
+    "sec-ch-ua-platform": "Android",
+    "user-agent": "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.199 Mobile Safari/537.36",
+    "sec-ch-ua": '"Not=A?Brand";v="99", "Android WebView";v="151", "Chromium";v="151"',
+    "content-type": "application/json",
+    "sec-ch-ua-mobile": "?1",
+    "accept": "*/*",
+    "origin": "https://play.pitcoindrop.com",
+    "x-requested-with": "org.telegram.messenger.web",
+    "sec-fetch-site": "same-site",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-dest": "empty",
+    "referer": "https://play.pitcoindrop.com/",
+    "accept-language": "id,id-ID;q=0.9,en-US;q=0.8,en;q=0.7"
+}
+# ======================================
 
-def print_ok(msg):
-    print(f"{GREEN}✅ [ OK ]{RESET} {msg}")
+def clear_screen():
+    os.system('cls' if os.name == 'nt' else 'clear')
 
-def print_wait(msg):
-    print(f"{YELLOW}⏳ [WAIT]{RESET} {msg}")
+def print_banner():
+    banner = f"""
+{Fore.CYAN}{'='*40}
+{Fore.YELLOW}{Style.BRIGHT}         🚀 PITCOINDROP BOT 🚀
+{Fore.CYAN}{'='*40}
+{Fore.GREEN}TG          : {Fore.LIGHTWHITE_EX}https://t.me/pitcoin_official
+{Fore.GREEN}SCRIPTMAKER : {Fore.LIGHTWHITE_EX}DataMiner
+{Fore.CYAN}{'='*40}{Style.RESET_ALL}
+"""
+    print(banner)
 
-def print_error(msg):
-    print(f"{RED}❌ [ERR ]{RESET} {msg}")
-
-def print_success(msg):
-    print(f"{GREEN}💰 [REWARD]{RESET} {msg}")
-
-def print_quest_info(msg):
-    print(f"{CYAN}📋 [QUEST]{RESET} {msg}")
-
-def countdown(seconds, msg="⏳ Menunggu"):
-    while seconds > 0:
-        hours = seconds // 3600
-        minutes = (seconds % 3600) // 60
-        secs = seconds % 60
-        if hours > 0:
-            time_str = f"{hours:02d}:{minutes:02d}:{secs:02d}"
-        else:
-            time_str = f"{minutes:02d}:{secs:02d}"
-        print(f"\r{msg} {time_str}   ", end="", flush=True)
-        time.sleep(1)
-        seconds -= 1
-    print(f"\r{msg} selesai!     ")
-
-# ============================================================
-# CLASS PITCOIN (Fix headers & JSON handling)
-# ============================================================
-class Pitcoin:
-    BASE_URL = "https://pitcoin.onrender.com"
-
-    def __init__(self, init_data: str):
-        # Unquote init_data biar gak double-encoded
-        self.init_data = urllib.parse.unquote(init_data)
-        self.session = requests.Session()
-        
-        # Headers tanpa Accept-Encoding biar requests handle sendiri
-        self.session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.199 Mobile Safari/537.36 Telegram-Android/12.9.2 (Samsung SM-A556E; Android 16; SDK 36; HIGH)",
-            "Accept": "*/*",
-            "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-            # HAPUS Accept-Encoding biar requests otomatis
-            # "Accept-Encoding": "gzip, deflate, br, zstd",  <-- dihapus
-            "Origin": self.BASE_URL,
-            "Referer": self.BASE_URL + "/app",
-            "X-Requested-With": "org.telegram.messenger.web",
-            "Sec-Fetch-Site": "same-origin",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Dest": "empty",
-            "Sec-Ch-Ua": '"Not=A?Brand";v="99", "Android WebView";v="151", "Chromium";v="151"',
-            "Sec-Ch-Ua-Mobile": "?1",
-            "Sec-Ch-Ua-Platform": '"Android"',
-            "X-Telegram-Init-Data": self.init_data,
-            "Content-Type": "application/json",
-        })
-
-    def _request(self, method: str, endpoint: str, json_data: Optional[Dict] = None, retries: int = 3) -> Dict:
-        url = self.BASE_URL + endpoint
-        for attempt in range(retries):
-            try:
-                resp = self.session.request(method, url, json=json_data, timeout=30)
-                if resp.status_code != 200:
-                    # Coba baca text
-                    return {"error": resp.status_code, "text": resp.text[:200]}
-                
-                # Coba parse JSON dengan fallback
-                try:
-                    return resp.json()
-                except json.JSONDecodeError:
-                    # Jika gagal, coba decode manual (mungkin karena brotli)
-                    try:
-                        # Coba pakai text (requests sudah handle decompress otomatis)
-                        text = resp.text
-                        if text.startswith('{'):
-                            return json.loads(text)
-                        else:
-                            return {"error": "non_json", "text": text[:200]}
-                    except:
-                        return {"error": "json_decode", "text": resp.text[:200]}
-            except requests.exceptions.RequestException as e:
-                print_wait(f"Request error (attempt {attempt+1}/{retries}): {e}")
-                if attempt < retries - 1:
-                    time.sleep(3)
-                    continue
-                else:
-                    return {"error": "exception", "text": str(e)}
-        return {"error": "max_retries", "text": "Failed after multiple retries"}
-
-    def get_user(self) -> Dict:
-        return self._request("GET", "/api/user")
-
-    def claim_mine(self) -> Dict:
-        return self._request("POST", "/api/mine/claim")
-
-    def boost_overclock(self) -> Dict:
-        return self._request("POST", "/api/boost/overclock")
-
-    def complete_quest(self, quest_id: str) -> Dict:
-        return self._request("POST", "/api/quests/complete", json_data={"questId": quest_id})
-
-    def get_quests(self) -> Dict:
-        return self._request("GET", "/api/quests")
-
-# ============================================================
-# FUNGSI BANTU
-# ============================================================
-def parse_init_data(init_data: str) -> Dict:
-    # Unquote dulu biar aman
-    decoded = urllib.parse.unquote(init_data)
-    parsed = urllib.parse.parse_qs(decoded)
-    user_str = parsed.get("user", [""])[0]
-    try:
-        user_obj = json.loads(user_str)
-    except:
-        user_obj = {}
-    return {
-        "tg_id": str(user_obj.get("id", "")),
-        "username": user_obj.get("username", ""),
-        "full_name": f"{user_obj.get('first_name', '')} {user_obj.get('last_name', '')}".strip()
-    }
-
-def ms_to_seconds(ms: int) -> int:
-    return ms // 1000
-
-# ============================================================
-# MAIN BOT
-# ============================================================
-class PitcoinBot:
-    def __init__(self, init_data: str):
-        self.init_data = init_data
-        self.bot = Pitcoin(init_data)
-        self.user_info = parse_init_data(init_data)
-        self.tg_id = self.user_info["tg_id"]
-        self.username = self.user_info["username"]
-        self.full_name = self.user_info["full_name"] or self.username
-
-        self.balance = 0.0
-        self.ad_boost_end_time = 0
-        self.completed_quests = []
-        self.is_ad_boost_active = False
-        self.active_th_s = 0.2
-        self.quests_attempted_today: Set[str] = set()
-        self.last_quest_date: str = ""
-        self.total_claimed_today = 0.0
-
-    def update_user_data(self) -> bool:
-        res = self.bot.get_user()
-        if res.get("error"):
-            print_wait(f"Error get user: {res.get('text', res)}")
-            return False
-
-        user = res.get("user", {})
-        mining = res.get("miningState", {})
-
-        self.balance = user.get("claimedPITBalance", 0.0)
-        self.completed_quests = user.get("completedQuests", [])
-        self.is_ad_boost_active = mining.get("isAdBoostActive", False)
-        self.ad_boost_end_time = mining.get("adBoostTimeRemainingMs", 0)
-        self.active_th_s = mining.get("activeTHs", 0.2)
-        
-        pnl = user.get("pnlHistory", [])
-        if pnl:
-            today = date.today().isoformat()
-            for entry in pnl:
-                if entry.get("date") == today:
-                    self.total_claimed_today = entry.get("mined", 0.0)
-                    break
-        
-        return True
-
-    def claim_mining(self) -> bool:
-        print_info("🔄 CLAIM MINING...")
-        res = self.bot.claim_mine()
-        if res.get("error"):
-            print_error(f"Gagal claim: {res}")
-            return False
-
-        if res.get("success"):
-            amount = res.get("claimedAmount", 0)
-            new_balance = res.get("newBalance", self.balance)
-            self.balance = new_balance
-            self.total_claimed_today += amount
-            print_success(f"✅ +{amount:.4f} PIT")
-            print_ok(f"💰 Balance: {self.balance:.4f} PIT")
-            print_ok(f"📊 Hari ini: +{self.total_claimed_today:.4f} PIT")
-            return True
-        else:
-            msg = res.get("message", "Unknown")
-            print_wait(f"⏳ {msg}")
-            return False
-
-    def boost_overclock(self) -> bool:
-        print_info("📺 WATCH ADS BOOST...")
-        res = self.bot.boost_overclock()
-        if res.get("error"):
-            print_error(f"Gagal boost: {res}")
-            return False
-
-        if res.get("success"):
-            mining = res.get("miningState", {})
-            self.is_ad_boost_active = mining.get("isAdBoostActive", False)
-            self.ad_boost_end_time = mining.get("adBoostTimeRemainingMs", 0)
-            self.active_th_s = mining.get("activeTHs", 0.2)
-            print_ok(f"⚡ Boost aktif! Speed: {self.active_th_s:.2f} TH/s")
-            if self.ad_boost_end_time > 0:
-                remaining_sec = ms_to_seconds(self.ad_boost_end_time)
-                print_wait(f"⏱️ Boost: {remaining_sec//60}m {remaining_sec%60}s")
-            return True
-        return False
-
-    def check_and_claim_quests(self) -> bool:
-        today = date.today().isoformat()
-        if self.last_quest_date != today:
-            self.quests_attempted_today.clear()
-            self.last_quest_date = today
-            print_info("📅 Hari baru, reset quest")
-
-        if self.quests_attempted_today:
-            print_wait("Quest sudah dicoba hari ini, skip")
-            return False
-
-        print_info("📋 Mengecek Quests...")
-        res = self.bot.get_quests()
-        if res.get("error"):
-            print_wait("Gagal ambil quest")
-            return False
-
-        quests = res.get("quests", []) if isinstance(res.get("quests"), list) else []
-        if not quests:
-            print_wait("Tidak ada quest")
-            return False
-
-        claimed_any = False
-        for quest in quests:
-            quest_id = quest.get("id")
-            if not quest_id or quest_id in self.completed_quests:
-                continue
-
-            title = quest.get("title", quest_id)
-            reward = quest.get("reward", 0)
-            print_quest_info(f"🔄 {title} (reward: {reward})")
-
-            res = self.bot.complete_quest(quest_id)
-            if res.get("error"):
-                if "already completed" in str(res.get("text", "")):
-                    print_quest_info(f"⏭️ Sudah diklaim")
-                elif "cooldown" in str(res.get("text", "")):
-                    print_quest_info(f"⏭️ Cooldown, coba besok")
-                else:
-                    print_error(f"Gagal: {res}")
-                continue
-
-            if res.get("success"):
-                self.balance = res.get("user", {}).get("claimedPITBalance", self.balance)
-                self.completed_quests.append(quest_id)
-                print_success(f"✅ Quest +{reward} PIT")
-                claimed_any = True
-            else:
-                print_wait(f"Quest belum bisa")
-
-        self.quests_attempted_today.add("done")
-        return claimed_any
-
-    def run_cycle(self) -> bool:
-        print_sep()
-        print_info(f"🔄 {datetime.now().strftime('%H:%M:%S')}")
-
-        if not self.update_user_data():
-            print_error("Gagal update, skip cycle")
-            return False
-
-        print_info(f"💰 Balance: {self.balance:.4f} PIT")
-        print_info(f"⚡ Speed: {self.active_th_s:.2f} TH/s")
-
-        # 1. Quests (1x per hari)
-        self.check_and_claim_quests()
-
-        # 2. Boost (Watch Ads) - jika boost mati
-        if not self.is_ad_boost_active:
-            print_info("⚡ Boost tidak aktif, watch ads...")
-            if self.boost_overclock():
-                print_wait("⏳ Tunggu 5 detik setelah boost...")
-                time.sleep(5)
-        else:
-            remaining = ms_to_seconds(self.ad_boost_end_time)
-            print_info(f"⚡ Boost aktif: {remaining//60}m {remaining%60}s tersisa")
-
-        # 3. CLAIM MINING
-        print_info("⛏️ CLAIM MINING...")
-        self.claim_mining()
-
-        self.update_user_data()
-        print_ok(f"💰 Balance akhir: {self.balance:.4f} PIT")
-        print_sep()
-        return True
-
-    def run_loop(self):
-        cycle_count = 0
-
-        print_header()
-        print_ok(f"👤 Login: @{self.full_name} (ID: {self.tg_id})")
-        print_sep()
-
-        self.update_user_data()
-        print_ok(f"💰 Balance awal: {self.balance:.4f} PIT")
-        print_ok(f"⚡ Speed: {self.active_th_s:.2f} TH/s")
-        print_sep()
-        print_info("🚀 Bot running! Claim SETIAP 10 MENIT")
-        print_info("📌 Boost otomatis jika mati")
-        print_info("📌 Quest 1x per hari")
-        print_wait("⏹️ Tekan Ctrl+C untuk berhenti")
-        print_sep()
-
-        while True:
-            try:
-                cycle_count += 1
-                print_info(f"📊 Siklus #{cycle_count}")
-
-                success = self.run_cycle()
-                if not success:
-                    print_wait("Gagal, tunggu 30 detik...")
-                    countdown(30, "⏳ Cooldown error")
-                    continue
-
-                wait_time = 600
-                if self.ad_boost_end_time > 0:
-                    remaining_sec = ms_to_seconds(self.ad_boost_end_time)
-                    if remaining_sec > 0 and remaining_sec < wait_time:
-                        wait_time = remaining_sec + 5
-
-                print_wait(f"⏳ Jeda {wait_time//60}m {wait_time%60}s...")
-                countdown(wait_time, "⏳ Menunggu")
-
-            except KeyboardInterrupt:
-                print("\n")
-                print_wait("⏹️ Bot dihentikan user")
-                break
-            except Exception as e:
-                print_error(f"❌ Error: {e}")
-                countdown(30, "⏳ Cooldown error")
-
-        print_sep()
-        print_ok(f"💰 Balance akhir: {self.balance:.4f} PIT")
-        print_ok(f"📊 Total hari ini: +{self.total_claimed_today:.4f} PIT")
-        print_sep()
-
-# ============================================================
-# HEADER & MAIN
-# ============================================================
-def print_header():
-    print(f"""
-{BLUE}╔══════════════════════════════════════════════════════════════╗
-║{WHITE}  Pitcoin Auto Claim & Boost Bot - {CYAN}Premium{WHITE}                    ║
-║{WHITE}  Auto Claim SETIAP 10 MENIT + Boost + Quests             ║
-╚══════════════════════════════════════════════════════════════╝{RESET}
-{BLUE}============================================================{RESET}
-{CYAN}👨‍💻 ScriptMaker : {WHITE}@JoshuaXSupport{RESET}
-{CYAN}📢 TG          : {WHITE}https://t.me/+f3QBLkR5D8k4YzNl{RESET}
-{BLUE}============================================================{RESET}
-    """)
-
-def get_init_data_from_user() -> str:
-    print(f"\n{YELLOW}📌 Cara mendapatkan init_data:{RESET}")
-    print(f"1. Buka {CYAN}https://pitcoin.onrender.com/app{RESET} di browser")
-    print(f"2. Buka {CYAN}Developer Tools (F12) -> Network tab{RESET}")
-    print(f"3. Cari request ke {CYAN}/api/user{RESET}")
-    print(f"4. Lihat header {CYAN}'X-Telegram-Init-Data'{RESET}")
-    print(f"5. Copy seluruh isinya (panjang 200-500 karakter)")
-    print_sep()
-    init_data = input(f"\n📝 {BOLD}Paste init_data:{RESET} ").strip()
+def get_init_data():
+    print(f"{Fore.YELLOW}📝 Masukkan Telegram Init Data :")
+    print(f"{Fore.LIGHTBLACK_EX}Contoh : user=%7B%22id%22%3A...&auth_date=...&hash=...{Fore.RESET}")
+    print(f"{Fore.LIGHTBLACK_EX}(Copy dari header x-telegram-init-data di DevTools){Fore.RESET}")
+    print("-" * 60)
+    init_data = input(f"{Fore.GREEN}➜ {Fore.RESET}").strip()
     if not init_data:
-        print_error("❌ Init data tidak boleh kosong!")
-        return get_init_data_from_user()
+        print(f"{Fore.RED}❌ Init data tidak boleh kosong !{Fore.RESET}")
+        return None
     return init_data
 
+def build_headers(init_data):
+    headers = BASE_HEADERS.copy()
+    headers["x-telegram-init-data"] = init_data
+    return headers
+
+def safe_json(response):
+    try:
+        return response.json()
+    except ValueError:
+        print(f"{Fore.RED}❌ Response bukan JSON: {response.text[:300]}{Fore.RESET}")
+        return None
+
+def api_request(method, endpoint, headers, data=None, params=None):
+    url = f"{BASE_URL}{endpoint}"
+    try:
+        resp = requests.request(method, url, headers=headers, json=data, params=params, timeout=REQUEST_TIMEOUT)
+        if resp.status_code == 200:
+            return safe_json(resp)
+        else:
+            print(f"{Fore.RED}❌ HTTP {resp.status_code} - {resp.text[:100]}{Fore.RESET}")
+            return None
+    except requests.exceptions.Timeout:
+        print(f"{Fore.RED}❌ Timeout ({REQUEST_TIMEOUT}s){Fore.RESET}")
+        return None
+    except requests.exceptions.ConnectionError:
+        print(f"{Fore.RED}❌ Gagal terhubung ke server{Fore.RESET}")
+        return None
+    except Exception as e:
+        print(f"{Fore.RED}❌ Error request: {e}{Fore.RESET}")
+        return None
+
+def get_user_info(headers):
+    data = api_request("GET", "/api/user", headers)
+    if data and data.get("success"):
+        user = data.get("user", {})
+        mining = data.get("miningState", {})
+        return user, mining
+    return None, None
+
+def get_mining_state(headers):
+    """Ambil mining state terbaru tanpa print berlebihan"""
+    data = api_request("GET", "/api/user", headers)
+    if data and data.get("success"):
+        return data.get("miningState", {})
+    return None
+
+def get_quests(headers):
+    data = api_request("GET", "/api/quests", headers)
+    if data and data.get("success"):
+        return data.get("quests", [])
+    return []
+
+def claim_quest(headers, quest_id):
+    payload = {"questId": quest_id}
+    data = api_request("POST", "/api/quests/claim", headers, data=payload)
+    if data and data.get("success"):
+        print(f"{Fore.GREEN}✅ Quest {quest_id} berhasil diklaim! Reward: {data.get('reward', 0)}{Fore.RESET}")
+        return True
+    else:
+        data2 = api_request("POST", "/api/quests/complete", headers, data=payload)
+        if data2 and data2.get("success"):
+            print(f"{Fore.GREEN}✅ Quest {quest_id} berhasil diklaim!{Fore.RESET}")
+            return True
+        else:
+            print(f"{Fore.YELLOW}⚠️ Gagal klaim quest {quest_id} (mungkin sudah diklaim){Fore.RESET}")
+            return False
+
+def claim_mining(headers):
+    print(f"{Fore.CYAN}⛏️  Claim mining ...{Fore.RESET}", end="", flush=True)
+    data = api_request("POST", "/api/mine/claim", headers)
+    if data and data.get("success"):
+        claimed = data.get("claimedAmount", 0)
+        new_balance = data.get("newBalance", 0)
+        print(f"\r{Fore.GREEN}✅ Claimed {claimed:.4f} PIT  |  Balance: {new_balance:.4f} PIT{Fore.RESET}")
+        return True, claimed, new_balance
+    else:
+        print(f"\r{Fore.YELLOW}⚠️ Claim mining gagal (mungkin bucket belum penuh){Fore.RESET}")
+        return False, 0, 0
+
+def boost_overclock(headers):
+    print(f"{Fore.CYAN}⚡ Boost overclock ...{Fore.RESET}", end="", flush=True)
+    data = api_request("POST", "/api/boost/overclock", headers)
+    if data and data.get("success"):
+        mining = data.get("miningState", {})
+        ths = mining.get("activeTHs", 0)
+        print(f"\r{Fore.GREEN}✅ Overclock aktif! Hashrate: {ths} TH/s{Fore.RESET}")
+        return True
+    else:
+        print(f"\r{Fore.YELLOW}⚠️ Overclock gagal (mungkin cooldown){Fore.RESET}")
+        return False
+
+def is_ad_boost_active(headers):
+    """Cek apakah ad boost masih aktif dari mining state"""
+    mining = get_mining_state(headers)
+    if mining:
+        is_active = mining.get("isAdBoostActive", False)
+        remaining_ms = mining.get("adBoostTimeRemainingMs", 0)
+        if is_active and remaining_ms > 5000:  # lebih dari 5 detik
+            print(f"{Fore.YELLOW}📺 Iklan masih aktif, sisa {remaining_ms//1000} detik, lewati watch ad{Fore.RESET}")
+            return True
+    return False
+
+def watch_ad_boost(headers):
+    """Coba watch ad boost, cek status dulu"""
+    # Cek apakah boost sudah aktif
+    if is_ad_boost_active(headers):
+        return False  # skip, tidak perlu tonton iklan
+
+    print(f"{Fore.CYAN}📺 Menonton iklan boost ...{Fore.RESET}", end="", flush=True)
+    # Daftar endpoint yang mungkin
+    endpoints = [
+        "/api/boost/adsgram",      # Dari pesan response: Adsgram Rewarded Video
+        "/api/boost/watch-ads",
+        "/api/boost/ad",
+        "/api/boost/watch",
+        "/api/mine/boost",
+        "/api/boost/ads"
+    ]
+    for ep in endpoints:
+        data = api_request("POST", ep, headers)
+        if data and data.get("success"):
+            msg = data.get("message", "")
+            mining = data.get("miningState", {})
+            ths = mining.get("activeTHs", 0)
+            print(f"\r{Fore.GREEN}✅ Iklan berhasil! {msg}  |  Hashrate: {ths} TH/s{Fore.RESET}")
+            return True
+    print(f"\r{Fore.YELLOW}⚠️ Gagal menonton iklan (limit atau tidak tersedia){Fore.RESET}")
+    return False
+
+def daily_checkin(headers):
+    quests = get_quests(headers)
+    daily_quest = None
+    for q in quests:
+        if "Daily Check-in" in q.get("title", ""):
+            daily_quest = q
+            break
+    if not daily_quest:
+        print(f"{Fore.YELLOW}⚠️ Quest Daily Check-in tidak ditemukan{Fore.RESET}")
+        return False
+
+    qid = daily_quest.get("id")
+    user, _ = get_user_info(headers)
+    if user:
+        completed = [cq.get("id") for cq in user.get("completedQuests", [])]
+        if qid in completed:
+            print(f"{Fore.YELLOW}✅ Daily Check-in sudah diklaim hari ini{Fore.RESET}")
+            return True
+    print(f"{Fore.CYAN}📅 Claim Daily Check-in ...{Fore.RESET}")
+    return claim_quest(headers, qid)
+
+def countdown_timer(seconds, label="Menunggu"):
+    print(f"{Fore.YELLOW}⏳ {label} {seconds//60} menit ...{Fore.RESET}")
+    bar_length = 10
+    for i in range(seconds, 0, -1):
+        progress = (seconds - i) / seconds
+        filled = int(bar_length * progress)
+        bar = "█" * filled + "░" * (bar_length - filled)
+        mins = i // 60
+        secs = i % 60
+        text = f"⏱️ {mins:02d}:{secs:02d} [{bar}] {int(progress*100):3d}%"
+        sys.stdout.write("\r" + text + " " * 10)
+        sys.stdout.flush()
+        time.sleep(1)
+    sys.stdout.write("\r" + " " * 60 + "\r")
+    sys.stdout.flush()
+
 def main():
-    print_header()
-    init_data = get_init_data_from_user()
-    bot = PitcoinBot(init_data)
-    bot.run_loop()
+    clear_screen()
+    print_banner()
+    init_data = get_init_data()
+    if not init_data:
+        return
+
+    headers = build_headers(init_data)
+
+    clear_screen()
+    print_banner()
+
+    user, mining = get_user_info(headers)
+    if not user:
+        print(f"{Fore.RED}❌ Gagal memulai bot. Cek init data Anda !{Fore.RESET}")
+        return
+
+    # Daily check-in
+    print(f"\n{Fore.CYAN}📅 Menjalankan Daily Check-in ...{Fore.RESET}")
+    daily_checkin(headers)
+
+    print(f"\n{Fore.GREEN}✅ Bot berjalan! Boost & Claim setiap {INTERVAL_BOOST//60} menit")
+    print(f"{Fore.YELLOW}💡 Tekan Ctrl+C untuk berhenti{Fore.RESET}\n")
+
+    cycle_count = 0
+    total_claimed = 0
+
+    while True:
+        try:
+            cycle_count += 1
+            current_time = datetime.now().strftime("%H:%M:%S")
+            print(f"{Fore.CYAN}{'='*60}")
+            print(f"{Fore.WHITE}[{current_time}] {Fore.YELLOW}🔄 Siklus #{cycle_count}")
+            print(f"{Fore.CYAN}{'='*60}")
+
+            # 1. Boost overclock
+            boost_overclock(headers)
+
+            # 2. Claim mining
+            success, claimed, new_bal = claim_mining(headers)
+            if success:
+                total_claimed += claimed
+
+            # 3. Watch ad boost (hanya jika belum aktif)
+            watch_ad_boost(headers)
+
+            # 4. Jeda 30 detik setelah iklan (jika berhasil ditonton)
+            #    Untuk efisiensi, kita tunda hanya jika iklan berhasil, tapi di sini kita tunda selalu
+            print(f"{Fore.YELLOW}⏳ Jeda 30 detik setelah iklan ...{Fore.RESET}")
+            time.sleep(DELAY_AFTER_AD)
+
+            # 5. Countdown sampai siklus berikutnya
+            countdown_timer(INTERVAL_BOOST, "Menunggu siklus berikutnya")
+
+        except KeyboardInterrupt:
+            print(f"\n\n{Fore.RED}🛑 Bot dihentikan oleh user{Fore.RESET}")
+            print(f"{Fore.CYAN}📊 Total siklus: {cycle_count}")
+            print(f"{Fore.CYAN}💰 Total PIT terkumpul: {total_claimed:.4f} PIT")
+            print(f"\n{Fore.GREEN}Terima kasih ! 👋{Fore.RESET}")
+            break
+        except Exception as e:
+            print(f"\n{Fore.RED}❌ Error: {e}")
+            print(f"{Fore.YELLOW}⏳ Tunggu 60 detik lalu coba lagi ...{Fore.RESET}")
+            time.sleep(60)
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n")
-        print_wait("⏹️ Dibatalkan")
-    except Exception as e:
-        print_error(f"❌ Error: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"\n\n{Fore.RED}🛑 Bot dihentikan{Fore.RESET}")
