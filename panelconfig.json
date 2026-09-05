@@ -104,7 +104,7 @@
           "runner": "python3"
         },
         "4": {
-          "label": "PitCoinMiner 🔴",
+          "label": "PitCoinMiner 🟢",
           "file": "Pit.py",
           "runner": "python3"
         },
