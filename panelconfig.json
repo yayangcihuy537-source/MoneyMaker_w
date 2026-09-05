@@ -54,7 +54,7 @@
       "name": "Apikey",
       "items": {
         "1": {
-          "label": "99faucetv2 🟢",
+          "label": "99faucetv2 🔴",
           "file": "99faucet.php",
           "runner": "php"
         },
