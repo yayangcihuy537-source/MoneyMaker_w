@@ -68,7 +68,7 @@ def print_banner():
 {Fore.YELLOW}{Style.BRIGHT}         🚀 PITCOINDROP BOT 🚀
 {Fore.CYAN}{'='*40}
 {Fore.GREEN}TG          : {Fore.LIGHTWHITE_EX}https://t.me/pitcoin_official
-{Fore.GREEN}SCRIPTMAKER : {Fore.LIGHTWHITE_EX}DataMiner
+{Fore.GREEN}SCRIPTMAKER : {Fore.LIGHTWHITE_EX}MoneyMaker_w
 {Fore.CYAN}{'='*40}{Style.RESET_ALL}
 """
     print(banner)
