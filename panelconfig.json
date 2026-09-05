@@ -164,7 +164,7 @@
           "runner": "python3"
         },
         "16": {
-          "label": "GramAds 🟢",
+          "label": "GramBux 🟢",
           "file": "Gramads.py",
           "runner": "python3"
         },
