@@ -179,8 +179,8 @@
           "runner": "python3"
         },
         "19": {
-          "label": "Coming Soon",
-          "file": "",
+          "label": "SHIBAInuTapbot",
+          "file": "SHIBAInuTapbot.py",
           "runner": "python3"
         }
       }
