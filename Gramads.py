@@ -177,10 +177,11 @@ def parse_init_data(init_data: str) -> Dict:
         "full_name": f"{user_obj.get('first_name', '')} {user_obj.get('last_name', '')}".strip()
     }
 
-def check_block_status(bot, tg_id, block_id):
+def check_block_status(bot, tg_id, username, block_id):
     """Cek status block dari watchProgress"""
     try:
-        user_data = bot.get_user(tg_id, "MoneyMaker", "@MoneyMaker_w")
+        # Gunakan username yang diterima, bukan hardcode "MoneyMaker"
+        user_data = bot.get_user(tg_id, username, f"@{username}" if username else "")
         if user_data.get("error"):
             return 0, False
         watch_progress = user_data.get("watchProgress", {})
@@ -191,12 +192,12 @@ def check_block_status(bot, tg_id, block_id):
     except:
         return 0, False
 
-def watch_block(bot, tg_id, block_id, retry_delay=3600):
+def watch_block(bot, tg_id, username, block_id, retry_delay=3600):
     """Watch block 10x lalu claim"""
     pprint(f"\n📺 [ BLOCK {block_id} ]", CYAN)
     pprint(f"🎯 Target: 10/10 ads", YELLOW)
     
-    watched_count, claimed_today = check_block_status(bot, tg_id, block_id)
+    watched_count, claimed_today = check_block_status(bot, tg_id, username, block_id)
     
     if watched_count >= 10 and claimed_today:
         pprint(f"ℹ️ Block {block_id} sudah selesai dan di-claim!", YELLOW)
@@ -216,6 +217,11 @@ def watch_block(bot, tg_id, block_id, retry_delay=3600):
                     pprint(f"⚠️ Block {block_id} masih terkunci! (Percobaan ke-{retry_count})", YELLOW)
                     pprint(f"⏳ Jeda 1 JAM sebelum coba lagi...", YELLOW)
                     countdown(retry_delay, "⏳ Jeda 1 jam")
+                    # Refresh status setelah jeda
+                    watched_count, claimed_today = check_block_status(bot, tg_id, username, block_id)
+                    if watched_count >= 10 and claimed_today:
+                        pprint(f"✅ Block {block_id} sudah selesai saat jeda!", GREEN)
+                        return {"status": "already_claimed", "watched": watched_count, "claimed": True, "earned": 0.0022}
                     continue
                 else:
                     pprint(f"❌ Error: {watch_res}", RED)
@@ -492,7 +498,7 @@ def main():
     # Cek user
     pprint("\n👤 USER INFORMATION", CYAN)
     try:
-        user_data = bot.get_user(tg_id, username, f"@{username}")
+        user_data = bot.get_user(tg_id, username, f"@{username}" if username else "")
         if user_data.get("error"):
             pprint(f"❌ Gagal ambil data user: {user_data}", RED)
             return
@@ -526,7 +532,7 @@ def main():
     pprint("⚠️ Jika error, akan jeda 1 jam lalu coba lagi\n", YELLOW)
     
     for block_id in range(1, 6):
-        result = watch_block(bot, tg_id, block_id)
+        result = watch_block(bot, tg_id, username, block_id)
         if result["status"] in ["success", "already_claimed"]:
             total_earned += result.get("earned", 0)
             total_claim += 1
@@ -574,7 +580,7 @@ def main():
     
     # Ambil balance terbaru
     try:
-        user_data = bot.get_user(tg_id, username, f"@{username}")
+        user_data = bot.get_user(tg_id, username, f"@{username}" if username else "")
         if not user_data.get("error"):
             new_balance = user_data.get("user", {}).get("ton_balance", 0)
             pprint(f"💎 Balance Akhir        : {new_balance:.5f} TON", GREEN)
