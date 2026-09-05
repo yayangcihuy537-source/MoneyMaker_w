@@ -75,11 +75,13 @@ TEXTS = {
     "ad_giga_done": "GigaPub ads completed ({}/{} watched)",
     "ad_giga_fail": "GigaPub ad failed: {}",
     "ad_giga_skip": "GigaPub ad already completed or active",
+    "ad_giga_error": "GigaPub ad error: {}",
     "ad_libtl": "Libtl: watching ad ({}/{})",
     "ad_libtl_ok": "Libtl ad watched successfully",
     "ad_libtl_done": "Libtl ads completed ({}/{} watched)",
     "ad_libtl_fail": "Libtl ad failed: {}",
     "ad_libtl_skip": "Libtl ad already completed or active",
+    "ad_libtl_error": "Libtl ad error: {}",
     "act_mine": "Activating Mining Engine...",
     "mine_ok": "Mining Start : Success",
     "start_at": "Started at :",
@@ -280,6 +282,77 @@ async def authenticate(client, acc_num, sess_name, start_param):
         log(acc_num, "❌", f"Auth exception: {e}", R)
         return None
 
+async def watch_ads_until_done(acc_num, headers):
+    """Fungsi untuk menonton iklan sampai habis untuk kedua provider"""
+    log(acc_num, "📺", t["watch_ads"], C)
+    
+    # ===== GIGAPUB =====
+    log(acc_num, "📢", "Processing GigaPub ads...", Y)
+    attempt = 0
+    max_attempts = 100
+    while attempt < max_attempts:
+        attempt += 1
+        try:
+            # Refresh dashboard
+            resp = requests.get("https://api.musicmb.site/api/dashboard", headers=headers, timeout=10)
+            if resp.status_code != 200:
+                log(acc_num, "⚠️", f"Failed to refresh dashboard: {resp.status_code}", Y)
+                break
+            data = resp.json()
+            ad_data = data.get('ad_boost', {})
+            if ad_data.get('active') == True:
+                log(acc_num, "⏭️", t["ad_giga_skip"], G)
+                break
+            watched = ad_data.get('ads_watched', 0)
+            required = ad_data.get('ads_required', 10)
+            if watched >= required:
+                log(acc_num, "✅", t["ad_giga_done"].format(watched, required), G)
+                break
+            # Tonton iklan
+            log(acc_num, "📢", t["ad_giga"].format(watched+1, required), Y)
+            res_ad = requests.post("https://api.musicmb.site/api/mining/ad-boost/complete", headers=headers, timeout=15)
+            if res_ad.status_code == 200:
+                log(acc_num, "✅", t["ad_giga_ok"], G)
+            else:
+                log(acc_num, "⚠️", t["ad_giga_fail"].format(res_ad.status_code), Y)
+            await asyncio.sleep(random.uniform(1.5, 3))
+        except Exception as e:
+            log(acc_num, "❌", t["ad_giga_error"].format(e), R)
+            await asyncio.sleep(2)
+    
+    # ===== LIBTL =====
+    log(acc_num, "📢", "Processing Libtl ads...", Y)
+    attempt = 0
+    while attempt < max_attempts:
+        attempt += 1
+        try:
+            # Refresh dashboard
+            resp = requests.get("https://api.musicmb.site/api/dashboard", headers=headers, timeout=10)
+            if resp.status_code != 200:
+                log(acc_num, "⚠️", f"Failed to refresh dashboard: {resp.status_code}", Y)
+                break
+            data = resp.json()
+            ad_data = data.get('libtl_ad_boost', {})
+            if ad_data.get('active') == True:
+                log(acc_num, "⏭️", t["ad_libtl_skip"], G)
+                break
+            watched = ad_data.get('ads_watched', 0)
+            required = ad_data.get('ads_required', 10)
+            if watched >= required:
+                log(acc_num, "✅", t["ad_libtl_done"].format(watched, required), G)
+                break
+            # Tonton iklan
+            log(acc_num, "📢", t["ad_libtl"].format(watched+1, required), Y)
+            res_ad = requests.post("https://api.musicmb.site/api/mining/libtl-ad-boost/complete", headers=headers, timeout=15)
+            if res_ad.status_code == 200:
+                log(acc_num, "✅", t["ad_libtl_ok"], G)
+            else:
+                log(acc_num, "⚠️", t["ad_libtl_fail"].format(res_ad.status_code), Y)
+            await asyncio.sleep(random.uniform(1.5, 3))
+        except Exception as e:
+            log(acc_num, "❌", t["ad_libtl_error"].format(e), R)
+            await asyncio.sleep(2)
+
 async def process_account(client, acc_num, sess_name, start_param):
     tokens = load_tokens()
     auth_token = tokens.get(sess_name)
@@ -349,7 +422,10 @@ async def process_account(client, acc_num, sess_name, start_param):
     else:
         log(acc_num, "💼", t["wall_link"], G)
 
-    # --- Otomatis klaim semua tugas ---
+    # ===== URUTAN: WATCH ADS DAHULU SAMPAI HABIS =====
+    await watch_ads_until_done(acc_num, headers)
+
+    # ===== BARU KLAIM TUGAS =====
     tasks = dash_data.get('tasks', [])
     for task in tasks:
         if task.get('completed', True):
@@ -396,77 +472,7 @@ async def process_account(client, acc_num, sess_name, start_param):
 
         await asyncio.sleep(random.uniform(0.5, 1.5))
 
-    # --- Nonton Iklan (Ad Boost) sampai habis ---
-    log(acc_num, "📺", t["watch_ads"], C)
-
-    # Fungsi internal untuk menonton iklan satu provider sampai selesai
-    async def watch_ads_provider(acc_num, headers, provider_key, endpoint, label_ok, label_done, label_fail, label_skip):
-        watched_total = 0
-        required = 10
-        max_attempts = 100  # safety
-        attempt = 0
-        while attempt < max_attempts:
-            attempt += 1
-            # Refresh dashboard untuk mendapatkan status terbaru
-            try:
-                resp = requests.get("https://api.musicmb.site/api/dashboard", headers=headers, timeout=10)
-                if resp.status_code != 200:
-                    log(acc_num, "⚠️", f"Failed to refresh dashboard: {resp.status_code}", Y)
-                    break
-                data = resp.json()
-                provider_data = data.get(provider_key, {})
-                if provider_data.get('active') == True:
-                    # sudah aktif, tidak perlu tonton lagi
-                    log(acc_num, "⏭️", label_skip, G)
-                    break
-                watched = provider_data.get('ads_watched', 0)
-                required = provider_data.get('ads_required', 10)
-                if watched >= required:
-                    log(acc_num, "✅", label_done.format(watched, required), G)
-                    break
-                # Tonton iklan
-                log(acc_num, "📢", label_ok.format(watched+1, required), Y)
-                res_ad = requests.post(endpoint, headers=headers, timeout=15)
-                if res_ad.status_code == 200:
-                    log(acc_num, "✅", f"Ad watched successfully", G)
-                    watched += 1
-                else:
-                    log(acc_num, "⚠️", label_fail.format(res_ad.status_code), Y)
-                    # jika gagal, mungkin rate limit atau sudah aktif, coba jeda
-                    await asyncio.sleep(2)
-                    continue
-                # jeda antar iklan
-                await asyncio.sleep(random.uniform(1.5, 3))
-            except Exception as e:
-                log(acc_num, "❌", f"Error watching ad: {e}", R)
-                await asyncio.sleep(2)
-        return
-
-    # GigaPub
-    await watch_ads_provider(
-        acc_num,
-        headers,
-        'ad_boost',
-        'https://api.musicmb.site/api/mining/ad-boost/complete',
-        t["ad_giga"],
-        t["ad_giga_done"],
-        t["ad_giga_fail"],
-        t["ad_giga_skip"]
-    )
-
-    # Libtl
-    await watch_ads_provider(
-        acc_num,
-        headers,
-        'libtl_ad_boost',
-        'https://api.musicmb.site/api/mining/libtl-ad-boost/complete',
-        t["ad_libtl"],
-        t["ad_libtl_done"],
-        t["ad_libtl_fail"],
-        t["ad_libtl_skip"]
-    )
-
-    # --- Aktivasi Mining ---
+    # ===== AKTIVASI MINING =====
     log(acc_num, "⛏️", t["act_mine"], Y)
     res_mine = requests.post("https://api.musicmb.site/api/mining/start", headers=headers, timeout=15)
     
