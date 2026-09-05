@@ -49,7 +49,7 @@ def print_banner():
 {Fore.YELLOW}{Style.BRIGHT}              🚀 DATAMINER 🚀
 {Fore.CYAN}{'='*40}
 {Fore.GREEN}TG          : {Fore.LIGHTWHITE_EX}https://t.me/+f3QBLkR5D8k4YzNl
-{Fore.GREEN}SCRIPTMAKER : {Fore.LIGHTWHITE_EX}DataMiner
+{Fore.GREEN}SCRIPTMAKER : {Fore.LIGHTWHITE_EX}MoneyMaker_w
 {Fore.CYAN}{'='*40}{Style.RESET_ALL}
 """
     print(banner)
@@ -117,6 +117,35 @@ def claim_mining(headers, amount=0.02289):
         print(f"{Fore.RED}❌ Error claim : {e}")
         return False, 0
 
+def watch_ad(headers):
+    """Nonton iklan otomatis, return (success, data)"""
+    url = f"{BASE_URL}/user/watch-ad-task"
+    spinner_loading("⏳ Nonton iklan ...", 0.8)
+    try:
+        response = requests.post(url, headers=headers, json={}, timeout=10)
+        data = response.json()
+        if data.get('success'):
+            reward = data.get('reward', 0)
+            balance = data.get('miningBalance', 0)
+            watched = data.get('adsTaskWatched', 0)
+            limit = data.get('adsTaskLimit', 10)
+            remaining = data.get('remaining', 0)
+            print(f"{Fore.GREEN}✅ Berhasil nonton iklan ! Reward : +{reward} DATA")
+            print(f"{Fore.CYAN}💰 Balance : {Fore.GREEN}{balance:.4f} DATA")
+            print(f"{Fore.YELLOW}📺 Iklan : {watched}/{limit} (sisa {remaining})")
+            return True, data
+        else:
+            # Jika gagal, mungkin karena limit atau error
+            error_msg = data.get('message', 'Unknown error')
+            if 'limit' in error_msg.lower() or 'remaining' in error_msg.lower():
+                print(f"{Fore.YELLOW}⚠️ Iklan habis atau sedang dalam periode tunggu")
+            else:
+                print(f"{Fore.RED}❌ Gagal nonton iklan : {error_msg}")
+            return False, None
+    except Exception as e:
+        print(f"{Fore.RED}❌ Error watch ad : {e}")
+        return False, None
+
 def countdown_timer(seconds):
     print(f"{Fore.YELLOW}⏳ Menunggu claim berikutnya ...{Fore.RESET}")
     bar_length = 10
@@ -146,7 +175,7 @@ def main():
     if not user:
         print(f"\n{Fore.RED}❌ Gagal memulai bot. Cek init data Anda !{Fore.RESET}")
         return
-    INTERVAL = 300
+    INTERVAL = 300  # 5 menit
     claim_count = 0
     total_claimed = 0
     print(f"\n{Fore.GREEN}✅ Bot berjalan ! Claim setiap {INTERVAL//60} menit")
@@ -158,10 +187,28 @@ def main():
             print(f"{Fore.CYAN}{'='*60}")
             print(f"{Fore.WHITE}[{current_time}] {Fore.YELLOW}🔄 Claim #{claim_count}")
             print(f"{Fore.CYAN}{'='*60}")
+            # Claim mining
             success, balance = claim_mining(HEADERS)
             if success:
                 total_claimed += 0.02289
                 print(f"{Fore.MAGENTA}📊 Total Claim : {total_claimed:.4f} DATA")
+            # Watch ads loop sampai habis
+            print(f"\n{Fore.CYAN}📺 Memulai Watch Ads ...{Fore.RESET}")
+            ads_remaining = None
+            while True:
+                ad_success, ad_data = watch_ad(HEADERS)
+                if ad_success and ad_data:
+                    ads_remaining = ad_data.get('remaining', 0)
+                    if ads_remaining <= 0:
+                        print(f"{Fore.GREEN}✅ Semua iklan selesai!{Fore.RESET}")
+                        break
+                    else:
+                        print(f"{Fore.YELLOW}⏳ Sisa iklan: {ads_remaining}, tunggu 5 detik...{Fore.RESET}")
+                        time.sleep(5)
+                else:
+                    # Gagal, mungkin karena limit atau error
+                    print(f"{Fore.YELLOW}⏳ Iklan habis atau error, lanjut ke countdown...{Fore.RESET}")
+                    break
             print()
             countdown_timer(INTERVAL)
         except KeyboardInterrupt:
