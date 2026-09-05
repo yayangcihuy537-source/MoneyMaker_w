@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ╔═══════════════════════════════════════════════════════════════════╗
-║  🐸 PEPE TAP BOT v1.0 — Fixed 20 Taps per Request               ║
+║  🐸 PEPE TAP BOT v1.1 — Auto Retry + Rate Limit Handler         ║
 ║  🔐 Login via InitData                                         ║
 ║  👆 Auto Tap (batch mode, 20 taps per request)                ║
 ║  🎯 Auto Claim (Streak + Spin + Tasks)                       ║
@@ -48,9 +48,9 @@ BANNER = rf"""{CYAN}
 ║  {WHITE}██║     ███████╗██║     ███████╗   ██║   ██║  ██║██║     {CYAN}║
 ║  {WHITE}╚═╝     ╚══════╝╚═╝     ╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝     {CYAN}║
 ║                                                                   ║
-║            {GREEN}🐸 PEPE TAP AUTO BOT v1.0 🐸{CYAN}                    ║
+║            {GREEN}🐸 PEPE TAP AUTO BOT v1.1 🐸{CYAN}                    ║
 ║                                                                   ║
-║  {YELLOW}⚡ 20 Taps per Request  •  Batch Mode  •  Auto Claim{RESET}{CYAN}     ║
+║  {YELLOW}⚡ 20 Taps per Request  •  Batch Mode  •  Auto Retry{RESET}{CYAN}    ║
 ║  {PINK}👑 Owner: @MoneyMaker_w  •  📢 TG: @MoneyMaker_w{RESET}{CYAN}         ║
 ║                                                                   ║
 ╚═══════════════════════════════════════════════════════════════════╝{RESET}
@@ -209,11 +209,10 @@ class PepeTapBot:
         payload = {
             "bot": self.bot_name,
             "initData": self.init_data,
-            "open": True          # dari request asli ada "open":true
+            "open": True
         }
         result = self._request("/v1/game/init", data=payload)
         if result and result.get("ok"):
-            # token bisa dari result langsung atau dari config
             self.token = result.get("token") or result.get("tapToken") or ""
             self.tap_token = result.get("tapToken") or result.get("token") or ""
             self._update_player(result)
@@ -275,6 +274,7 @@ class PepeTapBot:
                 wait = random.randint(30, 60)
                 self.log(f"⏳ Rate limited! Tunggu {wait} detik...", "WARNING")
                 countdown_timer(wait, "⏳ Cooldown")
+                # Biarkan caller yang menangani retry
                 return False
             elif 'cooldown' in str(error).lower():
                 self.log(f"⏳ Tap cooldown", "WARNING")
@@ -295,13 +295,15 @@ class PepeTapBot:
                 self.log(f"❌ Tap failed: {error}", "ERROR")
                 return False
 
-    # ==================== TAP BATCH - 20 PER REQUEST ====================
+    # ==================== TAP BATCH - 20 PER REQUEST + AUTO RETRY ====================
     def tap_batch(self):
         batch_size = self.batch_size
         if batch_size <= 0:
             batch_size = 50
 
         taps_done_in_batch = 0
+        retry_count = 0
+        max_retries = 10
         while taps_done_in_batch < batch_size:
             if self.energy <= 0:
                 self.log(f"⏳ Energy habis ({self.energy}), tunggu 60 detik...", "WARNING")
@@ -314,9 +316,21 @@ class PepeTapBot:
             if t <= 0:
                 break
 
-            if not self.tap(t):
-                return False
+            result = self.tap(t)
+            if not result:
+                # Tap gagal, coba retry jika energy masih ada
+                if self.energy <= 0:
+                    continue  # akan dihandle di atas
+                retry_count += 1
+                if retry_count > max_retries:
+                    self.log("❌ Terlalu banyak retry, hentikan batch.", "ERROR")
+                    return False
+                self.log(f"🔄 Retry {retry_count}/{max_retries} setelah gagal...", "WARNING")
+                time.sleep(5)
+                continue
 
+            # Reset retry count jika berhasil
+            retry_count = 0
             taps_done_in_batch += t
             if taps_done_in_batch < batch_size:
                 jeda = random.uniform(1.5, 3.5)
@@ -458,7 +472,7 @@ class PepeTapBot:
 
         for task in tasks:
             task_id = task.get("id")
-            status = task.get("state", "available")  # state: available, started, done
+            status = task.get("state", "available")
             title = task.get("title", "Unknown")[:25]
 
             if status == "available":
@@ -631,9 +645,12 @@ class PepeTapBot:
                         return False
                     continue
 
-                if not self.tap_batch():
-                    self.log("❌ Tap batch failed, returning to menu.", "ERROR")
-                    return False
+                # Jalankan batch, dengan retry otomatis di dalamnya
+                batch_success = self.tap_batch()
+                if not batch_success:
+                    self.log("❌ Tap batch gagal, mencoba ulang setelah jeda...", "WARNING")
+                    time.sleep(10)
+                    continue  # coba lagi
 
                 total_taps_done += self.batch_size
 
