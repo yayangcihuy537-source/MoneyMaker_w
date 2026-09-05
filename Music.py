@@ -69,6 +69,15 @@ TEXTS = {
     "bind_fail": "Failed to bind wallet! HTTP",
     "inv_wall": "Invalid wallet format:",
     "wall_link": "Wallet Address is already linked.",
+    "watch_ads": "Watching ads for boost...",
+    "ad_giga": "GigaPub: watching ad ({}/{})",
+    "ad_giga_ok": "GigaPub ad watched successfully",
+    "ad_giga_fail": "GigaPub ad failed: {}",
+    "ad_giga_skip": "GigaPub ad already completed or active",
+    "ad_libtl": "Libtl: watching ad ({}/{})",
+    "ad_libtl_ok": "Libtl ad watched successfully",
+    "ad_libtl_fail": "Libtl ad failed: {}",
+    "ad_libtl_skip": "Libtl ad already completed or active",
     "act_mine": "Activating Mining Engine...",
     "mine_ok": "Mining Start : Success",
     "start_at": "Started at :",
@@ -385,6 +394,42 @@ async def process_account(client, acc_num, sess_name, start_param):
 
         await asyncio.sleep(random.uniform(0.5, 1.5))
 
+    # --- Nonton Iklan (Ad Boost) ---
+    log(acc_num, "📺", t["watch_ads"], C)
+    # Cek ad_boost gigapub
+    ad_boost = dash_data.get('ad_boost', {})
+    if ad_boost.get('active') == False and ad_boost.get('ads_watched', 0) < ad_boost.get('ads_required', 10):
+        watched = ad_boost.get('ads_watched', 0)
+        required = ad_boost.get('ads_required', 10)
+        log(acc_num, "📢", t["ad_giga"].format(watched, required), Y)
+        try:
+            res_ad = requests.post("https://api.musicmb.site/api/mining/ad-boost/complete", headers=headers, timeout=15)
+            if res_ad.status_code == 200:
+                log(acc_num, "✅", t["ad_giga_ok"], G)
+            else:
+                log(acc_num, "⚠️", t["ad_giga_fail"].format(res_ad.status_code), Y)
+        except Exception as e:
+            log(acc_num, "❌", f"GigaPub ad error: {e}", R)
+    else:
+        log(acc_num, "⏭️", t["ad_giga_skip"], G)
+
+    # Cek libtl ad boost
+    libtl_ad = dash_data.get('libtl_ad_boost', {})
+    if libtl_ad.get('active') == False and libtl_ad.get('ads_watched', 0) < libtl_ad.get('ads_required', 10):
+        watched = libtl_ad.get('ads_watched', 0)
+        required = libtl_ad.get('ads_required', 10)
+        log(acc_num, "📢", t["ad_libtl"].format(watched, required), Y)
+        try:
+            res_ad = requests.post("https://api.musicmb.site/api/mining/libtl-ad-boost/complete", headers=headers, timeout=15)
+            if res_ad.status_code == 200:
+                log(acc_num, "✅", t["ad_libtl_ok"], G)
+            else:
+                log(acc_num, "⚠️", t["ad_libtl_fail"].format(res_ad.status_code), Y)
+        except Exception as e:
+            log(acc_num, "❌", f"Libtl ad error: {e}", R)
+    else:
+        log(acc_num, "⏭️", t["ad_libtl_skip"], G)
+
     # --- Aktivasi Mining ---
     log(acc_num, "⛏️", t["act_mine"], Y)
     res_mine = requests.post("https://api.musicmb.site/api/mining/start", headers=headers, timeout=15)
@@ -414,7 +459,6 @@ async def create_session():
         print(f" \033[38;5;51m│\033[0m \033[1;31mPhone number is required.\033[0m")
         return None
 
-    # Tentukan nama session berikutnya (sessX.session)
     sessions = glob.glob("sess*.session")
     max_num = 0
     for f in sessions:
@@ -431,7 +475,6 @@ async def create_session():
     await client.connect()
 
     try:
-        # Kirim permintaan kode
         await client.send_code_request(phone)
         code = input(f" \033[38;5;51m│\033[0m \033[1;38;5;208m{t['enter_code']}\033[0m").strip()
         if not code:
@@ -439,15 +482,12 @@ async def create_session():
             await client.disconnect()
             return None
 
-        # Sign in dengan kode
         await client.sign_in(phone, code)
-        # Jika berhasil, session tersimpan otomatis
         print(f" \033[38;5;51m│\033[0m \033[1;32m{t['session_created'].format(sess_name + '.session')}\033[0m")
         await client.disconnect()
         return sess_name
 
     except SessionPasswordNeededError:
-        # Butuh password 2FA
         password = input(f" \033[38;5;51m│\033[0m \033[1;38;5;208m{t['enter_password']}\033[0m").strip()
         try:
             await client.sign_in(password=password)
@@ -480,16 +520,13 @@ async def main():
         if choice not in ['y', 'yes']:
             print(f" \033[38;5;51m│\033[0m \033[1;31mExiting...\033[0m")
             return
-        # Buat session baru
         sess_name = await create_session()
         if not sess_name:
             print(f" \033[38;5;51m│\033[0m \033[1;31mFailed to create session. Exiting.\033[0m")
             return
-        # Set session file untuk diproses
         session_file = sess_name + '.session'
         sessions = [session_file]
     else:
-        # Hanya ambil session pertama
         session_file = sessions[0]
         sess_name = session_file.replace('.session', '')
 
