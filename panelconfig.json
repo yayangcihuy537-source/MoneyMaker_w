@@ -117,7 +117,7 @@
           "label": "NotBux 🟢",
           "file": "notbux.py",
           "runner": "python3"
-        }, 
+        },
         "7": {
           "label": "CloudEarnBot 🟢",
           "file": "Cloud.py",
@@ -181,6 +181,16 @@
         "19": {
           "label": "SHIBAInuTapbot 🟢",
           "file": "SHIBAInuTapbot.py",
+          "runner": "python3"
+        },
+        "20": {
+          "label": "MusicMiningMB 🟢",
+          "file": "Music.py",
+          "runner": "python3"
+        },
+        "21": {
+          "label": "Coming Soon",
+          "file": "",
           "runner": "python3"
         }
       }
