@@ -24,7 +24,7 @@
           "runner": "python3"
         },
         "5": {
-          "label": "GainLtc 🟡",
+          "label": "GainLtc 🔴",
           "file": "GainLtc.php",
           "runner": "php"
         },
@@ -69,7 +69,7 @@
           "runner": "python3"
         },
         "4": {
-          "label": "LightQuest 🟡",
+          "label": "LightQuest 🔴",
           "file": "light.php",
           "runner": "php"
         },
@@ -104,7 +104,7 @@
           "runner": "python3"
         },
         "4": {
-          "label": "PitCoinMiner 🟢",
+          "label": "PitCoinMiner 🔴",
           "file": "Pit.py",
           "runner": "python3"
         },
@@ -144,7 +144,7 @@
           "runner": "python3"
         },
         "12": {
-          "label": "Faucet Btc 🟡",
+          "label": "Faucet Btc 🔴",
           "file": "Btc.php",
           "runner": "php"
         },
