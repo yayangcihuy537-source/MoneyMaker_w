@@ -179,7 +179,7 @@
           "runner": "python3"
         },
         "19": {
-          "label": "SHIBAInuTapbot",
+          "label": "SHIBAInuTapbot 🟢",
           "file": "SHIBAInuTapbot.py",
           "runner": "python3"
         }
