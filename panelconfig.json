@@ -54,7 +54,7 @@
       "name": "Apikey",
       "items": {
         "1": {
-          "label": "99faucetv2 🟡",
+          "label": "99faucetv2 🟢",
           "file": "99faucet.php",
           "runner": "php"
         },
@@ -64,7 +64,7 @@
           "runner": "python3"
         },
         "3": {
-          "label": "AdCoins 🟡",
+          "label": "AdCoins 🟢",
           "file": "ad.py",
           "runner": "python3"
         },
@@ -79,8 +79,8 @@
           "runner": "php"
         },
         "6": {
-          "label": "Coming Soon",
-          "file": "",
+          "label": "PlusCryptoFaucetBot 🟢",
+          "file": "Plus.py",
           "runner": "python3"
         }
       }
