@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ╔═══════════════════════════════════════════════════════════════╗
-║   🚀 PEPEFLOW X CLOCKADS X MINIGRAMX - PARALLEL BOT         ║
+║   🚀 PEPEFLOW X CLOCKADS X MINIGRAMX X COINSZON - PARALLEL  ║
 ║   AUTO CLAIM • AUTO GAMES • AUTO DOUBLE • AUTO SKIP LIMIT  ║
 ║   🔐 AUTH via init_data (NO PHPSESSID)                     ║
 ║   🎲 FINGERPRINT RANDOM (acak tiap reauth)                 ║
@@ -22,35 +22,36 @@ RESET = '\033[0m'
 PEPE_CONFIG = "pepeflow_config.json"
 CLOCK_CONFIG = "clockads_config.json"
 MINI_CONFIG  = "minigramx_config.json"
+COIN_CONFIG  = "coinszon_config.json"
 
 PEPE_URL = "https://pepeflow.com"
 CLOCK_URL = "https://clockads.in"
 MINI_URL  = "https://minigramx.top"
+COIN_URL  = "https://coinszon.com"
 
 UA = "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.47 Mobile Safari/537.36 Telegram-Android/12.6.4"
 
 # ---------- Game config per site ----------
-# PEPEFLOW hanya Lucky Wheel
 PEPE_GAMES = ["lucky_wheel"]
-PEPE_GAME_MAP = {
-    "lucky_wheel": {"display": "SPIN", "icon": "🎡"},
-}
+PEPE_GAME_MAP = {"lucky_wheel": {"display": "SPIN", "icon": "🎡"}}
 
-# CLOCKADS lengkap
-CLOCK_GAMES = ["lucky_wheel", "slots", "scratch", "treasure_dig"]
+# CLOCKADS: HANYA LUCKY WHEEL YANG AVAILABLE (slots/scratch/treasure_dig UNAVAILABLE)
+CLOCK_GAMES = ["lucky_wheel"]
 CLOCK_GAME_MAP = {
     "lucky_wheel": {"display": "SPIN", "icon": "🎡"},
-    "slots":       {"display": "SLOTS", "icon": "🎰"},
-    "scratch":     {"display": "SCRATCH", "icon": "🎫"},
-    "treasure_dig":{"display": "DIG", "icon": "⛏️"},
 }
 
-# MINIGRAMX
 MINI_GAMES = ["lucky_wheel", "coin_catch", "flappy_coin"]
 MINI_GAME_MAP = {
     "lucky_wheel": {"display": "SPIN", "icon": "🎡"},
     "coin_catch":  {"display": "CATCH", "icon": "🪙"},
     "flappy_coin": {"display": "FLAPPY", "icon": "🐦"},
+}
+
+COIN_GAMES = ["lucky_wheel", "slots"]
+COIN_GAME_MAP = {
+    "lucky_wheel": {"display": "SPIN", "icon": "🎡"},
+    "slots":       {"display": "SLOTS", "icon": "🎰"},
 }
 
 # ========== Config (only init_data) ==========
@@ -106,9 +107,9 @@ def live_timer(seconds, msg="⏳ Menunggu"):
     sys.stdout.write("\r" + " " * 60 + "\r")
     sys.stdout.flush()
 
-def ad_progress(seconds=30, label="📺 Watching ad"):
+def ad_progress(seconds=10, label="📺 Watching ad"):
     for i in range(seconds, 0, -1):
-        bar_len = 20
+        bar_len = 15
         filled = int((seconds - i) / seconds * bar_len)
         bar = '█' * filled + '░' * (bar_len - filled)
         sys.stdout.write(f"\r{G}{label} [{bar}] {i}s left{RESET}")
@@ -153,6 +154,7 @@ class BaseBot:
         self.game_index = 0
         self.treasure_token = None
         self.limited_games = set()
+        self.unavailable_games = set()  # game yang unavailable
         self.consecutive_errors = 0
         self.max_consecutive_errors = 5
         self._initial_auth()
@@ -411,7 +413,7 @@ class BaseBot:
             return False
         try:
             self.get_games_status()
-            ready = [g for g in self.game_list if g not in self.limited_games and self.cooldowns.get(g, 0) <= 0]
+            ready = [g for g in self.game_list if g not in self.limited_games and g not in self.unavailable_games and self.cooldowns.get(g, 0) <= 0]
             return len(ready) > 0
         except:
             return False
@@ -421,14 +423,14 @@ class BaseBot:
             return []
         try:
             self.get_games_status()
-            return [g for g in self.game_list if g not in self.limited_games and self.cooldowns.get(g, 0) <= 0]
+            return [g for g in self.game_list if g not in self.limited_games and g not in self.unavailable_games and self.cooldowns.get(g, 0) <= 0]
         except:
             return []
 
     def is_all_limited(self):
         if not self.game_list:
             return False
-        return all(g in self.limited_games for g in self.game_list)
+        return all(g in self.limited_games or g in self.unavailable_games for g in self.game_list)
 
     # ---------- Play game ----------
     def play_game(self, game, doubled=False, base_reward=None, pick=None, quiz_token=None, answer_index=None, double_token=None, score=None, bombed=None, diamonds=None, survived=None):
@@ -436,6 +438,9 @@ class BaseBot:
             return None
         if game in self.limited_games:
             self.log(f"{Y}⏭️ {game} sudah limit, skip{RESET}")
+            return None
+        if game in self.unavailable_games:
+            self.log(f"{Y}⏭️ {game} unavailable, skip{RESET}")
             return None
         files = {"action": (None, "play"), "game": (None, game),
                  "doubled": (None, "1" if doubled else "0")}
@@ -463,28 +468,17 @@ class BaseBot:
             except: pass
         return None
 
-    def start_treasure_dig(self):
-        if not self.game_list:
-            return None
-        resp = self.post("/actions/mini_games.php", data={"action": "quiz_start", "game": "treasure_dig"})
-        if resp and resp.status_code == 200:
-            try:
-                data = resp.json()
-                if data.get('status') == 'success':
-                    self.treasure_token = data.get('quiz_token')
-                    return self.treasure_token
-            except: pass
-        return None
-
     def play_single(self, game):
         if not self.game_list:
             return None
         if game in self.limited_games:
             self.log(f"{Y}⏭️ {game} sudah limit, skip{RESET}")
             return None
+        if game in self.unavailable_games:
+            return None
             
         if self.doubled_available.get(game, False) and self.retry_doubled.get(game, True):
-            ad_progress(30, f"📺 {self.game_map[game]['display']} double ad")
+            ad_progress(10, f"📺 {self.game_map[game]['display']} double ad")
             base = random.uniform(1e-7, 5e-6)
             result = self.play_game(game, doubled=True, base_reward=base)
             if result and result.get('status') == 'success':
@@ -572,6 +566,9 @@ class BaseBot:
                     if g in self.limited_games:
                         st = "LIMIT 🚫"
                         sc = R
+                    elif g in self.unavailable_games:
+                        st = "UNAVAIL ⛔"
+                        sc = R
                     else:
                         st = self.status[g]
                         sc = G if st == "Ready" else Y
@@ -604,7 +601,7 @@ class BaseBot:
             ready = self.get_ready_games()
             if not ready:
                 if self.is_all_limited():
-                    self.log(f"{R}🛑 {self.name} SEMUA GAME LIMIT! Bot di-stop{RESET}")
+                    self.log(f"{R}🛑 {self.name} SEMUA GAME LIMIT/UNAVAILABLE! Bot di-stop{RESET}")
                     self.running = False
                 return False
             
@@ -639,6 +636,10 @@ class BaseBot:
                             self.log(f"{R}✖ {self.game_map[g]['display']} still failed after claim{RESET}")
                     else:
                         self.log(f"{R}✖ Failed to claim pending, skip this game{RESET}")
+                    return False
+                elif 'unavailable' in err_msg.lower() or 'not available' in err_msg.lower():
+                    self.unavailable_games.add(g)
+                    self.log(f"{Y}⏭️ {self.game_map[g]['display']} UNAVAILABLE, skip{RESET}")
                     return False
             
             if result and result.get('status') == 'success':
@@ -686,6 +687,9 @@ class BaseBot:
                 elif 'daily_limit' in err.lower() or 'limit reached' in err.lower():
                     self.limited_games.add(g)
                     self.log(f"{Y}⏭️ {self.game_map[g]['display']} LIMIT REACHED, skip{RESET}")
+                elif 'unavailable' in err.lower() or 'not available' in err.lower():
+                    self.unavailable_games.add(g)
+                    self.log(f"{Y}⏭️ {self.game_map[g]['display']} UNAVAILABLE, skip{RESET}")
                 else:
                     self.log(f"{R}✖ {self.game_map[g]['display']} FAIL: {err}{RESET}")
             else:
@@ -710,6 +714,10 @@ class ClockBot(BaseBot):
 class MiniGramBot(BaseBot):
     def __init__(self, cfg):
         super().__init__(MINI_URL, cfg, MINI_GAMES, MINI_GAME_MAP, "MiniGramX", "GRAM")
+
+class CoinBot(BaseBot):
+    def __init__(self, cfg):
+        super().__init__(COIN_URL, cfg, COIN_GAMES, COIN_GAME_MAP, "Coinszon", "COIN")
 
 # ========== MODE PARALLEL ==========
 def parallel_run(bots):
@@ -777,16 +785,18 @@ def main():
         os.system('clear')
         print(f"""
 {PURPLE}╔══════════════════════════════════════════════════════════╗
-║   {GOLD}🚀 PEPEFLOW X CLOCKADS X MINIGRAMX - PARALLEL BOT {PURPLE}║
+║   {GOLD}🚀 PEPEFLOW X CLOCKADS X MINIGRAMX X COINSZON    {PURPLE}║
 ║   {PINK}🔐 AUTH via init_data (NO PHPSESSID)              {PURPLE}║
 ║   {PINK}🎲 FINGERPRINT RANDOM setiap reauth               {PURPLE}║
 ║   {PINK}🚫 AUTO SKIP LIMIT (daily + global)               {PURPLE}║
 ║   {PINK}🎁 AUTO CLAIM PENDING WIN (WITH AD PROOF)         {PURPLE}║
+║   {PINK}⛔ AUTO SKIP UNAVAILABLE GAMES                    {PURPLE}║
 ╠══════════════════════════════════════════════════════════╣
 ║   {G}[1]{RESET} 🔄 Start all bots (parallel)               ║
 ║   {Y}[2]{RESET} Setup PepeFlow (init_data)                 ║
 ║   {Y}[3]{RESET} Setup Clockads (init_data)                 ║
 ║   {Y}[4]{RESET} Setup MiniGramX (init_data)                ║
+║   {Y}[5]{RESET} Setup Coinszon (init_data)                 ║
 ║   {R}[0]{RESET} Exit                                     ║
 ╚══════════════════════════════════════════════════════════╝{RESET}
 """)
@@ -797,6 +807,7 @@ def main():
             pcfg = BaseConfig(PEPE_CONFIG)
             ccfg = BaseConfig(CLOCK_CONFIG)
             mcfg = BaseConfig(MINI_CONFIG)
+            xcfg = BaseConfig(COIN_CONFIG)
             if not pcfg.load() or not pcfg.init_data:
                 print(f"{R}❌ PepeFlow init_data belum disetup (menu 2){RESET}")
                 input("Enter...")
@@ -809,11 +820,16 @@ def main():
                 print(f"{R}❌ MiniGramX init_data belum disetup (menu 4){RESET}")
                 input("Enter...")
                 continue
+            if not xcfg.load() or not xcfg.init_data:
+                print(f"{R}❌ Coinszon init_data belum disetup (menu 5){RESET}")
+                input("Enter...")
+                continue
             pbot = PepeBot(pcfg)
             cbot = ClockBot(ccfg)
             mbot = MiniGramBot(mcfg)
+            xbot = CoinBot(xcfg)
             try:
-                parallel_run([pbot, cbot, mbot])
+                parallel_run([pbot, cbot, mbot, xbot])
             except KeyboardInterrupt:
                 pass
             input("Enter...")
@@ -825,6 +841,9 @@ def main():
             input("Enter...")
         elif choice == '4':
             setup_bot("MiniGramX", MINI_CONFIG, "Masukkan init_data untuk MiniGramX")
+            input("Enter...")
+        elif choice == '5':
+            setup_bot("Coinszon", COIN_CONFIG, "Masukkan init_data untuk Coinszon")
             input("Enter...")
         else:
             print(f"{R}❌ Invalid{RESET}")
