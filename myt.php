@@ -2,8 +2,8 @@
 
 error_reporting(0);
 date_default_timezone_set('Asia/Jakarta');
-$configFile = "makeyou.json";
-$waryono = "makeyou.txt";
+$configFile = "make1.json";
+$waryono = "make1.txt";
 
 const hitam  = "\033[0;30m";
 const merah  = "\033[0;31m";
@@ -27,17 +27,54 @@ const script_name = "makeyoutask.com";
 const host        = "https://makeyoutask.com";
 const in      = "https://api.waryono.my.id/in.php";
 
+function device_token_init() {
+    $file = "device_token.txt";
+    if (file_exists($file)) {
+        $tok = trim(file_get_contents($file));
+        if ($tok !== '') {
+            return $tok;
+        }
+    }
+    $screen_data = '1080x1920x24';
+    $nav_data = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36' . 'id-ID' . '1';
+    $raw = $screen_data . $nav_data . time() . mt_rand();
+    $hash = 0;
+    for ($i = 0, $l = strlen($raw); $i < $l; $i++) {
+        $hash = (($hash << 5) - $hash) + ord($raw[$i]);
+        $hash &= 0xFFFFFFFF;
+    }
+    $tok = 'dev_' . abs($hash) . '_' . substr(bin2hex(random_bytes(4)), 0, 8);
+    file_put_contents($file, $tok);
+    return $tok;
+}
+
 function clear() {
     (PHP_OS == "Linux") ? system('clear') : pclose(popen('cls', 'w'));
+}
+
+function ensure_device_cookie($host) {
+    global $device_token;
+    $file = "cookies.txt";
+    if (!file_exists($file) || !$host) {
+        return;
+    }
+    $content = file($file);
+    foreach ($content as $line) {
+        if (strpos($line, "\t".$host."\t") !== false && strpos($line, "\tdevice_token\t") !== false) {
+            return;
+        }
+    }
+    file_put_contents($file, $host."\tFALSE\t/\tFALSE\t4102444800\tdevice_token\t".$device_token."\n", FILE_APPEND);
 }
 
 function smm_claim_headers($claim_url, $referer) {
     $origin = preg_replace('~^(https?://[^/]+).*$~', '$1', $claim_url);
     $headers = [
+        'sec-ch-ua: "Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"',
         'sec-ch-ua-platform: "Android"',
         'x-requested-with: XMLHttpRequest',
         'user-agent: Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36',
-        'accept: application/json, text/javascript, q=0.01',
+        'accept: application/json, text/javascript, */*; q=0.01',
         'content-type: application/x-www-form-urlencoded; charset=UTF-8',
         'sec-ch-ua-mobile: ?1',
         'origin: '.$origin,
@@ -81,7 +118,12 @@ function skibidixxx($url, $method = 'GET', $data = [], $headers = []) {
         if ($response) {
             $header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
             $body = substr($response, $header_size);
-            $GLOBALS['last_url'] = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
+            $eff = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
+            $GLOBALS['last_url'] = $eff;
+            $eff_host = parse_url($eff, PHP_URL_HOST);
+            if ($eff_host && strpos($eff_host, 'makeyoutask.com') === false) {
+                ensure_device_cookie($eff_host);
+            }
             curl_close($ch);
             return $body;
         } else {
@@ -214,6 +256,7 @@ function cloud($apikey, $sitekey, $cdata = '') {
 function allsuki(&$a,&$b,&$c,&$d){
 	$a = [
 		'host: '.script_name,
+		'sec-ch-ua: "Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"',
 		'sec-ch-ua-platform: "Android"',
 		'save-data: on',
 		'upgrade-insecure-requests: 1',
@@ -227,6 +270,7 @@ function allsuki(&$a,&$b,&$c,&$d){
 	];
 	$b = [
 		'host: '.script_name,
+		'sec-ch-ua: "Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"',
 		'sec-ch-ua-platform: "Android"',
 		'save-data: on',
 		'origin: '.host,
@@ -243,6 +287,7 @@ function allsuki(&$a,&$b,&$c,&$d){
 	];
 	$c = [
 		'host: makeyoutask.com',
+		'sec-ch-ua: "Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"',
 		'sec-ch-ua-platform: "Android"',
 		'user-agent: Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36',
 		'origin: '.host,
@@ -254,6 +299,7 @@ function allsuki(&$a,&$b,&$c,&$d){
 	];
 	$d = [
 		'host: '.script_name,
+		'sec-ch-ua: "Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"',
 		'sec-ch-ua-platform: "Android"',
 		'sec-ch-ua-mobile: ?1',
 		'upgrade-insecure-requests: 1',
@@ -275,18 +321,20 @@ $email    = $config['email'];
 $password = $config['password'];
 
 clear();
+$device_token = device_token_init();
 
 allsuki($a,$b,$c,$d);
 $url = host."/dashboard";
 $dash = skibidixxx($url, "GET", [], $b);
 if (strpos($dash, "Dashboard | MakeYouTask.Com") !== false){
-	preg_match('/<span style="color:var\(--dash-gold\);">([^<]+)<\/span>/', $dash, $user);
+	preg_match('/<span class="font-weight-bold text-white">([^<]+)<\/span>/', $dash, $user);
 	$username = trim($user[1] ?? 'Guest');
-	preg_match('/Level:\s*<strong>([^<]+)<\/strong>/', $dash, $lvl);
-	$level = trim($lvl[1] ?? 'Level 0');
-	preg_match('/<span class="text-warning font-weight-bold">(\d+\s*\/\s*\d+\s*EXP)<\/span>/', $dash, $exp);
-	$current_exp = trim($exp[1] ?? '0/0');
-	preg_match('/<h3 class="kpi-value text-success">([^<]+)<\/h3>/', $dash, $bal);
+	preg_match('/>LVL\s+(\d+)<\/span>/', $dash, $lvl);
+	$level = trim($lvl[1] ?? '0');
+	$level = "Level ".$level;
+	preg_match('~font-weight: 700; color: #fff;">\s*([\d.,]+)\s*\/\s*([\d.,]+)\s*</div>~s', $dash, $exp);
+	$current_exp = trim(($exp[1] ?? '0')." / ".($exp[2] ?? '0'));
+	preg_match('/<span class="stat-number text-success">([^<]+)<\/span>/', $dash, $bal);
 	$balance = trim($bal[1] ?? '0 Token');
 	echo putih."user: ".cyan.$username.putih." balance: ".biru.$balance."\n";
 	echo putih."level: ".biru.$level.putih." (".biru.$current_exp.putih.")\n";
@@ -311,6 +359,21 @@ if (strpos($dash, "Dashboard | MakeYouTask.Com") !== false){
 	        timer($menit * 60, "  cooldown...");
 	        goto smm_get;
 	    }
+	    if (strpos($watch, "Human Verification Required") !== false) {
+	        echo putih."[ERROR] ".merah."Halaman minta verifikasi tapi gak ada videoCode, retry...\n";
+	        sleep(5);
+	        goto smm_get;
+	    }
+	    if (preg_match('/<title>([^<]+)<\/title>/', $watch, $ttl)) {
+	        echo putih."[ERROR] ".merah."Halaman: ".kuning.trim($ttl[1])."\n";
+	    }
+	    if (preg_match('/class="wat-(msg-box|limit-card|security-card)[^"]*"[^>]*>(.{0,300})/s', $watch, $wbox)) {
+	        $txt = trim(strip_tags($wbox[2]));
+	        echo putih."[ERROR] ".merah."Pesan: ".kuning.substr($txt, 0, 200)."\n";
+	    }
+	    if (strpos($watch, "login") !== false && strpos($watch, "MakeYouTask") === false) {
+	        echo putih."[ERROR] ".merah."Session mungkin expired (login required).\n";
+	    }
 	    echo putih."[ERROR] ".merah."Gagal membuka halaman stream, retry...\n";
 	    sleep(5);
 	    goto smm_get;
@@ -327,13 +390,17 @@ if (strpos($dash, "Dashboard | MakeYouTask.Com") !== false){
 	$vid       = $vc[1] ?? '?';
 	$claim_url = $cw[1] ?? '';
 	$blog_page = $GLOBALS['last_url'];
-	if (!$csrf_hash || !$target || !$claim_url) {
+	if (!$csrf_hash || !$claim_url) {
 	    echo putih."[ERROR] ".merah."Data stream tidak lengkap!\n";
 	    sleep(5);
 	    goto smm_get;
 	}
-	$total_claim = ceil($target / $required);
-	echo putih."video: ".biru.$vid.putih." | target: ".biru.$target."s".putih." | claim tiap: ".biru.$required."s".putih." (~".$total_claim."x)\n";
+	if ($target > 0) {
+	    $total_claim = ceil($target / $required);
+	    echo putih."video: ".biru.$vid.putih." | target: ".biru.$target."s".putih." | claim tiap: ".biru.$required."s".putih." (~".$total_claim."x)\n";
+	} else {
+	    echo putih."video: ".biru.$vid.putih." | mode baru (s/d refresh:true) | claim tiap: ".biru.$required."s\n";
+	}
 
 	if (strpos($watch, "Human Verification Required") !== false) {
 	    preg_match('/data-sitekey="([^"]+)"/', $watch, $site);
@@ -381,7 +448,7 @@ if (strpos($dash, "Dashboard | MakeYouTask.Com") !== false){
 	while (true) {
 	    timer($required, "  watching [".$vid."]");
 	    $watched += $required;
-	    $done = ($watched >= $target);
+	    $done = ($target > 0 && $watched >= $target);
 	    $data = http_build_query(["csrf_token_name" => $csrf_hash]);
 	    $claim = skibidixxx($claim_url, "POST", $data, smm_claim_headers($claim_url, $blog_page));
 	    preg_match('/"status"\s*:\s*"([^"]*)"/', $claim, $st);
@@ -395,9 +462,9 @@ if (strpos($dash, "Dashboard | MakeYouTask.Com") !== false){
 	        $csrf_hash = $tk[1];
 	    }
 	    if ($status == 'success') {
-	        echo putih."[".biru.$watched."/".$target.putih."] ".hijau.$pesan."\n";
+	        echo putih."[".biru.$watched."s".putih."] ".hijau.$pesan."\n";
 	    } else {
-	        echo putih."[".biru.$watched."/".$target.putih."] ".merah.$pesan."\n";
+	        echo putih."[".biru.$watched."s".putih."] ".merah.$pesan."\n";
 	    }
 	    if (($cp[1] ?? 'false') == 'true') {
 	        echo putih."[ERROR] ".merah."hubungi admin untuk update script.\n";
