@@ -30,7 +30,7 @@ BANNER = f"""
                                                                   
 {C}=============================================================={X}
 {G}👨‍💻 ScriptMaker : MoneyMaker_w{X}
-{G}📢 TG          : @ScriptyXSouu{X}
+{G}📢 TG          : https://t.me/+f3QBLkR5D8k4YzNl{X}
 {G}🤖 Bot         : PlusCrypto{X}
 {C}=============================================================={X}
 """
@@ -293,6 +293,7 @@ class PlusCryptoClaimer:
             return True
         return False
     
+    # ==================== SUBMIT CLAIM (UPDATED WITH DEBUG ONLY ON FAILURE) ====================
     def submit_claim(self, currency_id, currency_name, captcha_token):
         print(f"{C}📤 [SUBMIT]     {W}Submitting claim...{X}")
         try:
@@ -313,6 +314,8 @@ class PlusCryptoClaimer:
                 "Referer": f"{BASE_URL}/apps-tgmini/plus-crypto-faucet-bot/manual-faucet/{currency_id}/{currency_name}"
             }
             resp = self.session.post(claim_url, headers=headers, data=data, timeout=30, allow_redirects=True)
+            
+            # Cek sukses
             if "alert-success" in resp.text or "successfully added" in resp.text:
                 reward_match = re.search(r'([\d.]+)\s*' + currency_name, resp.text, re.IGNORECASE)
                 if reward_match:
@@ -325,12 +328,28 @@ class PlusCryptoClaimer:
                 self.save_config()
                 return True
             else:
+                # Gagal – tampilkan debug
+                print(f"{Y}📡 HTTP Status : {resp.status_code}{X}")
+                print(f"{Y}📍 Final URL   : {resp.url}{X}")
+                clean_text = re.sub(r'<[^>]+>', ' ', resp.text)
+                snippet = clean_text[:300].strip()
+                print(f"{Y}📄 Response    : {snippet}{'...' if len(clean_text) > 300 else ''}{X}")
+                
+                # Cek alert-danger
                 error_match = re.search(r'alert-danger[^>]*>(.*?)</div>', resp.text, re.DOTALL)
                 if error_match:
                     err_msg = re.sub(r'<[^>]+>', '', error_match.group(1)).strip()
                     print(f"{R}❌ [FAILED]     {W}{err_msg}{X}")
                 else:
-                    print(f"{R}❌ [FAILED]     {W}Claim failed (unknown reason){X}")
+                    # Deteksi kemungkinan masalah
+                    if "login" in resp.url.lower() or "signin" in resp.url.lower() or "auth" in resp.url.lower():
+                        print(f"{R}❌ [FAILED]     {W}Session expired / redirected to login!{X}")
+                    elif resp.status_code in [302, 303, 307, 308]:
+                        print(f"{R}❌ [FAILED]     {W}Redirect detected (maybe session expired){X}")
+                    elif "csrf" in resp.text.lower() and "token" in resp.text.lower():
+                        print(f"{R}❌ [FAILED]     {W}CSRF token mismatch / invalid{X}")
+                    else:
+                        print(f"{R}❌ [FAILED]     {W}Claim failed (unknown reason){X}")
                 self.failed += 1
                 self.save_config()
                 return False
