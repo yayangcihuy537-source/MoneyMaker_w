@@ -79,7 +79,7 @@
           "runner": "php"
         },
         "6": {
-          "label": "PlusCryptoFaucetBot 🔴",
+          "label": "PlusCryptoFaucetBot 🟢",
           "file": "Plus.py",
           "runner": "python3"
         }
