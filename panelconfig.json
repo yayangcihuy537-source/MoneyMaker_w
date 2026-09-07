@@ -84,9 +84,9 @@
           "runner": "python3"
         },
         "7": {
-          "label": "Coming Soon",
-          "file": "",
-          "runner": "php"
+          "label": "litecoinpick 🟢",
+          "file": "pick.py",
+          "runner": "python3"
         },
         "8": {
           "label": "Coming Soon",
