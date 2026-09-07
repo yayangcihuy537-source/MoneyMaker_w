@@ -209,8 +209,8 @@
           "runner": "python3"
         },
         "23": {
-          "label": "Coming Soon",
-          "file": "",
+          "label": "Faucet Btc 🟢",
+          "file": "btc.py",
           "runner": "python3"
         },
         "24": {
