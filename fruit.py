@@ -1,420 +1,230 @@
 #!/usr/bin/env python3
-"""
-GRAM DROP - AUTO ADS + GAMES (REAL)
-- Auto watch ads (earn + monetag) sampai limit harian
-- Auto main game (whack, flappy, catch, merge) sampai habis
-- Delay 17 detik sebelum claim (real play)
-- Clean progress bar
-- Auto detect daily limit & cooldown
-"""
+# -*- coding: utf-8 -*-
 
-import os
-import sys
-import time
-import json
-import random
-import uuid
-import hashlib
 import requests
-from datetime import datetime
+import json
+import urllib.parse
+import time
+import sys
 
-# ============================================================
-# WARNA
-# ============================================================
-C = '\033[96m'
-LC = '\033[1;96m'
-Y = '\033[93m'
-G = '\033[92m'
-R = '\033[91m'
-B = '\033[94m'
-W = '\033[97m'
-BLD = '\033[1m'
-RS = '\033[0m'
-DIM = '\033[2m'
+# Warna ANSI
+GREEN = '\033[92m'
+YELLOW = '\033[93m'
+RED = '\033[91m'
+CYAN = '\033[96m'
+RESET = '\033[0m'
+BOLD = '\033[1m'
 
-# ============================================================
-# BANNER
-# ============================================================
-BANNER = f"""
-{C}╔══════════════════════════════════════════════════════════╗
-║   ██████╗ ██████╗  █████╗ ███╗   ███╗██████╗ ██████╗   ║
-║  ██╔════╝ ██╔══██╗██╔══██╗████╗ ████║██╔══██╗██╔══██╗  ║
-║  ██║  ███╗██████╔╝███████║██╔████╔██║██████╔╝██████╔╝  ║
-║  ██║   ██║██╔══██╗██╔══██║██║╚██╔╝██║██╔═══╝ ██╔══██╗  ║
-║  ╚██████╔╝██║  ██║██║  ██║██║ ╚═╝ ██║██║     ██║  ██║  ║
-║   ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝     ╚═╝  ╚═╝  ║
-╠══════════════════════════════════════════════════════════╣
-║                 {Y}☁️  GRAM DROP ☁️{RS}{C}                    ║
-║            {LC}AUTO ADS + GAMES (REAL){RS}{C}              ║
-╚══════════════════════════════════════════════════════════╝{RS}
-"""
+# =============================================================
+#                  🌙 SLEEPY MINE 🌙
+# =============================================================
+#                     ⛏️ SLEEPY MINE
+#                  💎 AUTO MINING BOT 💎
+# =============================================================
+# 🤖 BOT   : @MineSLPYBot
+# 🔗 REF   : ref743382203
+# 🚀 START : t.me/MineSLPYBot?startapp=ref743382203
+# =============================================================
+#                     HAPPY MINING 🚀
+# =============================================================
+# ScriptMaker : @MoneyMaker_w
+# TG          : https://t.me/ScriptyXSouu
+# =============================================================
 
-MENU = f"""
-{C}╔══════════════════════════════════════════════╗
-║              {Y}☁️ GRAM DROP ☁️{RS}{C}               ║
-║          {LC}AUTO EARNER (REAL){RS}{C}             ║
-╠══════════════════════════════════════════════╣
-║  {G}[1] 📺 Watch Ads (auto){RS}{C}                 ║
-║  {B}[2] 🎮 Play Games (auto){RS}{C}               ║
-║  {Y}[3] 🔑 Set Init Data{RS}{C}                   ║
-║  {B}[4] 💰 Check Balance{RS}{C}                   ║
-║                                              ║
-║  {R}[0] ❌ Exit{RS}{C}                                ║
-╚══════════════════════════════════════════════╝{RS}
-"""
+API_URL = "https://sleepymine.xyz/api/db.php"
 
-CONFIG_FILE = "gramdrop_config.json"
-BASE_URL = "https://modapkam.shop"
+# Konfigurasi
+MAX_REGULAR_ADS = 500      # Iklan biasa
+MAX_TADDY_ADS = 250        # Iklan Taddy (0.25 SLPY each)
+AD_DELAY = 3               # Jeda antar iklan (detik)
 
-class GramDropBot:
-    def __init__(self, init_data: str = None):
-        self.init_data = init_data
-        self.base_url = BASE_URL
-        self.api_url = f"{self.base_url}/api"
-        self.session = requests.Session()
-        self.device_id = self._gen_device_id()
-        self.user_data = None
-        self.balance = 0
-        self.pending_claim = None
-        self.daily_bonus_claimed = False
-        self.stats = {'total_earned': 0, 'start_balance': 0}
-        self.GAME_IDS = ['whack', 'flappy', 'catch', 'merge']
-        self.FIXED_SCORE = 600
-        self._update_headers()
+def parse_init_data(init_data: str):
+    params = urllib.parse.parse_qs(init_data)
+    user_json = params.get('user', [None])[0]
+    if not user_json:
+        raise ValueError("user parameter not found in init_data")
+    user_data = json.loads(user_json)
+    uid = str(user_data.get('id'))
+    return uid
 
-    def _gen_device_id(self) -> str:
-        fp = "1920x1080|24|8|5|Linux|Asia/Kolkata|en-US"
-        return hashlib.sha256(f"{fp}|{uuid.uuid4()}".encode()).hexdigest()[:40]
+def db_request(payload, init_data):
+    headers = {
+        'Content-Type': 'application/json',
+        'x-telegram-init-data': init_data
+    }
+    resp = requests.post(API_URL, json=payload, headers=headers)
+    if resp.status_code != 200:
+        print(f"{RED}Error {resp.status_code}: {resp.text}{RESET}")
+    resp.raise_for_status()
+    return resp.json()
 
-    def _update_headers(self):
-        self.session.headers.update({
-            'Host': 'modapkam.shop',
-            'sec-ch-ua-platform': '"Android"',
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.181 Safari/537.36 Telegram-Android/12.6.4',
-            'Content-Type': 'application/json',
-            'X-Telegram-Initdata': self.init_data or '',
-            'X-Device-Id': self.device_id,
-            'Accept': '*/*',
-            'X-Requested-With': 'org.telegram.messenger.web',
-            'Referer': 'https://modapkam.shop/',
-            'Accept-Encoding': 'gzip, deflate',
-            'Accept-Language': 'id,id-ID;q=0.9,en-US;q=0.8,en;q=0.7',
-            'Origin': 'https://modapkam.shop',
-            'Sec-Fetch-Site': 'same-origin',
-            'Sec-Fetch-Mode': 'cors',
-            'Sec-Fetch-Dest': 'empty',
-            'Connection': 'keep-alive',
-        })
+def get_user(uid, init_data):
+    payload = {
+        "table": "airdrop_users",
+        "action": "select",
+        "select": "*",
+        "filters": [{"col": "uid", "op": "eq", "val": uid}],
+        "order": None,
+        "limit": None,
+        "single": True,
+        "payload": None
+    }
+    result = db_request(payload, init_data)
+    return result.get('data')
 
-    def _request(self, method: str, endpoint: str, data: dict = None):
-        url = f"{self.api_url}{endpoint}"
-        try:
-            if method.upper() == 'POST':
-                resp = self.session.post(url, json=data or {})
-            else:
-                resp = self.session.get(url)
-            if resp.status_code != 200:
-                print(f"{R}⚠️ HTTP {resp.status_code}{RS}")
-                return None
-            return resp.json()
-        except Exception as e:
-            print(f"{R}❌ Request gagal: {e}{RS}")
-            return None
-
-    def get_user(self):
-        resp = self._request('GET', '/me')
-        if not resp:
-            return None
-        if 'error' in resp:
-            print(f"{R}❌ API error: {resp}{RS}")
-            return None
-        self.user_data = resp.get('user', {})
-        if not self.user_data:
-            return None
-        self.balance = self.user_data.get('balance', 0)
-        self.pending_claim = self.user_data.get('pendingClaim')
-        self.daily_bonus_claimed = self.user_data.get('dailyBonusClaimed', False)
-        if self.stats['start_balance'] == 0:
-            self.stats['start_balance'] = self.balance
-        return resp
-
-    def _watch_ad(self, purpose: str) -> tuple:
-        start = self._request('POST', '/ads/start', {'purpose': purpose})
-        if not start or 'error' in start:
-            return False, None
-        nonce = start.get('nonce')
-        if not nonce:
-            return False, None
-        wait = start.get('minWatch', 30) + random.randint(1, 3)
-        print(f"{C}⏳ Watching ad ({wait}s)...{RS}")
-        for i in range(wait, 0, -1):
-            print(f"\r   {G}[{'#' * (wait - i + 1)}{' ' * (i - 1)}] {i:2d}s{RS}", end='', flush=True)
-            time.sleep(1)
-        print()
-        time.sleep(random.uniform(0.5, 1.5))
-        complete = self._request('POST', '/ads/complete', {'nonce': nonce})
-        if not complete or 'error' in complete:
-            return False, None
-        reward = complete.get('reward', 0)
-        if reward:
-            self.balance = complete.get('balance', self.balance)
-            self.stats['total_earned'] += reward
-            print(f"{G}✅ Ad completed: +{reward} GD (Bal: {self.balance}){RS}")
-        else:
-            print(f"{Y}⚠️ Ad completed, no reward{RS}")
-        return True, nonce
-
-    def play_game_delayed(self, game_id: str) -> int:
-        if self.pending_claim:
-            self.claim_pending()
-            self.get_user()
-            if self.pending_claim:
-                return 0
-
-        game_info = self.user_data.get('playsLeft', {})
-        if game_info.get(game_id, 0) <= 0:
-            return 0
-
-        print(f"{LC}▶️  Playing {game_id}...{RS}")
-        start = self._request('POST', '/games/start', {'game': game_id})
-        if not start or 'error' in start:
-            return 0
-        nonce = start.get('nonce')
-        if not nonce:
-            return 0
-
-        # Simulasi main game
-        play_time = random.randint(10, 25)
-        for i in range(play_time, 0, -1):
-            print(f"\r   {C}🎮 Playing {i:2d}s{RS}", end='', flush=True)
-            time.sleep(1)
-        print()
-
-        # Finish game
-        finish = self._request('POST', '/games/finish', {'nonce': nonce, 'score': self.FIXED_SCORE})
-        if not finish or 'error' in finish:
-            return 0
-        sid = finish.get('sessionId')
-        if not sid:
-            return 0
-
-        # Start ad
-        success, ad_nonce = self._watch_ad('game')
-        if not success or not ad_nonce:
-            self.pending_claim = {'sessionId': sid, 'game': game_id, 'reward': finish.get('reward', 0)}
-            print(f"{Y}⚠️ Ad failed, pending claim saved.{RS}")
-            return 0
-
-        # Delay 17 detik sebelum claim
-        print(f"{LC}⏳ Waiting 17 seconds before claim...{RS}")
-        for i in range(17, 0, -1):
-            print(f"\r   {C}🕒 {i:2d}s remaining{RS}", end='', flush=True)
-            time.sleep(1)
-        print()
-
-        # Claim
-        claim_resp = self._request('POST', '/games/claim', {'sessionId': sid, 'adNonce': ad_nonce})
-        if not claim_resp or 'error' in claim_resp:
-            return 0
-        reward = claim_resp.get('reward', 0)
-        if reward:
-            self.balance = claim_resp.get('balance', self.balance)
-            self.stats['total_earned'] += reward
-            self.user_data['playsLeft'] = claim_resp.get('playsLeft', {})
-            print(f"{G}✅ Claimed! +{reward} GD (Bal: {self.balance}){RS}")
-        else:
-            print(f"{R}❌ Claim failed{RS}")
-        return reward
-
-    def claim_pending(self) -> int:
-        if not self.pending_claim:
-            return 0
-        sid = self.pending_claim.get('sessionId')
-        reward = self.pending_claim.get('reward', 0)
-        print(f"{Y}📌 Claiming pending {reward} GD...{RS}")
-        success, nonce = self._watch_ad('game')
-        if not success:
-            return 0
-        resp = self._request('POST', '/games/claim', {'sessionId': sid, 'adNonce': nonce})
-        if resp and 'error' not in resp:
-            self.pending_claim = None
-            self.balance = resp.get('balance', self.balance)
-            self.stats['total_earned'] += resp.get('reward', 0)
-            return resp.get('reward', 0)
-        return 0
-
-    def get_ads_info(self):
-        if not self.user_data:
-            self.get_user()
-        counters = self.user_data.get('adCounters', {})
-        adsgram = counters.get('adsgram', {'used': 0, 'cap': 8})
-        monetag = counters.get('monetag', {'used': 0, 'cap': 6})
-        return {
-            'adsgram': {
-                'used': adsgram.get('used', 0),
-                'cap': adsgram.get('cap', 8),
-                'remaining': max(0, adsgram.get('cap', 8) - adsgram.get('used', 0))
-            },
-            'monetag': {
-                'used': monetag.get('used', 0),
-                'cap': monetag.get('cap', 6),
-                'remaining': max(0, monetag.get('cap', 6) - monetag.get('used', 0))
-            }
+def claim_mined(uid, init_data):
+    for fn in ['claim_mined', 'claim', 'claim_reward']:
+        payload = {
+            "action": "rpc",
+            "fn": fn,
+            "args": {"uid": uid}
         }
-
-    def watch_ads_loop(self):
-        print(f"\n{LC}📺 Starting Ads Auto...{RS}")
-        round_num = 0
-        while True:
-            round_num += 1
-            info = self.get_ads_info()
-            if info['adsgram']['remaining'] <= 0 and info['monetag']['remaining'] <= 0:
-                print(f"{G}✅ All ad limits reached!{RS}")
-                break
-
-            if round_num % 2 == 1 and info['adsgram']['remaining'] > 0:
-                print(f"{Y}📊 Adsgram: {info['adsgram']['remaining']} left{RS}")
-                success, _ = self._watch_ad('earn')
-                if success:
-                    print(f"{G}✅ Adsgram done{RS}")
-            elif info['monetag']['remaining'] > 0:
-                print(f"{Y}📊 Monetag: {info['monetag']['remaining']} left{RS}")
-                success, _ = self._watch_ad('monetag')
-                if success:
-                    print(f"{G}✅ Monetag done{RS}")
-            self.get_user()
-            time.sleep(random.randint(3, 6))
-
-    def play_games_loop(self):
-        print(f"\n{LC}🎮 Starting Games Auto...{RS}")
-        if self.pending_claim:
-            self.claim_pending()
-            self.get_user()
-
-        total_earned = 0
-        for game in self.GAME_IDS:
-            if self.user_data.get('playsLeft', {}).get(game, 0) > 0:
-                reward = self.play_game_delayed(game)
-                if reward:
-                    total_earned += reward
-                time.sleep(random.randint(3, 6))
-
-        print(f"{G}✅ Games finished! Total earned: +{total_earned} GD{RS}")
-
-    def show_balance(self):
-        self.get_user()
-        print(f"\n{B}💰 Balance: {self.balance} GD{RS}")
-        print(f"{B}📊 Total earned today: {self.stats['total_earned']} GD{RS}")
-        if self.pending_claim:
-            print(f"{Y}⚠️ Pending claim: {self.pending_claim.get('reward', 0)} GD{RS}")
-        plays = self.user_data.get('playsLeft', {})
-        print(f"{B}🎮 Remaining plays:{RS}")
-        for g, s in plays.items():
-            print(f"   {C}{g}: {s} x{RS}")
-
-# ============================================================
-# FUNGSI UTILITY
-# ============================================================
-def load_config():
-    if os.path.exists(CONFIG_FILE):
         try:
-            with open(CONFIG_FILE, 'r') as f:
-                return json.load(f)
-        except:
-            return None
+            result = db_request(payload, init_data)
+            if result and result.get('data') and result['data'].get('success'):
+                return result['data']
+        except Exception:
+            continue
     return None
 
-def save_config(data):
-    with open(CONFIG_FILE, 'w') as f:
-        json.dump(data, f, indent=4)
+def watch_regular_ad(uid, init_data):
+    # Iklan biasa
+    fn_list = ['credit_ad_reward', 'credit_ad', 'watch_ad']
+    for fn in fn_list:
+        payload = {
+            "action": "rpc",
+            "fn": fn,
+            "args": {"uid": uid}
+        }
+        try:
+            result = db_request(payload, init_data)
+            if result and result.get('data') and result['data'].get('success'):
+                return result['data']
+        except Exception:
+            continue
+    return None
 
-def set_init_data():
-    os.system('cls' if os.name == 'nt' else 'clear')
-    print(BANNER)
-    print(f"\n{Y}🔑 SET INIT DATA{RS}")
-    print(f"{C}{'='*50}{RS}")
-    print(f"{Y}⚠️  Pastikan init_data masih VALID dan belum expired!{RS}")
-    print(f"{Y}⚠️  Copy dari WebApp Telegram (bisa dari DevTools){RS}")
-    init_data = input(f"{LC}X-Telegram-Initdata (wajib): {RS}").strip()
-    if not init_data:
-        print(f"{R}❌ Init data tidak boleh kosong!{RS}")
-        time.sleep(2)
-        return False
+def watch_taddy_ad(uid, init_data):
+    # Iklan Taddy (0.25 SLPY)
+    fn_list = ['credit_taddy_reward', 'taddy_ad_reward', 'credit_taddy_ad', 'watch_taddy_ad']
+    for fn in fn_list:
+        payload = {
+            "action": "rpc",
+            "fn": fn,
+            "args": {"uid": uid}
+        }
+        try:
+            result = db_request(payload, init_data)
+            if result and result.get('data') and result['data'].get('success'):
+                return result['data']
+        except Exception:
+            continue
+    return None
 
-    old_config = load_config() or {}
-    config = {
-        "init_data": init_data,
-        "device_id": old_config.get("device_id", hashlib.sha256(f"{uuid.uuid4()}".encode()).hexdigest()[:40])
-    }
-    save_config(config)
-    print(f"{G}✅ Config disimpan!{RS}")
-    time.sleep(1.5)
-    return True
+def print_banner():
+    print(f"{CYAN}=" * 60)
+    print(f"{CYAN}                 🌙 SLEEPY MINE 🌙")
+    print(f"{CYAN}=" * 60)
+    print()
+    print(f"{YELLOW}                    ⛏️ SLEEPY MINE")
+    print(f"{YELLOW}                 💎 AUTO MINING BOT 💎")
+    print()
+    print(f"{CYAN}=" * 60)
+    print(f"{GREEN}🤖 BOT   : @MineSLPYBot")
+    print(f"{GREEN}🔗 REF   : ref6894031790")
+    print(f"{GREEN}🚀 START : t.me/MineSLPYBot?startapp=ref6894031790")
+    print(f"{CYAN}=" * 60)
+    print(f"{BOLD}                    HAPPY MINING 🚀{RESET}")
+    print(f"{CYAN}=" * 60)
+    print(f"{GREEN}ScriptMaker : @MoneyMaker_w")
+    print(f"{GREEN}TG          : https://t.me/ScriptyXSouu{RESET}")
+    print(f"{CYAN}=" * 60)
 
 def main():
-    config = load_config()
-    init_data = config.get("init_data", "") if config else ""
-
-    bot = None
-    if init_data:
-        bot = GramDropBot(init_data)
-        if not bot.get_user():
-            print(f"{R}❌ Init_data tidak valid atau expired. Silakan set ulang.{RS}")
-            bot = None
-            time.sleep(2)
-
-    while True:
-        os.system('cls' if os.name == 'nt' else 'clear')
-        print(BANNER)
-        print(MENU)
-        if bot and bot.init_data:
-            print(f"{G}🔑 Config: Aktif ✅ (Init_Data tersimpan){RS}")
-            print(f"{B}💰 Balance: {bot.balance} GD{RS}")
+    print_banner()
+    
+    init_data = input(f"\n{YELLOW}Masukkan init_data (dari Telegram WebApp): {RESET}").strip()
+    if not init_data:
+        print(f"{RED}Init_data tidak boleh kosong!{RESET}")
+        sys.exit(1)
+    
+    try:
+        uid = parse_init_data(init_data)
+        print(f"{GREEN}UID terdeteksi: {uid}{RESET}")
+    except Exception as e:
+        print(f"{RED}Gagal parse init_data: {e}{RESET}")
+        sys.exit(1)
+    
+    print(f"\n{CYAN}[1] Mengambil data user...{RESET}")
+    user = get_user(uid, init_data)
+    if not user:
+        print(f"{RED}Gagal mendapatkan data user.{RESET}")
+        sys.exit(1)
+    print(f"Nama: {user.get('name')}")
+    print(f"Points: {user.get('points')}")
+    print(f"Unclaimed Mined: {user.get('unclaimed_mined')}")
+    print(f"Ads watched (regular): {user.get('ads_watched_count')}")
+    print(f"Taddy ads watched: {user.get('taddy_watched_count')}")
+    
+    # Claim mined jika ada
+    if user.get('unclaimed_mined', 0) > 0:
+        print(f"\n{CYAN}[2] Melakukan claim mined...{RESET}")
+        claim_result = claim_mined(uid, init_data)
+        if claim_result and claim_result.get('success'):
+            print(f"{GREEN}Claim berhasil!{RESET}")
+            user = get_user(uid, init_data)
+            print(f"Points sekarang: {user.get('points')}")
         else:
-            print(f"{R}🔑 Config: Belum diset ❌{RS}")
-
-        choice = input(f"\n{LC}Pilih Menu » {RS}").strip()
-
-        if choice == "1":
-            if not bot:
-                print(f"{R}❌ Set Init_Data dulu (menu 3){RS}")
-                time.sleep(2)
-                continue
-            bot.watch_ads_loop()
-            input(f"\n{C}Tekan Enter untuk kembali...{RS}")
-        elif choice == "2":
-            if not bot:
-                print(f"{R}❌ Set Init_Data dulu (menu 3){RS}")
-                time.sleep(2)
-                continue
-            bot.play_games_loop()
-            input(f"\n{C}Tekan Enter untuk kembali...{RS}")
-        elif choice == "3":
-            if set_init_data():
-                config = load_config()
-                init_data = config.get("init_data", "")
-                bot = GramDropBot(init_data)
-                if not bot.get_user():
-                    print(f"{R}❌ Init_data tidak valid. Coba lagi.{RS}")
-                    bot = None
-                    time.sleep(2)
-        elif choice == "4":
-            if not bot:
-                print(f"{R}❌ Set Init_Data dulu (menu 3){RS}")
-                time.sleep(2)
-                continue
-            bot.show_balance()
-            input(f"\n{C}Tekan Enter untuk kembali...{RS}")
-        elif choice == "0":
-            print(f"\n{R}❌ Exit...{RS}")
-            sys.exit(0)
-        else:
-            print(f"{R}❌ Pilihan tidak valid!{RS}")
-            time.sleep(1)
+            print(f"{RED}Claim gagal atau tidak ada yang bisa di-claim.{RESET}")
+    else:
+        print(f"\n{YELLOW}[2] Tidak ada unclaimed mined, lewati claim.{RESET}")
+    
+    # ---- TADDY ADS ----
+    print(f"\n{CYAN}[3a] Mulai menonton TADDY ADS (0.25 SLPY each, max {MAX_TADDY_ADS}/hari)...{RESET}")
+    taddy_count = 0
+    while taddy_count < MAX_TADDY_ADS:
+        ad_result = watch_taddy_ad(uid, init_data)
+        if not ad_result or not ad_result.get('success'):
+            print(f"{YELLOW}Taddy ads habis atau error, lanjut ke iklan biasa.{RESET}")
+            break
+        
+        taddy_count = ad_result.get('count', 0)
+        reward = ad_result.get('reward', 0)
+        points = ad_result.get('points', 0)
+        print(f"{GREEN}Taddy ke-{taddy_count}: +{reward} SLPY, total points: {points}{RESET}")
+        
+        if taddy_count >= MAX_TADDY_ADS:
+            print(f"{YELLOW}Sudah mencapai batas {MAX_TADDY_ADS} Taddy ads hari ini.{RESET}")
+            break
+        
+        time.sleep(AD_DELAY)  # jeda 3 detik
+    
+    # ---- REGULAR ADS ----
+    print(f"\n{CYAN}[3b] Mulai menonton REGULAR ADS (max {MAX_REGULAR_ADS}/hari)...{RESET}")
+    regular_count = 0
+    while regular_count < MAX_REGULAR_ADS:
+        ad_result = watch_regular_ad(uid, init_data)
+        if not ad_result or not ad_result.get('success'):
+            print(f"{YELLOW}Regular ads habis atau error, berhenti.{RESET}")
+            break
+        
+        regular_count = ad_result.get('count', 0)
+        reward = ad_result.get('reward', 0)
+        points = ad_result.get('points', 0)
+        print(f"{GREEN}Regular ke-{regular_count}: +{reward} SLPY, total points: {points}{RESET}")
+        
+        if regular_count >= MAX_REGULAR_ADS:
+            print(f"{YELLOW}Sudah mencapai batas {MAX_REGULAR_ADS} regular ads hari ini.{RESET}")
+            break
+        
+        time.sleep(AD_DELAY)  # jeda 3 detik
+    
+    print(f"\n{GREEN}Selesai! Bot selesai menjalankan perintah.{RESET}")
+    print_banner()
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print(f"\n{Y}⏹ Dihentikan oleh user.{RS}")
+        print(f"\n{RED}Bot dihentikan oleh user.{RESET}")
         sys.exit(0)
