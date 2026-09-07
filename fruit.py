@@ -22,8 +22,8 @@ BOLD = '\033[1m'
 #                  💎 AUTO MINING BOT 💎
 # =============================================================
 # 🤖 BOT   : @MineSLPYBot
-# 🔗 REF   : ref743382203
-# 🚀 START : t.me/MineSLPYBot?startapp=ref743382203
+# 🔗 REF   : ref6894031790
+# 🚀 START : t.me/MineSLPYBot?startapp=ref6894031790
 # =============================================================
 #                     HAPPY MINING 🚀
 # =============================================================
@@ -32,11 +32,8 @@ BOLD = '\033[1m'
 # =============================================================
 
 API_URL = "https://sleepymine.xyz/api/db.php"
-
-# Konfigurasi
-MAX_REGULAR_ADS = 500      # Iklan biasa
-MAX_TADDY_ADS = 250        # Iklan Taddy (0.25 SLPY each)
-AD_DELAY = 3               # Jeda antar iklan (detik)
+MAX_ADS = 200  # Batas iklan per hari
+AD_DELAY = 3   # Jeda antar iklan (detik)
 
 def parse_init_data(init_data: str):
     params = urllib.parse.parse_qs(init_data)
@@ -87,27 +84,8 @@ def claim_mined(uid, init_data):
             continue
     return None
 
-def watch_regular_ad(uid, init_data):
-    # Iklan biasa
-    fn_list = ['credit_ad_reward', 'credit_ad', 'watch_ad']
-    for fn in fn_list:
-        payload = {
-            "action": "rpc",
-            "fn": fn,
-            "args": {"uid": uid}
-        }
-        try:
-            result = db_request(payload, init_data)
-            if result and result.get('data') and result['data'].get('success'):
-                return result['data']
-        except Exception:
-            continue
-    return None
-
-def watch_taddy_ad(uid, init_data):
-    # Iklan Taddy (0.25 SLPY)
-    fn_list = ['credit_taddy_reward', 'taddy_ad_reward', 'credit_taddy_ad', 'watch_taddy_ad']
-    for fn in fn_list:
+def watch_ad(uid, init_data):
+    for fn in ['credit_ad_reward', 'credit_ad', 'watch_ad']:
         payload = {
             "action": "rpc",
             "fn": fn,
@@ -163,8 +141,7 @@ def main():
     print(f"Nama: {user.get('name')}")
     print(f"Points: {user.get('points')}")
     print(f"Unclaimed Mined: {user.get('unclaimed_mined')}")
-    print(f"Ads watched (regular): {user.get('ads_watched_count')}")
-    print(f"Taddy ads watched: {user.get('taddy_watched_count')}")
+    print(f"Ads watched: {user.get('ads_watched_count')}")
     
     # Claim mined jika ada
     if user.get('unclaimed_mined', 0) > 0:
@@ -179,45 +156,25 @@ def main():
     else:
         print(f"\n{YELLOW}[2] Tidak ada unclaimed mined, lewati claim.{RESET}")
     
-    # ---- TADDY ADS ----
-    print(f"\n{CYAN}[3a] Mulai menonton TADDY ADS (0.25 SLPY each, max {MAX_TADDY_ADS}/hari)...{RESET}")
-    taddy_count = 0
-    while taddy_count < MAX_TADDY_ADS:
-        ad_result = watch_taddy_ad(uid, init_data)
-        if not ad_result or not ad_result.get('success'):
-            print(f"{YELLOW}Taddy ads habis atau error, lanjut ke iklan biasa.{RESET}")
-            break
-        
-        taddy_count = ad_result.get('count', 0)
-        reward = ad_result.get('reward', 0)
-        points = ad_result.get('points', 0)
-        print(f"{GREEN}Taddy ke-{taddy_count}: +{reward} SLPY, total points: {points}{RESET}")
-        
-        if taddy_count >= MAX_TADDY_ADS:
-            print(f"{YELLOW}Sudah mencapai batas {MAX_TADDY_ADS} Taddy ads hari ini.{RESET}")
-            break
-        
-        time.sleep(AD_DELAY)  # jeda 3 detik
-    
     # ---- REGULAR ADS ----
-    print(f"\n{CYAN}[3b] Mulai menonton REGULAR ADS (max {MAX_REGULAR_ADS}/hari)...{RESET}")
-    regular_count = 0
-    while regular_count < MAX_REGULAR_ADS:
-        ad_result = watch_regular_ad(uid, init_data)
+    print(f"\n{CYAN}[3] Mulai menonton REGULAR ADS (max {MAX_ADS}/hari) dengan jeda {AD_DELAY} detik...{RESET}")
+    count = 0
+    while count < MAX_ADS:
+        ad_result = watch_ad(uid, init_data)
         if not ad_result or not ad_result.get('success'):
             print(f"{YELLOW}Regular ads habis atau error, berhenti.{RESET}")
             break
         
-        regular_count = ad_result.get('count', 0)
+        count = ad_result.get('count', 0)
         reward = ad_result.get('reward', 0)
         points = ad_result.get('points', 0)
-        print(f"{GREEN}Regular ke-{regular_count}: +{reward} SLPY, total points: {points}{RESET}")
+        print(f"{GREEN}Iklan ke-{count}: +{reward} SLPY, total points: {points}{RESET}")
         
-        if regular_count >= MAX_REGULAR_ADS:
-            print(f"{YELLOW}Sudah mencapai batas {MAX_REGULAR_ADS} regular ads hari ini.{RESET}")
+        if count >= MAX_ADS:
+            print(f"{YELLOW}Sudah mencapai batas {MAX_ADS} iklan hari ini.{RESET}")
             break
         
-        time.sleep(AD_DELAY)  # jeda 3 detik
+        time.sleep(AD_DELAY)
     
     print(f"\n{GREEN}Selesai! Bot selesai menjalankan perintah.{RESET}")
     print_banner()
