@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-GramBux Auto Claim + Watch Ads FULL
-- Watch Ads Block 1-5 (10 watch per block, claim otomatis)
-- Auto Claim BOT Tasks
-- Auto Tap to Earn
-- Auto Mystery Box, Miner, Vault
-- Jeda 1 jam jika block error
-- DEBUG MODE untuk lihat response API
+GramBux Auto Claim + Watch Ads FULL (Rapi)
+- Output bersih, debug hanya jika error
+- Progress bar cantik
+- Estimasi waktu selesai
 
 ============================================================
 👨‍💻 ScriptMaker : @JoshuaXSupport
@@ -20,6 +17,8 @@ import json
 import time
 import urllib.parse
 import os
+import gzip
+import zlib
 from typing import Dict, Optional, List
 
 # ============================================================
@@ -42,6 +41,16 @@ def pprint(msg, color=GREEN):
 def print_sep():
     print(f"{GRAY}{'='*60}{RESET}")
 
+def print_header():
+    print(f"{CYAN}{BOLD}")
+    print("╔════════════════════════════════════════════════════╗")
+    print("║          🚀 GRAM BUX AUTO CLAIM                    ║")
+    print("╠════════════════════════════════════════════════════╣")
+    print("║  👨‍💻 Maker : MoneyMaker_w                          ║")
+    print("║  📢 TG    : https://t.me/+f3QBLkR5D8k4YzNl        ║")
+    print("╚════════════════════════════════════════════════════╝")
+    print(f"{RESET}")
+
 def countdown(seconds, msg="⏳ Menunggu"):
     while seconds > 0:
         hours = seconds // 3600
@@ -56,12 +65,12 @@ def countdown(seconds, msg="⏳ Menunggu"):
         seconds -= 1
     print(f"\r{msg} selesai!     ")
 
-def print_progress(current, target=10):
-    filled = min(current, target)
-    empty = target - filled
-    fire = "🔥" * filled
-    lock = "🔏" * empty
-    pprint(f"{fire}{lock} {filled}/{target}", YELLOW)
+def progress_bar(current, target=10, width=20):
+    filled = int((current / target) * width)
+    empty = width - filled
+    bar = "█" * filled + "░" * empty
+    pct = int((current / target) * 100)
+    return f"[{bar}] {pct}%"
 
 # ============================================================
 # CLASS GRAMBUX
@@ -70,14 +79,15 @@ class GramBux:
     BASE_URL = "https://grambux-backend.ankisaw1003.workers.dev"
     FRONTEND = "https://grambux-frontend.onrender.com"
 
-    def __init__(self, init_data: str):
+    def __init__(self, init_data: str, debug=False):
         self.init_data = init_data
+        self.debug = debug
         self.session = requests.Session()
         self.session.headers.update({
             "User-Agent": "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.199 Mobile Safari/537.36 Telegram-Android/12.9.2 (Samsung SM-A556E; Android 16; SDK 36; HIGH)",
             "Accept": "*/*",
             "Accept-Language": "id,id-ID;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Accept-Encoding": "gzip, deflate",
             "Origin": self.FRONTEND,
             "Referer": self.FRONTEND + "/",
             "X-Requested-With": "org.telegram.messenger.web",
@@ -95,51 +105,51 @@ class GramBux:
         url = self.BASE_URL + endpoint
         try:
             resp = self.session.request(method, url, json=json_data, params=params, timeout=30)
+            
+            if self.debug:
+                print(f"\n🔍 DEBUG: {method} {endpoint}")
+                print(f"   Status: {resp.status_code}")
+                print(f"   Content-Encoding: {resp.headers.get('content-encoding')}")
+                print(f"   First 100 bytes: {repr(resp.content[:100])}")
+            
             if resp.status_code != 200:
                 return {
                     "error": f"http_{resp.status_code}",
                     "status_code": resp.status_code,
-                    "content_type": resp.headers.get("content-type", ""),
                     "text": resp.text[:500]
                 }
+            
             try:
                 return resp.json()
-            except ValueError as e:
-                return {
-                    "error": "invalid_json",
-                    "status_code": resp.status_code,
-                    "content_type": resp.headers.get("content-type", ""),
-                    "text": resp.text[:500],
-                    "parse_error": str(e)
-                }
-        except requests.exceptions.Timeout:
-            return {"error": "timeout", "text": "Request timeout"}
-        except requests.exceptions.ConnectionError:
-            return {"error": "connection", "text": "Connection error"}
+            except ValueError:
+                raw = resp.content
+                if raw.startswith(b'\x1f\x8b'):
+                    try:
+                        decompressed = gzip.decompress(raw)
+                        return json.loads(decompressed.decode('utf-8'))
+                    except Exception as e:
+                        return {"error": "gzip_decompress_failed", "text": str(e)}
+                elif raw.startswith(b'\x78\x9c'):
+                    try:
+                        decompressed = zlib.decompress(raw)
+                        return json.loads(decompressed.decode('utf-8'))
+                    except Exception as e:
+                        return {"error": "zlib_decompress_failed", "text": str(e)}
+                else:
+                    return {"error": "invalid_json", "text": resp.text[:500]}
         except Exception as e:
             return {"error": "exception", "text": str(e)}
 
     def _request_with_retry(self, method: str, endpoint: str, json_data: Optional[Dict] = None, 
                            params: Optional[Dict] = None, max_retries: int = 3, retry_delay: int = 3):
-        last_error = None
         for attempt in range(max_retries):
             result = self._request(method, endpoint, json_data, params)
             if not result.get("error"):
                 return result
-            if result.get("error") == "invalid_json":
-                pprint(f"⚠️ Response bukan JSON (attempt {attempt+1}/{max_retries})", YELLOW)
-                pprint(f"   Status: {result.get('status_code')}", YELLOW)
-                pprint(f"   Content-Type: {result.get('content_type')}", YELLOW)
-                pprint(f"   Response: {result.get('text', '')[:200]}", YELLOW)
-                if result.get('status_code') == 200 and 'html' in result.get('content_type', '').lower():
-                    pprint("⚠️ Server mengembalikan HTML, mungkin worker error", RED)
-                    pprint("   Coba lagi dalam beberapa detik...", YELLOW)
-            last_error = result
             if attempt < max_retries - 1:
                 time.sleep(retry_delay)
-        return last_error or {"error": "max_retries", "text": "Gagal setelah retry"}
+        return result
 
-    # === USER ===
     def get_user(self, tg_id: str, username: str, telegram_username: str, referrer: str = "") -> Dict:
         params = {
             "tg_id": tg_id,
@@ -150,45 +160,36 @@ class GramBux:
         }
         return self._request_with_retry("GET", "/api/user", params=params)
 
-    def verify_channels(self, tg_id: str) -> Dict:
-        return self._request("POST", "/api/verify-channels", json_data={"tg_id": tg_id})
-
     def get_earn_status(self, tg_id: str) -> Dict:
         return self._request_with_retry("GET", "/api/earn/status", params={"tg_id": tg_id})
 
     def get_tasks(self) -> Dict:
         return self._request_with_retry("GET", "/api/tasks")
 
-    # === WATCH ADS ===
     def watch_ad(self, tg_id: str, block_id: int) -> Dict:
         return self._request("POST", "/api/watch-ad/watch", json_data={"tg_id": tg_id, "block_id": block_id})
 
     def claim_ad(self, tg_id: str, block_id: int) -> Dict:
         return self._request("POST", "/api/watch-ad/claim", json_data={"tg_id": tg_id, "block_id": block_id})
 
-    # === TASKS ===
     def initiate_task(self, tg_id: str, task_id: str) -> Dict:
         return self._request("POST", "/api/task/initiate", json_data={"tg_id": tg_id, "task_id": task_id})
 
     def claim_task(self, tg_id: str, task_id: str) -> Dict:
         return self._request("POST", "/api/task/claim", json_data={"tg_id": tg_id, "task_id": task_id})
 
-    # === TAP TO EARN ===
     def claim_tap(self, tg_id: str) -> Dict:
         return self._request("POST", "/api/tap-to-earn/claim", json_data={"tg_id": tg_id})
 
-    # === MYSTERY BOX ===
     def claim_mystery_box(self, tg_id: str) -> Dict:
         return self._request("POST", "/api/mystery-box/claim", json_data={"tg_id": tg_id})
 
-    # === MINER ===
     def start_miner(self, tg_id: str) -> Dict:
         return self._request("POST", "/api/miner/start", json_data={"tg_id": tg_id})
 
     def claim_miner(self, tg_id: str) -> Dict:
         return self._request("POST", "/api/miner/claim", json_data={"tg_id": tg_id})
 
-    # === VAULT ===
     def start_vault(self, tg_id: str) -> Dict:
         return self._request("POST", "/api/vault/start", json_data={"tg_id": tg_id})
 
@@ -215,113 +216,75 @@ def check_block_status(bot, tg_id, username, block_id):
     try:
         user_data = bot.get_user(tg_id, username, f"@{username}" if username else "")
         if user_data.get("error"):
-            pprint(f"⚠️ Gagal cek status: {user_data.get('error')}", YELLOW)
             return 0, False
         watch_progress = user_data.get("watchProgress", {})
         block_data = watch_progress.get(str(block_id), {})
-        watched_count = block_data.get("watched_count", 0)
-        claimed_today = block_data.get("claimed_today", False)
-        return watched_count, claimed_today
-    except Exception as e:
-        pprint(f"⚠️ Error cek status: {e}", YELLOW)
+        return block_data.get("watched_count", 0), block_data.get("claimed_today", False)
+    except:
         return 0, False
 
 def watch_block(bot, tg_id, username, block_id, retry_delay=3600):
-    pprint(f"\n📺 [ BLOCK {block_id} ]", CYAN)
-    pprint(f"🎯 Target: 10/10 ads", YELLOW)
-    
+    print(f"\n{YELLOW}📺 BLOCK {block_id}{RESET}")
     watched_count, claimed_today = check_block_status(bot, tg_id, username, block_id)
     
     if watched_count >= 10 and claimed_today:
-        pprint(f"ℹ️ Block {block_id} sudah selesai dan di-claim!", YELLOW)
+        print(f"   ✅ Sudah selesai dan di-claim")
         return {"status": "already_claimed", "watched": watched_count, "claimed": True, "earned": 0.0022}
     
     attempt = 0
-    retry_count = 0
-    
     while True:
         attempt += 1
-        try:
-            watch_res = bot.watch_ad(tg_id, block_id)
-            if watch_res.get("error"):
-                error_text = str(watch_res.get("text", ""))
-                if "400" in str(watch_res) or "block" in error_text.lower():
-                    retry_count += 1
-                    pprint(f"⚠️ Block {block_id} masih terkunci! (Percobaan ke-{retry_count})", YELLOW)
-                    pprint(f"⏳ Jeda 1 JAM sebelum coba lagi...", YELLOW)
-                    countdown(retry_delay, "⏳ Jeda 1 jam")
-                    watched_count, claimed_today = check_block_status(bot, tg_id, username, block_id)
-                    if watched_count >= 10 and claimed_today:
-                        pprint(f"✅ Block {block_id} sudah selesai saat jeda!", GREEN)
-                        return {"status": "already_claimed", "watched": watched_count, "claimed": True, "earned": 0.0022}
-                    continue
-                else:
-                    pprint(f"❌ Error: {watch_res}", RED)
-                    countdown(10, "⏳ Coba lagi dalam 10 detik")
-                    continue
-            
-            watched_count = watch_res.get("watched_count", 0)
-            pprint(f"🔄 Watch ke-{attempt}:", YELLOW)
-            print_progress(watched_count, 10)
-            pprint(f"👁️ Watched Count : {watched_count}/10", GREEN)
-            
-            if watched_count >= 10:
-                break
-            countdown(15, "⏳ Menunggu sebelum watch berikutnya")
-        except Exception as e:
-            pprint(f"❌ Error watch: {e}", RED)
-            countdown(10, "⏳ Coba lagi dalam 10 detik")
-            continue
+        watch_res = bot.watch_ad(tg_id, block_id)
+        if watch_res.get("error"):
+            if "block" in str(watch_res).lower() or "400" in str(watch_res):
+                print(f"   ⚠️ Block terkunci, jeda 1 jam...")
+                countdown(retry_delay, "   ⏳ Jeda")
+                watched_count, claimed_today = check_block_status(bot, tg_id, username, block_id)
+                if watched_count >= 10 and claimed_today:
+                    return {"status": "already_claimed", "watched": watched_count, "claimed": True, "earned": 0.0022}
+                continue
+            else:
+                print(f"   ❌ Error: {watch_res.get('text', '')}")
+                time.sleep(10)
+                continue
+        
+        watched_count = watch_res.get("watched_count", 0)
+        bar = progress_bar(watched_count, 10)
+        print(f"\r   🔄 Watch {attempt}: {bar}  ({watched_count}/10)", end="", flush=True)
+        
+        if watched_count >= 10:
+            print()
+            break
+        time.sleep(15)
     
-    if watched_count >= 10:
-        if not claimed_today:
-            pprint("🎯 Target 10/10 tercapai! Claiming...", GREEN)
-            try:
-                claim_res = bot.claim_ad(tg_id, block_id)
-                if claim_res.get("error"):
-                    pprint(f"❌ Gagal claim: {claim_res}", RED)
-                    return {"status": "claim_failed", "watched": watched_count, "claimed": False, "earned": 0}
-                new_balance = claim_res.get("newBalance", 0)
-                new_stars = claim_res.get("newStars", 0)
-                pprint(f"💰 Claim berhasil! +{new_stars} TON", GREEN)
-                pprint(f"💎 Balance baru: {new_balance} TON", GREEN)
-                return {"status": "success", "watched": watched_count, "claimed": True, "earned": new_stars}
-            except Exception as e:
-                pprint(f"❌ Gagal claim: {e}", RED)
-                return {"status": "claim_failed", "watched": watched_count, "claimed": False, "earned": 0}
-        else:
-            pprint("ℹ️ Sudah di-claim hari ini.", YELLOW)
-            return {"status": "already_claimed", "watched": watched_count, "claimed": True, "earned": 0.0022}
+    if watched_count >= 10 and not claimed_today:
+        print("   🎯 Target tercapai! Claiming...")
+        claim_res = bot.claim_ad(tg_id, block_id)
+        if claim_res.get("error"):
+            print(f"   ❌ Gagal claim: {claim_res.get('text', '')}")
+            return {"status": "claim_failed", "watched": watched_count, "claimed": False, "earned": 0}
+        earned = claim_res.get("newStars", 0)
+        print(f"   ✅ +{earned:.5f} TON")
+        return {"status": "success", "watched": watched_count, "claimed": True, "earned": earned}
+    elif watched_count >= 10 and claimed_today:
+        return {"status": "already_claimed", "watched": watched_count, "claimed": True, "earned": 0.0022}
     else:
         return {"status": "failed", "watched": watched_count, "claimed": False, "earned": 0}
 
 def claim_bot_tasks(bot, tg_id, completions):
-    pprint("\n📋 Mengecek Tasks type BOT...", CYAN)
+    print(f"\n{CYAN}📋 BOT TASKS{RESET}")
     tasks_res = bot.get_tasks()
     if tasks_res.get("error") or not isinstance(tasks_res, list):
-        pprint(f"❌ Gagal ambil tasks: {tasks_res}", RED)
+        print(f"   ❌ Gagal ambil tasks")
         return 0, 0
     
-    all_tasks = tasks_res
-    bot_tasks = []
+    bot_tasks = [t for t in tasks_res if isinstance(t, dict) and t.get('type') == 'bot' and t.get('id') not in completions and t.get('id') != 'daily1']
     
-    for task in all_tasks:
-        if not isinstance(task, dict):
-            continue
-        task_id = task.get('id')
-        task_type = task.get('type', '')
-        if task_id == 'daily1':
-            continue
-        if task_id in completions:
-            continue
-        if task_type == 'bot':
-            bot_tasks.append(task)
-    
-    pprint(f"🤖 Bot tasks ditemukan: {len(bot_tasks)}", YELLOW)
     if not bot_tasks:
-        pprint("✅ Semua bot tasks sudah diklaim!", GREEN)
+        print("   ✅ Semua bot tasks sudah diklaim")
         return 0, 0
     
+    print(f"   🔍 Ditemukan {len(bot_tasks)} task")
     total_earned = 0
     claimed_count = 0
     
@@ -329,312 +292,237 @@ def claim_bot_tasks(bot, tg_id, completions):
         task_id = task.get('id')
         title = task.get('title', 'No title')[:30]
         reward = task.get('reward_ton', 0)
-        pprint(f"\n[{idx}/{len(bot_tasks)}] ⏳ {title} (reward: {reward:.5f} TON)", YELLOW)
+        print(f"\n   [{idx}/{len(bot_tasks)}] {title} (reward: {reward:.5f} TON)")
         
         init_res = bot.initiate_task(tg_id, task_id)
         if init_res.get("error"):
             if "already completed" in str(init_res):
-                pprint("   Task sudah diklaim", YELLOW)
+                print("      ⏳ Sudah diklaim")
                 continue
-            pprint(f"   ❌ Initiate gagal: {init_res}", RED)
+            print(f"      ❌ Gagal initiate: {init_res.get('text', '')}")
             continue
         
         if init_res.get('success'):
-            pprint("   ⏳ Menunggu 5 detik...", YELLOW)
             time.sleep(5)
             claim_res = bot.claim_task(tg_id, task_id)
-            if claim_res.get("error"):
-                if "already claimed" in str(claim_res):
-                    pprint("   Task sudah diklaim", YELLOW)
-                    continue
-                if "timer not completed" in str(claim_res):
-                    pprint("   ⏳ Timer belum selesai, tunggu 3 detik...", YELLOW)
-                    time.sleep(3)
-                    claim_res = bot.claim_task(tg_id, task_id)
             if claim_res and claim_res.get('success'):
                 earned = claim_res.get('starsAwarded', 0)
-                pprint(f"   💰 +{earned:.5f} TON", GREEN)
+                print(f"      ✅ +{earned:.5f} TON")
                 total_earned += earned
                 claimed_count += 1
             else:
-                pprint(f"   ❌ Claim gagal: {claim_res}", RED)
-        else:
-            pprint(f"   ❌ Initiate gagal", RED)
+                print(f"      ❌ Gagal claim")
         time.sleep(2)
     
     return claimed_count, total_earned
 
 def claim_tap(bot, tg_id):
-    pprint("\n🖐️ Mengecek Tap to Earn...", CYAN)
+    print(f"\n{CYAN}🖐️ TAP TO EARN{RESET}")
     status = bot.get_earn_status(tg_id)
     if status.get("error"):
-        pprint(f"❌ Gagal ambil status tap: {status}", RED)
+        print(f"   ❌ Gagal ambil status")
         return 0, 0
     
     tap_info = status.get("tap_to_earn", {})
     remaining = tap_info.get("remaining_taps", 0)
     cooldown = tap_info.get("cooldown_remaining_sec", 0)
     
-    pprint(f"Tap tersisa: {remaining}/10", YELLOW)
     if remaining == 0:
-        pprint("Tap sudah habis hari ini ✅", GREEN)
+        print("   ✅ Tap habis hari ini")
         return 0, 0
     if cooldown > 60:
-        pprint(f"⏳ Cooldown {cooldown//60}m {cooldown%60}s - SKIP", YELLOW)
+        print(f"   ⏳ Cooldown {cooldown//60}m {cooldown%60}s - SKIP")
         return 0, 0
     
+    print(f"   🔍 Tersisa {remaining} tap")
     claimed = 0
     earned = 0
     for i in range(remaining):
         if cooldown > 60:
             break
         if cooldown > 0:
-            pprint(f"⏳ Cooldown {cooldown}s, tunggu...", YELLOW)
             time.sleep(cooldown + 1)
             cooldown = 0
         res = bot.claim_tap(tg_id)
         if res.get("error"):
-            pprint(f"❌ Tap gagal: {res}", RED)
+            print(f"   ❌ Gagal tap")
             break
         if res.get("success"):
             earned += res.get("earned_ton", 0)
             claimed += 1
-            pprint(f"💰 Tap #{i+1}: +{res.get('earned_ton', 0):.5f} TON", GREEN)
+            print(f"   💰 Tap #{i+1}: +{res.get('earned_ton', 0):.5f} TON")
             cooldown = res.get("cooldown_sec", 0)
-        else:
-            pprint(f"❌ Tap gagal: {res}", RED)
-            break
         time.sleep(1)
     
     return claimed, earned
 
 def claim_mystery_box(bot, tg_id):
-    pprint("\n📦 Mengecek Mystery Box...", CYAN)
+    print(f"\n{CYAN}📦 MYSTERY BOX{RESET}")
     status = bot.get_earn_status(tg_id)
     if status.get("error"):
-        pprint(f"❌ Gagal ambil status: {status}", RED)
+        print("   ❌ Gagal ambil status")
         return 0
-    
     mystery = status.get("mystery_box", {})
     if not mystery.get("available"):
-        pprint("Mystery Box belum tersedia", YELLOW)
+        print("   ℹ️ Belum tersedia")
         return 0
-    
-    pprint("Mystery Box tersedia! Mengklaim...", GREEN)
+    print("   🎁 Claiming...")
     res = bot.claim_mystery_box(tg_id)
-    if res.get("error"):
-        pprint(f"❌ Gagal claim: {res}", RED)
-        return 0
     if res.get("success"):
         earned = res.get("earned_ton", 0)
-        pprint(f"💰 +{earned:.5f} TON", GREEN)
+        print(f"   ✅ +{earned:.5f} TON")
         return earned
     return 0
 
 def handle_miner(bot, tg_id):
-    pprint("\n⛏️ Mengecek Miner...", CYAN)
+    print(f"\n{CYAN}⛏️ MINER{RESET}")
     status = bot.get_earn_status(tg_id)
     if status.get("error"):
-        pprint(f"❌ Gagal ambil status: {status}", RED)
+        print("   ❌ Gagal ambil status")
         return 0
-    
     miner = status.get("miner", {})
     if miner.get("ready"):
-        pprint("Miner ready! Mengklaim...", GREEN)
+        print("   🎯 Claiming...")
         res = bot.claim_miner(tg_id)
         if res.get("success"):
             earned = res.get("earned_ton", 0)
-            pprint(f"💰 +{earned:.5f} TON", GREEN)
+            print(f"   ✅ +{earned:.5f} TON")
             return earned
-        return 0
     elif miner.get("can_start") and not miner.get("is_running"):
-        pprint("Starting Miner...", YELLOW)
+        print("   🔄 Starting...")
         res = bot.start_miner(tg_id)
         if res.get("success"):
-            pprint("✅ Miner started!", GREEN)
-        else:
-            pprint(f"❌ Gagal start: {res}", RED)
+            print("   ✅ Miner started")
     else:
-        pprint("Miner sedang berjalan", YELLOW)
+        print("   ⏳ Miner running")
     return 0
 
 def handle_vault(bot, tg_id):
-    pprint("\n🏦 Mengecek Vault...", CYAN)
+    print(f"\n{CYAN}🏦 VAULT{RESET}")
     status = bot.get_earn_status(tg_id)
     if status.get("error"):
-        pprint(f"❌ Gagal ambil status: {status}", RED)
+        print("   ❌ Gagal ambil status")
         return 0
-    
     vault = status.get("vault", {})
     if vault.get("ready"):
-        pprint("Vault ready! Mengklaim...", GREEN)
+        print("   🎯 Claiming...")
         res = bot.claim_vault(tg_id)
         if res.get("success"):
             earned = res.get("earned_ton", 0)
-            pprint(f"💰 +{earned:.5f} TON", GREEN)
+            print(f"   ✅ +{earned:.5f} TON")
             return earned
-        return 0
     elif vault.get("can_start") and not vault.get("is_running"):
-        pprint("Starting Vault...", YELLOW)
+        print("   🔄 Starting...")
         res = bot.start_vault(tg_id)
         if res.get("success"):
-            pprint("✅ Vault started!", GREEN)
-        else:
-            pprint(f"❌ Gagal start: {res}", RED)
+            print("   ✅ Vault started")
     else:
-        pprint("Vault sedang berjalan", YELLOW)
+        print("   ⏳ Vault running")
     return 0
 
 # ============================================================
 # MAIN
 # ============================================================
 def main():
-    print_sep()
-    pprint("🚀 Gram Bux Auto Script FULL", CYAN)
-    pprint("👨‍💻 ScriptMaker : MoneyMaker_w", CYAN)
-    pprint("📢 TG          : https://t.me/+f3QBLkR5D8k4YzNl", CYAN)
-    print_sep()
+    print_header()
+    print()
     
-    # Tidak pakai config file, selalu minta input
-    pprint("\n🔐 Masukkan X-Telegram-Init-Data:", YELLOW)
-    pprint("   (Pastikan masih valid, ambil dari bot)", GRAY)
+    print(f"{YELLOW}🔐 Masukkan X-Telegram-Init-Data:{RESET}")
+    print("   (Ambil dari Mini App Telegram)")
     init_data = input("👉 ").strip()
     if not init_data:
-        pprint("❌ Init data kosong, keluar.", RED)
+        print(f"{RED}❌ Init data kosong, keluar.{RESET}")
         return
-
-    user_info = parse_init_data(init_data)
-    tg_id = user_info["tg_id"]
-    username = user_info["username"]
-    full_name = user_info["full_name"] or username
-
-    if not tg_id:
-        pprint("❌ Gagal parse tg_id dari init_data", RED)
-        pprint("   Pastikan init_data lengkap dan valid", YELLOW)
-        return
-
-    bot = GramBux(init_data)
-
-    # Cek user dengan debug
-    pprint("\n👤 USER INFORMATION", CYAN)
-    pprint("⏳ Menghubungi server...", YELLOW)
     
-    try:
-        user_data = bot.get_user(tg_id, username, f"@{username}" if username else "")
-        if user_data.get("error"):
-            pprint(f"❌ Gagal ambil data user:", RED)
-            pprint(f"   Error: {user_data.get('error')}", RED)
-            if user_data.get('status_code'):
-                pprint(f"   HTTP Status: {user_data.get('status_code')}", RED)
-            if user_data.get('content_type'):
-                pprint(f"   Content-Type: {user_data.get('content_type')}", RED)
-            if user_data.get('text'):
-                pprint(f"   Response: {user_data.get('text')[:300]}", RED)
-            
-            pprint("\n💡 Saran:", YELLOW)
-            pprint("   1. Pastikan init_data masih valid (buka ulang Mini App)", YELLOW)
-            pprint("   2. Coba refresh/ambil init_data baru", YELLOW)
-            pprint("   3. Pastikan koneksi internet stabil", YELLOW)
-            return
-        
-        user = user_data.get("user", {})
-        balance = user.get("ton_balance", 0)
-        completions = user_data.get("completions", {})
-        watch_progress = user_data.get("watchProgress", {})
-        
-        pprint(f"👋 Login sebagai : {full_name}", GREEN)
-        pprint(f"🆔 User ID      : {tg_id}", GREEN)
-        pprint(f"💰 Balance      : {balance:.5f} TON", GREEN)
-        pprint(f"📋 Tasks done   : {len(completions)}", GREEN)
-        
-        total_watch = 0
-        for block in watch_progress.values():
-            total_watch += block.get("watched_count", 0)
-        pprint(f"👁️ Total watch  : {total_watch}", GREEN)
-        
-    except Exception as e:
-        pprint(f"❌ Error: {e}", RED)
-        import traceback
-        traceback.print_exc()
+    user_info = parse_init_data(init_data)
+    tg_id = user_info.get("tg_id")
+    username = user_info.get("username")
+    full_name = user_info.get("full_name") or username
+    
+    if not tg_id:
+        print(f"{RED}❌ Gagal parse tg_id, init_data tidak valid{RESET}")
         return
-
+    
+    bot = GramBux(init_data, debug=False)
+    
+    print(f"\n{CYAN}👤 USER INFORMATION{RESET}")
+    print("   ⏳ Menghubungi server...")
+    
+    user_data = bot.get_user(tg_id, username, f"@{username}" if username else "")
+    if user_data.get("error"):
+        print(f"   {RED}❌ Gagal login: {user_data.get('text', '')}{RESET}")
+        print(f"\n{YELLOW}💡 Saran: init_data mungkin expired. Buka ulang Mini App.{RESET}")
+        return
+    
+    user = user_data.get("user", {})
+    balance = user.get("ton_balance", 0)
+    completions = user_data.get("completions", {})
+    watch_progress = user_data.get("watchProgress", {})
+    
+    print(f"   {GREEN}✅ Login sebagai : {full_name}{RESET}")
+    print(f"   🆔 User ID      : {tg_id}")
+    print(f"   💰 Balance      : {balance:.5f} TON")
+    print(f"   📋 Tasks done   : {len(completions)}")
+    total_watch = sum(b.get("watched_count", 0) for b in watch_progress.values())
+    print(f"   👁️ Total watch  : {total_watch}")
+    
     print_sep()
     total_earned = 0
     total_claim = 0
-
-    # ============================================================
-    # 1. WATCH ADS BLOCK 1-5
-    # ============================================================
-    pprint("\n▶️ [ WATCH ADS BLOCK 1-5 ]", CYAN)
-    pprint("📊 Target: 10 ads x 5 block = 50 ads", YELLOW)
-    pprint("⚠️ Jika error, akan jeda 1 jam lalu coba lagi\n", YELLOW)
     
+    # WATCH ADS
+    print(f"\n{CYAN}▶️ WATCH ADS BLOCK 1-5{RESET}")
+    print("   📊 Target: 10 ads x 5 block = 50 ads")
     for block_id in range(1, 6):
         result = watch_block(bot, tg_id, username, block_id)
         if result["status"] in ["success", "already_claimed"]:
             total_earned += result.get("earned", 0)
             total_claim += 1
         if block_id < 5:
-            countdown(7, f"⏳ Jeda 7 detik sebelum block {block_id+1}")
+            countdown(7, f"   ⏳ Jeda sebelum block {block_id+1}")
     
-    print_sep()
-    
-    # ============================================================
-    # 2. TAP TO EARN
-    # ============================================================
+    # TAP
     tap_claimed, tap_earned = claim_tap(bot, tg_id)
     total_earned += tap_earned
     total_claim += tap_claimed
     
-    # ============================================================
-    # 3. BOT TASKS
-    # ============================================================
+    # BOT TASKS
     task_claimed, task_earned = claim_bot_tasks(bot, tg_id, completions)
     total_earned += task_earned
     total_claim += task_claimed
     
-    # ============================================================
-    # 4. MYSTERY BOX
-    # ============================================================
+    # MYSTERY BOX
     total_earned += claim_mystery_box(bot, tg_id)
     
-    # ============================================================
-    # 5. MINER
-    # ============================================================
+    # MINER
     total_earned += handle_miner(bot, tg_id)
     
-    # ============================================================
-    # 6. VAULT
-    # ============================================================
+    # VAULT
     total_earned += handle_vault(bot, tg_id)
     
-    # ============================================================
     # FINAL
-    # ============================================================
     print_sep()
-    pprint("📊 RINGKASAN AKHIR", CYAN)
-    pprint(f"💰 Total Earned Hari Ini : {total_earned:.5f} TON", GREEN)
-    pprint(f"📋 Total Claim Berhasil  : {total_claim}", GREEN)
+    print(f"{CYAN}📊 RINGKASAN AKHIR{RESET}")
+    print(f"   💰 Total Earned : {total_earned:.5f} TON")
+    print(f"   📋 Total Claim  : {total_claim}")
     
-    try:
-        user_data = bot.get_user(tg_id, username, f"@{username}" if username else "")
-        if not user_data.get("error"):
-            new_balance = user_data.get("user", {}).get("ton_balance", 0)
-            pprint(f"💎 Balance Akhir        : {new_balance:.5f} TON", GREEN)
-    except:
-        pass
+    # Refresh balance
+    user_data = bot.get_user(tg_id, username, f"@{username}" if username else "")
+    if not user_data.get("error"):
+        new_balance = user_data.get("user", {}).get("ton_balance", 0)
+        print(f"   💎 Balance Akhir: {new_balance:.5f} TON")
     
     print_sep()
-    pprint("✅ Selesai! 🎉", GREEN)
-    pprint(f"📢 Bergabung dengan TG: https://t.me/+f3QBLkR5D8k4YzNl", CYAN)
+    print(f"{GREEN}✅ Selesai! 🎉{RESET}")
+    print(f"{CYAN}📢 TG: https://t.me/+f3QBLkR5D8k4YzNl{RESET}")
     print_sep()
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        pprint("\n⚠️ Dibatalkan oleh user.", RED)
+        print(f"\n{RED}⚠️ Dibatalkan oleh user.{RESET}")
     except Exception as e:
-        pprint(f"❌ Error: {e}", RED)
+        print(f"{RED}❌ Error: {e}{RESET}")
         import traceback
         traceback.print_exc()
