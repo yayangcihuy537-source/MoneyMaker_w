@@ -200,8 +200,8 @@
         },
         "21": {
           "label": "Faucet Btc 🟢",
-          "file": "btc.php",
-          "runner": "php"
+          "file": "btc.py",
+          "runner": "python3"
         },
         "22": {
           "label": "TonSpark 🟢",
