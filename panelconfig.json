@@ -210,8 +210,8 @@
         },
         "23": {
           "label": "Faucet Btc 🟢",
-          "file": "btc.py",
-          "runner": "python3"
+          "file": "btc.php",
+          "runner": "php"
         },
         "24": {
           "label": "Coming Soon",
