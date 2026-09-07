@@ -199,9 +199,9 @@
           "runner": "python3"
         },
         "21": {
-          "label": "Oremint 🟢",
-          "file": "Oremint.py",
-          "runner": "python3"
+          "label": "Faucet Btc 🟢",
+          "file": "btc.php",
+          "runner": "php"
         },
         "22": {
           "label": "TonSpark 🟢",
@@ -209,8 +209,8 @@
           "runner": "python3"
         },
         "23": {
-          "label": "Faucet Btc 🟢",
-          "file": "btc.php",
+          "label": "Coming Soon",
+          "file": "",
           "runner": "php"
         },
         "24": {
