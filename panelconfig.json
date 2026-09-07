@@ -204,8 +204,8 @@
           "runner": "python3"
         },
         "22": {
-          "label": "Coming Soon",
-          "file": "",
+          "label": "TonSpark 🟢",
+          "file": "TonSpark.py",
           "runner": "python3"
         },
         "23": {
