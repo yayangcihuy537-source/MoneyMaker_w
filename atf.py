@@ -8,8 +8,7 @@ import json
 import urllib.parse
 import requests
 import uuid
-import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 
 # ===== COLOR =====
 class Colors:
@@ -20,6 +19,7 @@ class Colors:
     RED = '\033[91m'
     PINK = '\033[38;5;206m'
     WHITE = '\033[97m'
+    GRAY = '\033[90m'
     BOLD = '\033[1m'
     END = '\033[0m'
 
@@ -42,21 +42,16 @@ BANNER = f"""
 {Colors.CYAN}================================================{Colors.END}
 """
 
-ACCOUNTS_FILE = "accounts.txt"
-LOCK = threading.Lock()
-
 def print_banner():
     os.system('cls' if os.name == 'nt' else 'clear')
     print(BANNER)
 
 # ============================================================
-# SINGLE ACCOUNT ENGINE (dengan debug & validasi)
+# SINGLE USE BOT (1x pakai, tanpa session, tanpa file)
 # ============================================================
 
 class ATFMinerBot:
-    def __init__(self, init_data, account_id=0):
-        self.init_data = init_data.strip()
-        self.account_id = account_id
+    def __init__(self):
         self.device_id = f"dev-{uuid.uuid4()}"
         self.base_url = "https://atfminers.asloni.online"
         self.session = requests.Session()
@@ -67,37 +62,43 @@ class ATFMinerBot:
             "Origin": self.base_url,
             "Referer": f"{self.base_url}/miner/index.html"
         })
-        self.session_token = None
-        self.is_logged_in = False
         self.balance = 0.0
         self.total_boost = 0
         self.mining_freeze_at = 0
         self.username = "Unknown"
+        self.init_data = ""
+        self.is_logged_in = False
+        
+        # Minta initData dari user
+        self.get_init_data()
+        
+    def get_init_data(self):
+        """Minta initData dari user (tidak disimpan)"""
+        print(f"{Colors.CYAN}╔════════════════════════════════════════╗{Colors.END}")
+        print(f"{Colors.CYAN}║{Colors.END}  {Colors.BOLD}MASUKKAN TELEGRAM INIT DATA{Colors.END}    {Colors.CYAN}║{Colors.END}")
+        print(f"{Colors.CYAN}║{Colors.END}  {Colors.GRAY}(copy dari WebView / network log){Colors.END} {Colors.CYAN}║{Colors.END}")
+        print(f"{Colors.CYAN}╚════════════════════════════════════════╝{Colors.END}")
+        print()
+        self.init_data = input(f"{Colors.GREEN}➜ {Colors.END}").strip()
+        
+        if not self.init_data:
+            print(f"{Colors.RED}❌ InitData tidak boleh kosong!{Colors.END}")
+            sys.exit(1)
+        
         self._parse_user()
-        # Coba login, jika gagal minta input ulang
-        if not self.login():
-            self._log("❌ Login gagal, coba masukkan initData baru", Colors.RED)
-            new_data = input(f"[Acc{self.account_id}] Masukkan initData ulang: ").strip()
-            if new_data:
-                self.init_data = new_data
-                self._parse_user()
-                self.login()
-
+        self.login()
+    
     def _parse_user(self):
         try:
             parsed = urllib.parse.parse_qs(self.init_data)
             if 'user' in parsed:
                 user = json.loads(parsed['user'][0])
                 self.username = user.get('username') or user.get('first_name', 'Unknown')
+                print(f"{Colors.GREEN}✅ User terdeteksi: {self.username}{Colors.END}")
             else:
-                self._log("⚠️ InitData tidak mengandung 'user'", Colors.YELLOW)
+                print(f"{Colors.YELLOW}⚠️ InitData tidak mengandung 'user', tapi tetap dicoba{Colors.END}")
         except Exception as e:
-            self._log(f"⚠️ Parse user error: {e}", Colors.YELLOW)
-
-    def _log(self, msg, color=Colors.WHITE):
-        prefix = f"[Acc{self.account_id}]" if self.account_id > 0 else ""
-        with LOCK:
-            print(f"{color}{prefix} {msg}{Colors.END}")
+            print(f"{Colors.YELLOW}⚠️ Parse error: {e}{Colors.END}")
 
     def _call_api(self, action, extra=None):
         url = f"{self.base_url}/miner/index.php"
@@ -109,98 +110,111 @@ class ATFMinerBot:
         }
         if extra:
             payload.update(extra)
-        headers = self.session.headers.copy()
-        if self.session_token:
-            headers["X-ATF-TMA-Session"] = self.session_token
-            headers["Cookie"] = f"atf_tma_session={self.session_token}"
+        
         try:
-            resp = self.session.post(url, params=params, json=payload, headers=headers, timeout=30)
+            resp = self.session.post(url, params=params, json=payload, timeout=30)
             if resp.status_code == 200:
                 return resp.json()
             else:
-                self._log(f"HTTP {resp.status_code} - {resp.text[:200]}", Colors.RED)
+                print(f"{Colors.RED}❌ HTTP {resp.status_code}{Colors.END}")
+                print(f"{Colors.GRAY}Response: {resp.text[:300]}{Colors.END}")
         except Exception as e:
-            self._log(f"Request exception: {e}", Colors.RED)
+            print(f"{Colors.RED}❌ Request error: {e}{Colors.END}")
         return None
 
     def login(self):
-        if not self.init_data:
-            self._log("InitData kosong", Colors.RED)
-            return False
-        
-        self._log("🔄 Login...", Colors.CYAN)
+        print(f"\n{Colors.CYAN}🔄 Mencoba login...{Colors.END}")
         result = self._call_api("login")
-        if result:
-            self._log(f"Response login: {json.dumps(result, indent=2)[:300]}", Colors.GRAY)
         
         if result and result.get('status') == 'success':
             user = result.get('user', {})
-            self.session_token = result.get('tma_session_token')
             self.is_logged_in = True
             self.balance = float(user.get('mined_balance', 0))
             self.total_boost = int(user.get('total_boost_count', 0))
             self.mining_freeze_at = int(user.get('mining_freezes_at', 0))
-            self._log(f"✅ Login OK | {self.username} | Balance: {self.balance:.4f} ATF", Colors.GREEN)
+            
+            print(f"\n{Colors.GREEN}✅ LOGIN BERHASIL!{Colors.END}")
+            print(f"{Colors.CYAN}👤 Username :{Colors.END} {Colors.WHITE}{user.get('username')}{Colors.END}")
+            print(f"{Colors.CYAN}📊 Level    :{Colors.END} {Colors.WHITE}{user.get('miner_level')}{Colors.END}")
+            print(f"{Colors.CYAN}💰 Balance  :{Colors.END} {Colors.WHITE}{self.balance:.4f} ATF{Colors.END}")
+            print(f"{Colors.CYAN}📈 Total Boost:{Colors.END} {Colors.WHITE}{self.total_boost}{Colors.END}")
+            print()
             return True
         else:
-            self._log(f"❌ Login GAGAL - status: {result.get('status') if result else 'No response'}", Colors.RED)
+            print(f"\n{Colors.RED}❌ LOGIN GAGAL!{Colors.END}")
             if result and result.get('message'):
-                self._log(f"   Pesan: {result.get('message')}", Colors.RED)
-            return False
+                print(f"{Colors.RED}Pesan: {result.get('message')}{Colors.END}")
+            if result and result.get('reason'):
+                print(f"{Colors.RED}Alasan: {result.get('reason')}{Colors.END}")
+            
+            # Tawarkan input ulang
+            retry = input(f"\n{Colors.YELLOW}Masukkan initData baru? (y/n): {Colors.END}").strip().lower()
+            if retry == 'y':
+                self.get_init_data()
+            else:
+                sys.exit(1)
 
     def countdown(self, sec, msg="⏳ Menunggu"):
         for i in range(sec, 0, -1):
-            with LOCK:
-                print(f"\r{Colors.YELLOW}[Acc{self.account_id}] {msg} {i} detik...{Colors.END}", end="")
+            print(f"\r{Colors.YELLOW}{msg} {i} detik...{Colors.END}", end="", flush=True)
             time.sleep(1)
-        with LOCK:
-            print(f"\r{Colors.GREEN}[Acc{self.account_id}] {msg} selesai!{Colors.END}          ")
+        print(f"\r{Colors.GREEN}{msg} selesai!{Colors.END}          ")
 
     def claim(self):
-        self._log("🔄 Claiming...", Colors.CYAN)
+        print(f"{Colors.CYAN}🔄 Claiming reward...{Colors.END}")
         result = self._call_api("claim")
         if not result:
-            self._log("❌ Claim gagal (no response)", Colors.RED)
+            print(f"{Colors.RED}❌ Claim gagal{Colors.END}")
             return False
+        
         status = result.get('status')
         if status == 'success':
             self.balance = float(result.get('user', {}).get('mined_balance', self.balance))
             self.mining_freeze_at = int(result.get('user', {}).get('mining_freezes_at', 0))
-            self._log(f"✅ Claim success! Balance: {self.balance:.4f} ATF", Colors.GREEN)
+            print(f"{Colors.GREEN}✅ Claim berhasil! Balance: {self.balance:.4f} ATF{Colors.END}")
             return True
         elif status in ('busy', 'cooldown'):
             wait = result.get('mining_freezes_at', 0) - int(time.time())
             if wait > 0:
-                self._log(f"⏳ Claim cooldown {wait}s", Colors.YELLOW)
-                self.countdown(wait, "Claim cooldown")
+                print(f"{Colors.YELLOW}⏳ Claim cooldown {wait} detik{Colors.END}")
+                self.countdown(wait, "⏳ Claim cooldown")
                 return self.claim()
         else:
-            self._log(f"❌ Claim status: {status}", Colors.RED)
+            print(f"{Colors.RED}❌ Claim status: {status}{Colors.END}")
         return False
 
     def do_boost(self):
+        # Cek frozen
         if self.mining_freeze_at > 0 and int(time.time()) >= self.mining_freeze_at:
-            self._log("⛔ Mining frozen! Claim dulu...", Colors.YELLOW)
+            print(f"{Colors.YELLOW}⛔ Mining frozen! Claim dulu...{Colors.END}")
             if not self.claim():
-                self._log("❌ Claim gagal, skip boost", Colors.RED)
+                print(f"{Colors.RED}❌ Claim gagal, skip boost{Colors.END}")
                 return False
 
+        print(f"{Colors.CYAN}🚀 Mengirim boost...{Colors.END}")
         result = self._call_api("activate_boost", {"display_preview": round(0.15 + 0.1 * (time.time() % 1), 4)})
+        
         if not result:
-            self._log("❌ Boost no response", Colors.RED)
+            print(f"{Colors.RED}❌ Boost gagal (no response){Colors.END}")
             return False
 
         status = result.get('status')
+        
         if status == 'success':
             reward = result.get('pending_reward', 0)
             self.balance = float(result.get('user', {}).get('mined_balance', self.balance))
             self.total_boost = int(result.get('user', {}).get('total_boost_count', self.total_boost))
             self.mining_freeze_at = int(result.get('user', {}).get('mining_freezes_at', 0))
-            self._log(f"✅ BOOST #{self.total_boost} | +{reward:.4f} ATF | Balance: {self.balance:.4f}", Colors.GREEN)
+            
+            print(f"{Colors.GREEN}✅ BOOST BERHASIL!{Colors.END}")
+            print(f"   {Colors.YELLOW}+{reward:.4f} ATF{Colors.END}")
+            print(f"   {Colors.CYAN}💰 Balance: {self.balance:.4f} ATF{Colors.END}")
+            print(f"   {Colors.CYAN}📊 Total boost: {self.total_boost}{Colors.END}")
+            print(f"   {Colors.GRAY}⏰ {datetime.now().strftime('%H:%M:%S')}{Colors.END}")
             return True
 
         elif status == 'frozen':
-            self._log("⛔ Frozen response, claim...", Colors.YELLOW)
+            print(f"{Colors.YELLOW}⛔ Frozen response, claim...{Colors.END}")
             if self.claim():
                 return self.do_boost()
             return False
@@ -208,79 +222,67 @@ class ATFMinerBot:
         elif status in ('busy', 'cooldown'):
             wait = result.get('boost_ready_at', 0) - int(time.time())
             if wait > 0:
-                self._log(f"⏳ Cooldown {wait}s", Colors.YELLOW)
-                self.countdown(wait, "Cooldown")
+                print(f"{Colors.YELLOW}⏳ Cooldown {wait} detik{Colors.END}")
+                self.countdown(wait, "⏳ Cooldown")
                 return self.do_boost()
             time.sleep(1)
             return self.do_boost()
 
         elif status == 'rate_limited':
-            wait = min(30, 5 * max(1, self.account_id))
-            self._log(f"⚠️ Rate limited, tunggu {wait}s", Colors.YELLOW)
-            self.countdown(wait, "Rate limit")
+            wait = 30
+            print(f"{Colors.YELLOW}⚠️ Rate limited, tunggu {wait} detik{Colors.END}")
+            self.countdown(wait, "⏳ Rate limit")
             return self.do_boost()
 
         else:
-            self._log(f"⚠️ Status tidak dikenal: {status}", Colors.RED)
+            print(f"{Colors.RED}❌ Boost gagal: {status}{Colors.END}")
             return False
 
-    def run_loop(self, max_boost=0):
-        if not self.is_logged_in:
-            self._log("Tidak login, skip", Colors.RED)
-            return
-        self._log("🚀 Memulai auto‑boost loop", Colors.CYAN)
-        count = 0
-        while max_boost == 0 or count < max_boost:
+    def run(self):
+        print(f"\n{Colors.GREEN}{Colors.BOLD}🚀 START AUTO BOOST{Colors.END}")
+        print(f"{Colors.CYAN}{'═' * 50}{Colors.END}")
+        print(f"{Colors.GRAY}Press Ctrl+C to stop{Colors.END}\n")
+        
+        boost_count = 0
+        while True:
             try:
                 if self.do_boost():
-                    count += 1
+                    boost_count += 1
+                    print(f"{Colors.GRAY}➜ Total boost sesi ini: {boost_count}{Colors.END}")
                 else:
+                    print(f"{Colors.RED}❌ Boost gagal, tunggu 5 detik...{Colors.END}")
                     time.sleep(5)
-                self.countdown(15, "Cooling down")
+                
+                # Cooldown 15 detik
+                self.countdown(15, "⏳ Cooling down")
+                
             except KeyboardInterrupt:
+                print(f"\n\n{Colors.GREEN}👋 Dihentikan! Total boost: {boost_count}{Colors.END}")
                 break
-        self._log(f"⏹️ Loop berhenti, total boost: {count}", Colors.YELLOW)
+            except Exception as e:
+                print(f"{Colors.RED}❌ Error: {e}{Colors.END}")
+                time.sleep(5)
 
 # ============================================================
-# MULTI‑ACCOUNT MANAGER
+# MAIN
 # ============================================================
-
-def load_accounts():
-    if not os.path.exists(ACCOUNTS_FILE):
-        return []
-    with open(ACCOUNTS_FILE, 'r') as f:
-        return [line.strip() for line in f if line.strip()]
-
-def run_single(init_data, idx):
-    bot = ATFMinerBot(init_data, idx)
-    bot.run_loop()
 
 def main():
     print_banner()
-    accounts = load_accounts()
-    if not accounts:
-        print(f"{Colors.YELLOW}⚠️ Tidak ada accounts.txt, masukkan initData manual:{Colors.END}")
-        manual = input("➜ ").strip()
-        if manual:
-            bot = ATFMinerBot(manual, 0)
-            bot.run_loop()
+    
+    try:
+        bot = ATFMinerBot()
+        if bot.is_logged_in:
+            bot.run()
         else:
-            print(f"{Colors.RED}❌ Tidak ada data, keluar.{Colors.END}")
-        return
-
-    print(f"{Colors.GREEN}✅ Memuat {len(accounts)} akun.{Colors.END}")
-    max_workers = min(len(accounts), 5)
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(run_single, acc, i+1) for i, acc in enumerate(accounts)]
-        for f in as_completed(futures):
-            try:
-                f.result()
-            except Exception as e:
-                print(f"{Colors.RED}❌ Error akun: {e}{Colors.END}")
+            print(f"{Colors.RED}❌ Tidak bisa lanjut karena login gagal{Colors.END}")
+            sys.exit(1)
+    except KeyboardInterrupt:
+        print(f"\n{Colors.RED}🛑 Dihentikan user{Colors.END}")
+        sys.exit(0)
+    except Exception as e:
+        print(f"\n{Colors.RED}❌ Error: {e}{Colors.END}")
+        sys.exit(1)
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print(f"\n{Colors.RED}🛑 Dihentikan user.{Colors.END}")
-        sys.exit(0)
+    main()
