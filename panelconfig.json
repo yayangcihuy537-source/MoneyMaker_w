@@ -89,9 +89,9 @@
           "runner": "python3"
         },
         "8": {
-          "label": "Coming Soon",
-          "file": "",
-          "runner": "php"
+          "label": "LightQuest [ Only level 10 ] 🟢",
+          "file": "light.py",
+          "runner": "python3"
         }
       }
     },
