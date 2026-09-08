@@ -63,6 +63,7 @@ class LitePickStats:
         self.cooldown_until = None
         self.status = "Idle"
         self.last_error = ""
+        self.debug_info = ""  # untuk menyimpan debug terakhir
 
 # ========== CAPTCHA SOLVER ==========
 class CaptchaSolver:
@@ -215,6 +216,10 @@ class LitePickFaucet:
         self.units_per_coin = 100000000
         self.logs = []
         
+        # Cache halaman faucet
+        self._faucet_page_html = None
+        self._faucet_page_fetched_at = None
+    
     def _get_csrf_token(self) -> Optional[str]:
         for cookie in self.session.cookies:
             if cookie.name == "csrf_cookie_name":
@@ -331,6 +336,7 @@ class LitePickFaucet:
             self.stats.status = "Login Request Failed"
             return False
         
+        # Debug login response (tapi tidak dicetak ke user)
         try:
             result = resp.json()
             if result.get("ret") == 1:
@@ -340,15 +346,41 @@ class LitePickFaucet:
             else:
                 self.stats.status = f"Login Failed: {result.get('mes', 'unknown')}"
                 return False
-        except:
-            self.stats.status = "Invalid Response"
+        except json.JSONDecodeError:
+            preview = re.sub(r"\s+", " ", resp.text[:300])
+            self.stats.status = f"Invalid JSON login response: {preview}"
             return False
     
-    def get_balance(self) -> float:
+    def _fetch_faucet_page(self) -> bool:
+        """Ambil halaman faucet sekali dan cache"""
         resp = self.session.get(f"{self.base_url}{self.faucet_page}")
         if resp.status_code != 200:
-            return self.stats.balance
-        
+            self._faucet_page_html = None
+            self._faucet_page_fetched_at = None
+            return False
+        self._faucet_page_html = resp.text
+        self._faucet_page_fetched_at = time.time()
+        return True
+    
+    def get_cooldown_from_html(self, html: str) -> int:
+        """Ekstrak cooldown dari HTML tanpa request tambahan"""
+        patterns = [
+            r'cooldown_remaining["\']?\s*:\s*(\d+)',
+            r'data-cooldown["\']?\s*=\s*["\'](\d+)["\']',
+            r'next_claim["\']?\s*:\s*(\d+)',
+            r'countdown["\']?\s*:\s*(\d+)',
+            r'class="cooldown"[^>]*>(\d+)',
+            r'id="cooldown"[^>]*>(\d+)',
+            r'Wait\s*(\d+)\s*seconds?',
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, html)
+            if match:
+                return int(match.group(1))
+        return 0
+    
+    def get_balance_from_html(self, html: str) -> float:
+        """Ekstrak balance dari HTML"""
         patterns = [
             r'id="dd_main_balance"[^>]*>([\d.,]+)',
             r'class="user_balance"[^>]*>([\d.,]+)',
@@ -357,61 +389,72 @@ class LitePickFaucet:
             r'"balance":\s*([\d.]+)',
         ]
         for pattern in patterns:
-            match = re.search(pattern, resp.text)
+            match = re.search(pattern, html)
             if match:
                 raw = match.group(1).replace(',', '').strip()
                 try:
-                    self.stats.balance = float(raw)
-                    return self.stats.balance
+                    return float(raw)
                 except:
                     continue
         return self.stats.balance
     
     def get_cooldown(self) -> int:
-        try:
-            resp = self.session.get(f"{self.base_url}{self.faucet_page}")
-            if resp.status_code != 200:
-                return 0
-            patterns = [
-                r'cooldown_remaining["\']?\s*:\s*(\d+)',
-                r'data-cooldown["\']?\s*=\s*["\'](\d+)["\']',
-                r'next_claim["\']?\s*:\s*(\d+)',
-                r'countdown["\']?\s*:\s*(\d+)',
-            ]
-            for pattern in patterns:
-                match = re.search(pattern, resp.text)
-                if match:
-                    cd = int(match.group(1))
-                    self.stats.cooldown = cd
-                    if cd > 0:
-                        self.stats.cooldown_until = datetime.now() + timedelta(seconds=cd)
-                    else:
-                        self.stats.cooldown_until = None
-                    return cd
-            self.stats.cooldown = 0
-            self.stats.cooldown_until = None
-            return 0
-        except:
-            return 0
+        """Dapatkan cooldown, usahakan dari cache jika masih fresh"""
+        # Coba dari cache halaman (valid 5 detik)
+        if self._faucet_page_html and self._faucet_page_fetched_at and (time.time() - self._faucet_page_fetched_at) < 5:
+            cd = self.get_cooldown_from_html(self._faucet_page_html)
+            if cd > 0:
+                self.stats.cooldown = cd
+                self.stats.cooldown_until = datetime.now() + timedelta(seconds=cd)
+                return cd
+        
+        # Jika cache tidak valid, fetch ulang
+        if self._fetch_faucet_page():
+            cd = self.get_cooldown_from_html(self._faucet_page_html)
+            self.stats.cooldown = cd
+            if cd > 0:
+                self.stats.cooldown_until = datetime.now() + timedelta(seconds=cd)
+            else:
+                self.stats.cooldown_until = None
+            return cd
+        
+        # Jika gagal fetch, kembalikan nilai terakhir
+        return self.stats.cooldown
+    
+    def get_balance(self) -> float:
+        if self._faucet_page_html:
+            bal = self.get_balance_from_html(self._faucet_page_html)
+            self.stats.balance = bal
+            return bal
+        
+        if self._fetch_faucet_page():
+            bal = self.get_balance_from_html(self._faucet_page_html)
+            self.stats.balance = bal
+            return bal
+        return self.stats.balance
     
     def claim(self) -> Tuple[bool, float, str]:
         if not self.logged_in:
             if not self.login():
                 return False, 0.0, "Not logged in"
         
-        resp = self.session.get(f"{self.base_url}{self.faucet_page}")
-        if resp.status_code != 200:
+        # Fetch halaman faucet sekali (digunakan untuk cooldown & balance)
+        if not self._fetch_faucet_page():
             return False, 0.0, "Failed to load faucet page"
         
+        html = self._faucet_page_html
+        
+        # Ambil CSRF dari cookie
         self.csrf_token = self._get_csrf_token()
         if not self.csrf_token:
             return False, 0.0, "No CSRF token"
         
-        cooldown = self.get_cooldown()
-        if cooldown > 0:
-            self.stats.cooldown = cooldown
-            self.stats.cooldown_until = datetime.now() + timedelta(seconds=cooldown)
-            return False, 0.0, f"Cooldown {cooldown}s"
+        # Cek cooldown dari HTML yang sudah di-fetch
+        cd = self.get_cooldown_from_html(html)
+        if cd > 0:
+            self.stats.cooldown = cd
+            self.stats.cooldown_until = datetime.now() + timedelta(seconds=cd)
+            return False, 0.0, f"Cooldown {cd}s"
         
         if not self.sitekey:
             return False, 0.0, "No sitekey"
@@ -450,42 +493,93 @@ class LitePickFaucet:
             }
         )
         
-        if resp.status_code != 200:
-            return False, 0.0, f"Request failed: {resp.status_code}"
+        # ========== DEBUG RESPONSE YANG AMAN ==========
+        content_type = resp.headers.get("Content-Type", "")
+        body = resp.text.strip()
         
+        debug_info = (
+            f"Status: {resp.status_code} | "
+            f"Content-Type: {content_type} | "
+            f"Length: {len(body)}"
+        )
+        self.stats.debug_info = debug_info
+        self.logs.append(f"🔍 {debug_info}")
+        
+        # Jika response kosong
+        if not body:
+            self.stats.fail_count += 1
+            self.stats.status = "Empty Response"
+            return False, 0.0, "Server returned empty response"
+        
+        # Coba parsing JSON
         try:
             result = resp.json()
-            if result.get("ret") == 1:
-                raw_reward = float(result.get('reward', 0))
-                reward = raw_reward
-                if raw_reward > 0 and raw_reward == int(raw_reward) and self.units_per_coin:
-                    reward = raw_reward / self.units_per_coin
-                
-                new_balance = result.get('new_balance')
-                if new_balance is not None:
-                    try:
-                        nb = float(new_balance)
-                        if nb > 0 and nb == int(nb) and self.units_per_coin:
-                            nb = nb / self.units_per_coin
-                        self.stats.balance = nb
-                    except:
-                        pass
-                else:
-                    self.get_balance()
-                
-                self.stats.last_claim = reward
-                self.stats.total_earned += reward
-                self.stats.claim_count += 1
-                self.stats.success_count += 1
-                self.stats.status = "Success"
-                self.get_cooldown()
-                return True, reward, result.get("mes", "Success")
+        except json.JSONDecodeError:
+            # Server mengirim HTML atau text bukan JSON
+            preview = re.sub(r"\s+", " ", body[:300])
+            self.stats.fail_count += 1
+            self.stats.status = "Invalid JSON"
+            self.logs.append(f"❌ Invalid JSON: {preview}")
+            return False, 0.0, (
+                f"Invalid JSON | HTTP {resp.status_code} | "
+                f"Content-Type: {content_type} | Preview: {preview}"
+            )
+        
+        if not isinstance(result, dict):
+            self.stats.fail_count += 1
+            self.stats.status = "Invalid JSON Object"
+            return False, 0.0, "Server JSON bukan object"
+        
+        # Proses result JSON
+        if result.get("ret") == 1:
+            raw_reward = float(result.get('reward', 0))
+            reward = raw_reward
+            if raw_reward > 0 and raw_reward == int(raw_reward) and self.units_per_coin:
+                reward = raw_reward / self.units_per_coin
+            
+            new_balance = result.get('new_balance')
+            if new_balance is not None:
+                try:
+                    nb = float(new_balance)
+                    if nb > 0 and nb == int(nb) and self.units_per_coin:
+                        nb = nb / self.units_per_coin
+                    self.stats.balance = nb
+                except:
+                    pass
             else:
-                self.stats.fail_count += 1
-                self.stats.status = "Failed"
-                msg = result.get("mes", "Unknown error")
-                
-                cd_match = re.search(r'(\d+)\s*minutes?,\s*(\d+)\s*seconds?', msg, re.IGNORECASE)
+                self.get_balance()
+            
+            self.stats.last_claim = reward
+            self.stats.total_earned += reward
+            self.stats.claim_count += 1
+            self.stats.success_count += 1
+            self.stats.status = "Success"
+            # Update cooldown dari response (jika ada)
+            cd_from_resp = result.get('cooldown') or result.get('cooldown_remaining')
+            if cd_from_resp is not None:
+                try:
+                    cd_int = int(cd_from_resp)
+                    if cd_int > 0:
+                        self.stats.cooldown = cd_int
+                        self.stats.cooldown_until = datetime.now() + timedelta(seconds=cd_int)
+                except:
+                    pass
+            return True, reward, result.get("mes", "Success")
+        else:
+            self.stats.fail_count += 1
+            self.stats.status = "Failed"
+            msg = result.get("mes", "Unknown error")
+            
+            # Ekstrak cooldown dari pesan error
+            cd_match = re.search(r'(\d+)\s*minutes?,\s*(\d+)\s*seconds?', msg, re.IGNORECASE)
+            if cd_match:
+                mins = int(cd_match.group(1))
+                secs = int(cd_match.group(2))
+                cd = mins * 60 + secs
+                self.stats.cooldown = cd
+                self.stats.cooldown_until = datetime.now() + timedelta(seconds=cd)
+            else:
+                cd_match = re.search(r'(\d+)\s*minutes?\s+(\d+)\s*seconds?', msg, re.IGNORECASE)
                 if cd_match:
                     mins = int(cd_match.group(1))
                     secs = int(cd_match.group(2))
@@ -493,19 +587,13 @@ class LitePickFaucet:
                     self.stats.cooldown = cd
                     self.stats.cooldown_until = datetime.now() + timedelta(seconds=cd)
                 else:
-                    cd_match = re.search(r'(\d+)\s*minutes?\s+(\d+)\s*seconds?', msg, re.IGNORECASE)
+                    cd_match = re.search(r'(\d+)\s*seconds?', msg, re.IGNORECASE)
                     if cd_match:
-                        mins = int(cd_match.group(1))
-                        secs = int(cd_match.group(2))
-                        cd = mins * 60 + secs
+                        cd = int(cd_match.group(1))
                         self.stats.cooldown = cd
                         self.stats.cooldown_until = datetime.now() + timedelta(seconds=cd)
-                
-                return False, 0.0, msg
-        except Exception as e:
-            self.stats.fail_count += 1
-            self.stats.status = "Error"
-            return False, 0.0, f"Exception: {e}"
+            
+            return False, 0.0, msg
     
     def run_cycle(self) -> Dict:
         result = {
@@ -523,8 +611,8 @@ class LitePickFaucet:
                 return result
             self.logs.append(f"✅ Login successful")
         
-        self.get_cooldown()
-        cooldown = self.stats.cooldown
+        # Get cooldown (gunakan cache jika memungkinkan)
+        cooldown = self.get_cooldown()
         if cooldown > 0:
             result["message"] = f"Cooldown {cooldown}s"
             result["cooldown"] = cooldown
@@ -587,6 +675,9 @@ class LitePickBot:
             print(f"{M}|| ⏳ COOLDOWN   : {Y}{cd_str}{RESET}")
         else:
             print(f"{M}|| ⏳ COOLDOWN   : {G}✅ READY{RESET}")
+        
+        if stats.debug_info:
+            print(f"{M}|| 🐞 DEBUG      : {Y}{stats.debug_info}{RESET}")
         
         if self.faucet.logs:
             print(f"\n{C}{'='*60}{RESET}")
@@ -677,7 +768,7 @@ def main_menu():
     while True:
         os.system('clear' if os.name == 'posix' else 'cls')
         print(f"\n{C}{'='*60}{RESET}")
-        print(f"{C}              ⚡ LITEPICK.IO BOT v1.0{RESET}")
+        print(f"{C}              ⚡ LITEPICK.IO BOT v1.1{RESET}")
         print(f"{C}{'='*60}{RESET}\n")
         print(f"{M}|| [1] 🚀 START BOT{RESET}")
         print(f"{M}|| [2] ⚙️  CONFIGURATION{RESET}")
