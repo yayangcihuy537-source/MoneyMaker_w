@@ -19,7 +19,7 @@ class Colors:
     RED = '\033[91m'
     PINK = '\033[38;5;206m'
     WHITE = '\033[97m'
-    GRAY = '\033[90m'
+    GRAY = '\033[90m'        # <--- sudah ditambahkan
     BOLD = '\033[1m'
     END = '\033[0m'
 
@@ -47,7 +47,7 @@ def print_banner():
     print(BANNER)
 
 # ============================================================
-# SINGLE USE BOT (1x pakai, tanpa session, tanpa file)
+# SINGLE USE BOT (tanpa file, tanpa session)
 # ============================================================
 
 class ATFMinerBot:
@@ -68,26 +68,35 @@ class ATFMinerBot:
         self.username = "Unknown"
         self.init_data = ""
         self.is_logged_in = False
-        
+
         # Minta initData dari user
         self.get_init_data()
-        
+
     def get_init_data(self):
-        """Minta initData dari user (tidak disimpan)"""
+        """Minta initData dari user, validasi sederhana"""
         print(f"{Colors.CYAN}╔════════════════════════════════════════╗{Colors.END}")
         print(f"{Colors.CYAN}║{Colors.END}  {Colors.BOLD}MASUKKAN TELEGRAM INIT DATA{Colors.END}    {Colors.CYAN}║{Colors.END}")
         print(f"{Colors.CYAN}║{Colors.END}  {Colors.GRAY}(copy dari WebView / network log){Colors.END} {Colors.CYAN}║{Colors.END}")
         print(f"{Colors.CYAN}╚════════════════════════════════════════╝{Colors.END}")
         print()
         self.init_data = input(f"{Colors.GREEN}➜ {Colors.END}").strip()
-        
+
         if not self.init_data:
             print(f"{Colors.RED}❌ InitData tidak boleh kosong!{Colors.END}")
             sys.exit(1)
-        
+
+        # Validasi sederhana: harus mengandung query_id= dan user=
+        if 'query_id=' not in self.init_data or 'user=' not in self.init_data:
+            print(f"{Colors.YELLOW}⚠️ InitData sepertinya tidak lengkap (harus ada query_id= dan user=){Colors.END}")
+            retry = input(f"{Colors.YELLOW}Lanjutkan tetap? (y/n): {Colors.END}").strip().lower()
+            if retry != 'y':
+                print(f"{Colors.RED}Mengulang input...{Colors.END}")
+                self.get_init_data()
+                return
+
         self._parse_user()
         self.login()
-    
+
     def _parse_user(self):
         try:
             parsed = urllib.parse.parse_qs(self.init_data)
@@ -110,7 +119,7 @@ class ATFMinerBot:
         }
         if extra:
             payload.update(extra)
-        
+
         try:
             resp = self.session.post(url, params=params, json=payload, timeout=30)
             if resp.status_code == 200:
@@ -125,14 +134,14 @@ class ATFMinerBot:
     def login(self):
         print(f"\n{Colors.CYAN}🔄 Mencoba login...{Colors.END}")
         result = self._call_api("login")
-        
+
         if result and result.get('status') == 'success':
             user = result.get('user', {})
             self.is_logged_in = True
             self.balance = float(user.get('mined_balance', 0))
             self.total_boost = int(user.get('total_boost_count', 0))
             self.mining_freeze_at = int(user.get('mining_freezes_at', 0))
-            
+
             print(f"\n{Colors.GREEN}✅ LOGIN BERHASIL!{Colors.END}")
             print(f"{Colors.CYAN}👤 Username :{Colors.END} {Colors.WHITE}{user.get('username')}{Colors.END}")
             print(f"{Colors.CYAN}📊 Level    :{Colors.END} {Colors.WHITE}{user.get('miner_level')}{Colors.END}")
@@ -146,12 +155,13 @@ class ATFMinerBot:
                 print(f"{Colors.RED}Pesan: {result.get('message')}{Colors.END}")
             if result and result.get('reason'):
                 print(f"{Colors.RED}Alasan: {result.get('reason')}{Colors.END}")
-            
+
             # Tawarkan input ulang
             retry = input(f"\n{Colors.YELLOW}Masukkan initData baru? (y/n): {Colors.END}").strip().lower()
             if retry == 'y':
                 self.get_init_data()
             else:
+                print(f"{Colors.RED}Keluar...{Colors.END}")
                 sys.exit(1)
 
     def countdown(self, sec, msg="⏳ Menunggu"):
@@ -166,7 +176,7 @@ class ATFMinerBot:
         if not result:
             print(f"{Colors.RED}❌ Claim gagal{Colors.END}")
             return False
-        
+
         status = result.get('status')
         if status == 'success':
             self.balance = float(result.get('user', {}).get('mined_balance', self.balance))
@@ -193,19 +203,19 @@ class ATFMinerBot:
 
         print(f"{Colors.CYAN}🚀 Mengirim boost...{Colors.END}")
         result = self._call_api("activate_boost", {"display_preview": round(0.15 + 0.1 * (time.time() % 1), 4)})
-        
+
         if not result:
             print(f"{Colors.RED}❌ Boost gagal (no response){Colors.END}")
             return False
 
         status = result.get('status')
-        
+
         if status == 'success':
             reward = result.get('pending_reward', 0)
             self.balance = float(result.get('user', {}).get('mined_balance', self.balance))
             self.total_boost = int(result.get('user', {}).get('total_boost_count', self.total_boost))
             self.mining_freeze_at = int(result.get('user', {}).get('mining_freezes_at', 0))
-            
+
             print(f"{Colors.GREEN}✅ BOOST BERHASIL!{Colors.END}")
             print(f"   {Colors.YELLOW}+{reward:.4f} ATF{Colors.END}")
             print(f"   {Colors.CYAN}💰 Balance: {self.balance:.4f} ATF{Colors.END}")
@@ -242,7 +252,7 @@ class ATFMinerBot:
         print(f"\n{Colors.GREEN}{Colors.BOLD}🚀 START AUTO BOOST{Colors.END}")
         print(f"{Colors.CYAN}{'═' * 50}{Colors.END}")
         print(f"{Colors.GRAY}Press Ctrl+C to stop{Colors.END}\n")
-        
+
         boost_count = 0
         while True:
             try:
@@ -252,10 +262,10 @@ class ATFMinerBot:
                 else:
                     print(f"{Colors.RED}❌ Boost gagal, tunggu 5 detik...{Colors.END}")
                     time.sleep(5)
-                
+
                 # Cooldown 15 detik
                 self.countdown(15, "⏳ Cooling down")
-                
+
             except KeyboardInterrupt:
                 print(f"\n\n{Colors.GREEN}👋 Dihentikan! Total boost: {boost_count}{Colors.END}")
                 break
@@ -269,7 +279,6 @@ class ATFMinerBot:
 
 def main():
     print_banner()
-    
     try:
         bot = ATFMinerBot()
         if bot.is_logged_in:
