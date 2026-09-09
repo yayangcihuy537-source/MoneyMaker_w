@@ -209,9 +209,9 @@
           "runner": "python3"
         },
         "23": {
-          "label": "Coming Soon",
-          "file": "",
-          "runner": "php"
+          "label": "FarmingMatesBot 🟢",
+          "file": "FarmingMatesBot.py",
+          "runner": "python3"
         },
         "24": {
           "label": "Coming Soon",
