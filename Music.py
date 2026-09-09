@@ -8,11 +8,12 @@ import urllib.parse
 import random
 import requests
 import base64
+import shutil
 from datetime import datetime
 from telethon import TelegramClient
 from telethon.tl.functions.messages import StartBotRequest, RequestWebViewRequest
 from telethon.tl.functions.channels import JoinChannelRequest, GetParticipantRequest
-from telethon.errors import SessionPasswordNeededError
+from telethon.errors import SessionPasswordNeededError, AuthKeyUnregisteredError, AuthKeyInvalidError
 
 # ====== Warna ======
 C = "\033[1;36m"
@@ -31,6 +32,7 @@ API_HASH = "ec1c1f2c30e2f1855c3edee7e348480b"
 BOT_USERNAME = "MusicMiningMB_Bot"
 TOKEN_FILE = "all_token.json"
 DEFAULT_REF = "MB000LPP"
+CACHE_DIR = "__pycache__"
 
 # ====== Teks ======
 TEXTS = {
@@ -90,7 +92,10 @@ TEXTS = {
     "mine_alr": "Mining is already active.",
     "mine_fail": "Failed to start mining! HTTP",
     "all_done": "Session Executed Successfully.",
-    "term": "Automation session forcefully terminated."
+    "term": "Automation session forcefully terminated.",
+    "cache_cleared": "Cache script dibersihkan",
+    "config_saved": "Konfigurasi tersimpan di folder ini",
+    "press_enter": "Press Enter to continue..."
 }
 
 t = TEXTS
@@ -98,12 +103,28 @@ t = TEXTS
 def clr():
     os.system('cls' if os.name == 'nt' else 'clear')
 
+def clear_cache():
+    """Bersihkan cache Python"""
+    if os.path.exists(CACHE_DIR):
+        try:
+            shutil.rmtree(CACHE_DIR)
+            print(f" \033[38;5;51m│\033[0m \033[1;38;5;46m[✓] {t['cache_cleared']}\033[0m")
+        except:
+            pass
+    # Hapus file .pyc
+    for f in glob.glob("*.pyc"):
+        try:
+            os.remove(f)
+        except:
+            pass
+
 def get_width():
     cols = os.get_terminal_size().columns if sys.stdout.isatty() else 80
     return max(50, min(cols, 100))
 
 def banner():
     clr()
+    clear_cache()
     w = get_width()
     line = "=" * w
     print(PURPLE + line + RESET)
@@ -122,6 +143,8 @@ def banner():
     print(PURPLE + "||" + " " + tg + " " * (total_inner - len(tg) - 1) + "||" + RESET)
     print(PURPLE + "||" + " " * (w - 4) + "||" + RESET)
     print(PURPLE + line + RESET)
+    print(f" \033[38;5;51m│\033[0m \033[1;38;5;46m[✓] {t['config_saved']}\033[0m")
+    print(f" \033[38;5;51m│\033[0m")
 
 def log(acc_num, icon, text, color):
     print(f" \033[38;5;51m│\033[0m \033[38;5;220m[{acc_num:04d}]\033[0m {color}{icon} {W}{text}{RES}")
@@ -180,7 +203,7 @@ def parse_channel_from_url(url):
 
 async def claim_task(acc_num, headers, task_id, reward):
     try:
-        res = requests.post(f"https://api.musicmb.site/api/tasks/{task_id}/complete", headers=headers, timeout=15)
+        res = requests.post(f"https://api.musicmb.site/api/tasks/{task_id}/complete", headers=headers, timeout=30)
         if res.status_code == 200:
             return True
         else:
@@ -191,7 +214,7 @@ async def claim_task(acc_num, headers, task_id, reward):
 async def process_captcha(acc_num):
     log(acc_num, "🛡️", t["req_cap"], Y)
     try:
-        res = requests.get("https://seed-flowers.vercel.app/api/captcha/check", timeout=10).json()
+        res = requests.get("https://seed-flowers.vercel.app/api/captcha/check", timeout=30).json()
         task_id = res.get("task_id")
         if not task_id:
             log(acc_num, "❌", t["cap_id_fail"], R)
@@ -201,7 +224,7 @@ async def process_captcha(acc_num):
         attempt = 1
         while True:
             try:
-                poll_res = requests.get(f"https://seed-flowers.vercel.app/api/captcha/poll?task_id={task_id}", timeout=10).json()
+                poll_res = requests.get(f"https://seed-flowers.vercel.app/api/captcha/poll?task_id={task_id}", timeout=30).json()
                 status = poll_res.get("status")
                 if status == "oke":
                     print("\r\033[K", end="")
@@ -269,7 +292,7 @@ async def authenticate(client, acc_num, sess_name, start_param):
             'Accept-Language': "en,id-ID;q=0.9,id;q=0.8,en-US;q=0.7"
         }
         
-        res = requests.post(url, json=payload, headers=headers, timeout=15)
+        res = requests.post(url, json=payload, headers=headers, timeout=30)
         if res.status_code == 200:
             auth_token = res.json().get("token")
             save_token(sess_name, auth_token)
@@ -293,8 +316,7 @@ async def watch_ads_until_done(acc_num, headers):
     while attempt < max_attempts:
         attempt += 1
         try:
-            # Refresh dashboard
-            resp = requests.get("https://api.musicmb.site/api/dashboard", headers=headers, timeout=10)
+            resp = requests.get("https://api.musicmb.site/api/dashboard", headers=headers, timeout=30)
             if resp.status_code != 200:
                 log(acc_num, "⚠️", f"Failed to refresh dashboard: {resp.status_code}", Y)
                 break
@@ -308,9 +330,8 @@ async def watch_ads_until_done(acc_num, headers):
             if watched >= required:
                 log(acc_num, "✅", t["ad_giga_done"].format(watched, required), G)
                 break
-            # Tonton iklan
             log(acc_num, "📢", t["ad_giga"].format(watched+1, required), Y)
-            res_ad = requests.post("https://api.musicmb.site/api/mining/ad-boost/complete", headers=headers, timeout=15)
+            res_ad = requests.post("https://api.musicmb.site/api/mining/ad-boost/complete", headers=headers, timeout=30)
             if res_ad.status_code == 200:
                 log(acc_num, "✅", t["ad_giga_ok"], G)
             else:
@@ -326,8 +347,7 @@ async def watch_ads_until_done(acc_num, headers):
     while attempt < max_attempts:
         attempt += 1
         try:
-            # Refresh dashboard
-            resp = requests.get("https://api.musicmb.site/api/dashboard", headers=headers, timeout=10)
+            resp = requests.get("https://api.musicmb.site/api/dashboard", headers=headers, timeout=30)
             if resp.status_code != 200:
                 log(acc_num, "⚠️", f"Failed to refresh dashboard: {resp.status_code}", Y)
                 break
@@ -341,9 +361,8 @@ async def watch_ads_until_done(acc_num, headers):
             if watched >= required:
                 log(acc_num, "✅", t["ad_libtl_done"].format(watched, required), G)
                 break
-            # Tonton iklan
             log(acc_num, "📢", t["ad_libtl"].format(watched+1, required), Y)
-            res_ad = requests.post("https://api.musicmb.site/api/mining/libtl-ad-boost/complete", headers=headers, timeout=15)
+            res_ad = requests.post("https://api.musicmb.site/api/mining/libtl-ad-boost/complete", headers=headers, timeout=30)
             if res_ad.status_code == 200:
                 log(acc_num, "✅", t["ad_libtl_ok"], G)
             else:
@@ -381,7 +400,7 @@ async def process_account(client, acc_num, sess_name, start_param):
         'Authorization': f"Bearer {auth_token}"
     }
 
-    res_dash = requests.get("https://api.musicmb.site/api/dashboard", headers=headers, timeout=15)
+    res_dash = requests.get("https://api.musicmb.site/api/dashboard", headers=headers, timeout=30)
     
     if res_dash.status_code in [401, 403]:
         log(acc_num, "⚠️", t["tok_exp"], R)
@@ -389,7 +408,7 @@ async def process_account(client, acc_num, sess_name, start_param):
         if not auth_token:
             return
         headers['Authorization'] = f"Bearer {auth_token}"
-        res_dash = requests.get("https://api.musicmb.site/api/dashboard", headers=headers, timeout=15)
+        res_dash = requests.get("https://api.musicmb.site/api/dashboard", headers=headers, timeout=30)
         
     if res_dash.status_code != 200:
         log(acc_num, "❌", f"{t['dash_fail']} {res_dash.status_code}", R)
@@ -410,7 +429,7 @@ async def process_account(client, acc_num, sess_name, start_param):
             short_raw = raw_addr[:10] + "...."
             log(acc_num, "🔗", f"{t['raw_addr']} {short_raw}", C)
             
-            res_wallet = requests.put("https://api.musicmb.site/api/profile/wallet", json={"address": raw_addr}, headers=headers, timeout=15)
+            res_wallet = requests.put("https://api.musicmb.site/api/profile/wallet", json={"address": raw_addr}, headers=headers, timeout=30)
             if res_wallet.status_code == 200:
                 wallet_data = res_wallet.json()
                 if wallet_data.get("wallet_locked"):
@@ -474,7 +493,7 @@ async def process_account(client, acc_num, sess_name, start_param):
 
     # ===== AKTIVASI MINING =====
     log(acc_num, "⛏️", t["act_mine"], Y)
-    res_mine = requests.post("https://api.musicmb.site/api/mining/start", headers=headers, timeout=15)
+    res_mine = requests.post("https://api.musicmb.site/api/mining/start", headers=headers, timeout=30)
     
     if res_mine.status_code in [200, 201]:
         mine_data = res_mine.json().get("mining", {})
@@ -546,6 +565,21 @@ async def create_session():
         await client.disconnect()
         return None
 
+async def validate_session(client, sess_name):
+    """Validasi apakah session masih aktif"""
+    try:
+        if not await client.is_user_authorized():
+            return False
+        # Coba dapatkan info user
+        me = await client.get_me()
+        if me:
+            return True
+        return False
+    except (AuthKeyUnregisteredError, AuthKeyInvalidError):
+        return False
+    except Exception:
+        return False
+
 # ====== MAIN ======
 async def main():
     banner()
@@ -583,20 +617,51 @@ async def main():
         client = TelegramClient(sess_name, API_ID, API_HASH)
         await client.connect()
         
-        if not await client.is_user_authorized():
+        # Validasi session
+        is_valid = await validate_session(client, sess_name)
+        
+        if not is_valid:
             log(acc_num, "❌", t["auth_exp"], R)
             await client.disconnect()
-            return
+            
+            # Tawarkan membuat session baru
+            print(f" \033[38;5;51m│\033[0m")
+            choice = input(f" \033[38;5;51m│\033[0m \033[1;38;5;208mSession expired. Create new session? (y/n): \033[0m").strip().lower()
+            if choice in ['y', 'yes']:
+                # Hapus session lama yang corrupt
+                if os.path.exists(session_file):
+                    try:
+                        os.remove(session_file)
+                        print(f" \033[38;5;51m│\033[0m \033[1;33mRemoved old session file: {session_file}\033[0m")
+                    except:
+                        pass
+                sess_name = await create_session()
+                if not sess_name:
+                    print(f" \033[38;5;51m│\033[0m \033[1;31mFailed to create session. Exiting.\033[0m")
+                    input(f"\n{Fore.CYAN}Tekan Enter untuk keluar...{Style.RESET_ALL}")
+                    return
+                session_file = sess_name + '.session'
+                client = TelegramClient(sess_name, API_ID, API_HASH)
+                await client.connect()
+            else:
+                print(f" \033[38;5;51m│\033[0m \033[1;31mExiting...\033[0m")
+                input(f"\n{Fore.CYAN}Tekan Enter untuk keluar...{Style.RESET_ALL}")
+                return
         
+        # Proses account
         await process_account(client, acc_num, sess_name, user_ref)
         await client.disconnect()
         
     except Exception as e:
         log(acc_num, "❌", f"Critical Error: {e}", R)
+        import traceback
+        traceback.print_exc()
             
     print(f"\033[38;5;51m" + "─" * get_width() + "\033[0m")
     print(f" \033[1;38;5;46m[✔] {t['all_done']}\033[0m")
-    print(f"\033[38;5;51m" + "─" * get_width() + "\033[0m\n")
+    print(f"\033[38;5;51m" + "─" * get_width() + "\033[0m")
+    print(f" \033[38;5;51m│\033[0m \033[1;38;5;46m{t['press_enter']}\033[0m")
+    input()
 
 if __name__ == "__main__":
     try:
