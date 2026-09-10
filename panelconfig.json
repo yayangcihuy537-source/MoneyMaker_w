@@ -214,9 +214,9 @@
           "runner": "python3"
         },
         "24": {
-          "label": "Coming Soon",
-          "file": "",
-          "runner": "python3"
+          "label": "CoinFree X FaucetMini X Coinplay X FaucetFi 🟢",
+          "file": "4in1.php",
+          "runner": "php"
         }
       }
     },
