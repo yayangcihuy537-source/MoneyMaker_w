@@ -24,8 +24,8 @@
           "runner": "python3"
         },
         "5": {
-          "label": "GainLtc 🔴",
-          "file": "GainLtc.php",
+          "label": "ARUBLE 🟢",
+          "file": "aruble.php",
           "runner": "php"
         },
         "6": {
