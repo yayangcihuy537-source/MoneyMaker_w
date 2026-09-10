@@ -3,11 +3,10 @@
 
 """
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                  ⚡ LITEPICK.IO AUTO BOT                                  ║
+║                  ⚡ LITEPICK.IO AUTO BOT v1.2 FIXED                       ║
 ║  🔥 Auto claim faucet with Turnstile captcha                            ║
 ║  🔐 Sitekey: 0x4AAAAAAA0-UWDHOKP0OrgS                                  ║
-║  🎲 Support: Waryono / BypassAll / Manual                              ║
-║  💰 Auto balance display & cooldown countdown                          ║
+║  🐛 Fix: binary response (gzip/deflate/brotli auto-decompress)         ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 """
 
@@ -18,12 +17,21 @@ import json
 import random
 import base64
 import re
+import gzip
+import zlib
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List, Tuple
 
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+
+# Coba import brotli (opsional)
+try:
+    import brotli
+    HAS_BROTLI = True
+except ImportError:
+    HAS_BROTLI = False
 
 # ========== WARNA ==========
 R = '\033[91m'
@@ -37,8 +45,6 @@ RESET = '\033[0m'
 
 # ========== KONFIGURASI ==========
 CONFIG_FILE = "litepick_config.json"
-
-# Hardcode sitekey untuk LitePick
 SITEKEY = "0x4AAAAAAA0-UWDHOKP0OrgS"
 
 SITE_CONFIG = {
@@ -63,7 +69,62 @@ class LitePickStats:
         self.cooldown_until = None
         self.status = "Idle"
         self.last_error = ""
-        self.debug_info = ""  # untuk menyimpan debug terakhir
+        self.debug_info = ""
+
+# ========== DECOMPRESS HELPER ==========
+def try_decompress(raw: bytes) -> Optional[str]:
+    """Coba decompress response binary. Return text atau None."""
+    if not raw:
+        return None
+    
+    magic = raw[:4]
+    
+    # gzip: 1f 8b
+    if magic[:2] == b'\x1f\x8b':
+        try:
+            return gzip.decompress(raw).decode('utf-8', errors='replace')
+        except Exception:
+            try:
+                # Kadang ada trailing bytes
+                import io
+                return gzip.GzipFile(fileobj=io.BytesIO(raw)).read().decode('utf-8', errors='replace')
+            except Exception:
+                pass
+    
+    # zlib: 78 01/9c/da/5e
+    if magic[:1] == b'\x78' and magic[1:2] in [b'\x01', b'\x9c', b'\xda', b'\x5e']:
+        try:
+            return zlib.decompress(raw).decode('utf-8', errors='replace')
+        except Exception:
+            try:
+                return zlib.decompress(raw, -zlib.MAX_WBITS).decode('utf-8', errors='replace')
+            except Exception:
+                pass
+    
+    # raw deflate (no header)
+    try:
+        return zlib.decompress(raw, -zlib.MAX_WBITS).decode('utf-8', errors='replace')
+    except Exception:
+        pass
+    
+    # brotli
+    if HAS_BROTLI:
+        try:
+            return brotli.decompress(raw).decode('utf-8', errors='replace')
+        except Exception:
+            pass
+    
+    # Coba decode UTF-8 biasa
+    try:
+        text = raw.decode('utf-8')
+        # Kalau banyak karakter aneh, anggap bukan text valid
+        printable = sum(1 for c in text[:100] if c.isprintable() or c in '\n\r\t ')
+        if printable > 70:
+            return text
+    except Exception:
+        pass
+    
+    return None
 
 # ========== CAPTCHA SOLVER ==========
 class CaptchaSolver:
@@ -109,12 +170,7 @@ class CaptchaSolver:
                 time.sleep(2)
                 poll_resp = requests.get(
                     poll_url,
-                    params={
-                        "apikey": api_key,
-                        "id": task_id,
-                        "action": "get",
-                        "json": 1
-                    },
+                    params={"apikey": api_key, "id": task_id, "action": "get", "json": 1},
                     timeout=30
                 )
                 if poll_resp.status_code != 200:
@@ -142,12 +198,7 @@ class CaptchaSolver:
     def solve_bypassall(api_key: str, sitekey: str, pageurl: str) -> Optional[str]:
         try:
             submit_url = "https://bypassallshortlinks.space/in.php"
-            params = {
-                "key": api_key,
-                "method": "turnstile",
-                "sitekey": sitekey,
-                "pageurl": pageurl
-            }
+            params = {"key": api_key, "method": "turnstile", "sitekey": sitekey, "pageurl": pageurl}
             resp = requests.get(submit_url, params=params, timeout=30)
             if resp.status_code != 200:
                 return None
@@ -159,11 +210,7 @@ class CaptchaSolver:
             poll_url = "https://bypassallshortlinks.space/res.php"
             for _ in range(30):
                 time.sleep(3)
-                poll_resp = requests.get(
-                    poll_url,
-                    params={"id": task_id, "key": api_key},
-                    timeout=30
-                )
+                poll_resp = requests.get(poll_url, params={"id": task_id, "key": api_key}, timeout=30)
                 if poll_resp.status_code != 200:
                     continue
                 text = poll_resp.text.strip()
@@ -194,8 +241,9 @@ class LitePickFaucet:
         self.session.headers.update({
             "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-            "Accept-Language": "id-ID",
-            "Accept-Encoding": "gzip, deflate, br",
+            "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+            # ⚠️ FIX: HAPUS "br" — biar server gak kirim brotli
+            "Accept-Encoding": "gzip, deflate",
             "sec-ch-ua": '"Chromium";v="127", "Not)A;Brand";v="99"',
             "sec-ch-ua-mobile": "?1",
             "sec-ch-ua-platform": '"Android"',
@@ -216,7 +264,6 @@ class LitePickFaucet:
         self.units_per_coin = 100000000
         self.logs = []
         
-        # Cache halaman faucet
         self._faucet_page_html = None
         self._faucet_page_fetched_at = None
     
@@ -243,7 +290,6 @@ class LitePickFaucet:
         return base64.b64encode(''.join(chars).encode()).decode()
     
     def _solve_captcha(self, sitekey: str, action: str = "login") -> Optional[str]:
-        """Solve captcha with retry, skip if all fail."""
         max_retries = 3
         attempt = 0
         
@@ -269,7 +315,6 @@ class LitePickFaucet:
             else:
                 break
         
-        # Fallback to manual input
         if self.captcha_service == "manual" or attempt >= max_retries:
             print(f"{C}🔑 Masukkan token Turnstile untuk LitePick ({action}){RESET}")
             print(f"{Y}Kosongkan untuk skip claim ini{RESET}")
@@ -310,10 +355,7 @@ class LitePickFaucet:
             "captcha_type": "3",
             "g-recaptcha-response": "",
             "_iconcaptcha-token": "",
-            "ic-rq": "",
-            "ic-wid": "",
-            "ic-cid": "",
-            "ic-hp": "",
+            "ic-rq": "", "ic-wid": "", "ic-cid": "", "ic-hp": "",
             "h-captcha-response": "",
             "c_captcha_response": token,
             "pcaptcha_token": "",
@@ -336,23 +378,32 @@ class LitePickFaucet:
             self.stats.status = "Login Request Failed"
             return False
         
-        # Debug login response (tapi tidak dicetak ke user)
+        # Parse response (bisa JSON, bisa binary)
+        text = resp.text
         try:
-            result = resp.json()
-            if result.get("ret") == 1:
-                self.logged_in = True
-                self.stats.status = "Logged In"
-                return True
-            else:
-                self.stats.status = f"Login Failed: {result.get('mes', 'unknown')}"
-                return False
+            result = json.loads(text)
         except json.JSONDecodeError:
-            preview = re.sub(r"\s+", " ", resp.text[:300])
-            self.stats.status = f"Invalid JSON login response: {preview}"
+            # Coba decompress
+            decoded = try_decompress(resp.content)
+            if decoded:
+                try:
+                    result = json.loads(decoded)
+                except:
+                    self.stats.status = "Login Invalid JSON"
+                    return False
+            else:
+                self.stats.status = "Login Invalid Response"
+                return False
+        
+        if result.get("ret") == 1:
+            self.logged_in = True
+            self.stats.status = "Logged In"
+            return True
+        else:
+            self.stats.status = f"Login Failed: {result.get('mes', 'unknown')}"
             return False
     
     def _fetch_faucet_page(self) -> bool:
-        """Ambil halaman faucet sekali dan cache"""
         resp = self.session.get(f"{self.base_url}{self.faucet_page}")
         if resp.status_code != 200:
             self._faucet_page_html = None
@@ -363,7 +414,6 @@ class LitePickFaucet:
         return True
     
     def get_cooldown_from_html(self, html: str) -> int:
-        """Ekstrak cooldown dari HTML tanpa request tambahan"""
         patterns = [
             r'cooldown_remaining["\']?\s*:\s*(\d+)',
             r'data-cooldown["\']?\s*=\s*["\'](\d+)["\']',
@@ -380,7 +430,6 @@ class LitePickFaucet:
         return 0
     
     def get_balance_from_html(self, html: str) -> float:
-        """Ekstrak balance dari HTML"""
         patterns = [
             r'id="dd_main_balance"[^>]*>([\d.,]+)',
             r'class="user_balance"[^>]*>([\d.,]+)',
@@ -399,8 +448,6 @@ class LitePickFaucet:
         return self.stats.balance
     
     def get_cooldown(self) -> int:
-        """Dapatkan cooldown, usahakan dari cache jika masih fresh"""
-        # Coba dari cache halaman (valid 5 detik)
         if self._faucet_page_html and self._faucet_page_fetched_at and (time.time() - self._faucet_page_fetched_at) < 5:
             cd = self.get_cooldown_from_html(self._faucet_page_html)
             if cd > 0:
@@ -408,7 +455,6 @@ class LitePickFaucet:
                 self.stats.cooldown_until = datetime.now() + timedelta(seconds=cd)
                 return cd
         
-        # Jika cache tidak valid, fetch ulang
         if self._fetch_faucet_page():
             cd = self.get_cooldown_from_html(self._faucet_page_html)
             self.stats.cooldown = cd
@@ -418,7 +464,6 @@ class LitePickFaucet:
                 self.stats.cooldown_until = None
             return cd
         
-        # Jika gagal fetch, kembalikan nilai terakhir
         return self.stats.cooldown
     
     def get_balance(self) -> float:
@@ -433,23 +478,68 @@ class LitePickFaucet:
             return bal
         return self.stats.balance
     
+    def _parse_claim_response(self, resp) -> Tuple[Optional[dict], str]:
+        """
+        Parse response claim yang mungkin JSON / binary / HTML.
+        Return (dict|None, status_msg)
+        """
+        content_type = resp.headers.get("Content-Type", "").lower()
+        raw = resp.content
+        body = resp.text
+        
+        # Simpan debug aman
+        debug = f"HTTP {resp.status_code} | {content_type} | {len(raw)}B"
+        self.stats.debug_info = debug
+        
+        # 1. Coba JSON langsung
+        try:
+            result = json.loads(body)
+            if isinstance(result, dict):
+                return result, "json"
+        except json.JSONDecodeError:
+            pass
+        
+        # 2. Coba decompress binary
+        decoded = try_decompress(raw)
+        if decoded:
+            self.logs.append(f"🔧 Decompressed: {len(decoded)} chars")
+            try:
+                result = json.loads(decoded)
+                if isinstance(result, dict):
+                    return result, "decompressed_json"
+            except json.JSONDecodeError:
+                # Bukan JSON tapi sudah dibaca
+                preview = re.sub(r"\s+", " ", decoded[:200])
+                self.logs.append(f"📄 Decoded preview: {preview}")
+                return None, f"non-json: {preview}"
+        
+        # 3. Binary gak bisa didecompress
+        if not decoded and raw and len(raw) < 200:
+            hex_preview = raw[:40].hex()
+            self.logs.append(f"🔍 Binary hex: {hex_preview}")
+            return None, f"binary ({len(raw)}B): {hex_preview}"
+        
+        # 4. HTML/text response
+        if body.strip():
+            preview = re.sub(r"\s+", " ", body[:200])
+            return None, f"html/text: {preview}"
+        
+        return None, "empty response"
+    
     def claim(self) -> Tuple[bool, float, str]:
         if not self.logged_in:
             if not self.login():
                 return False, 0.0, "Not logged in"
         
-        # Fetch halaman faucet sekali (digunakan untuk cooldown & balance)
         if not self._fetch_faucet_page():
             return False, 0.0, "Failed to load faucet page"
         
         html = self._faucet_page_html
         
-        # Ambil CSRF dari cookie
         self.csrf_token = self._get_csrf_token()
         if not self.csrf_token:
             return False, 0.0, "No CSRF token"
         
-        # Cek cooldown dari HTML yang sudah di-fetch
         cd = self.get_cooldown_from_html(html)
         if cd > 0:
             self.stats.cooldown = cd
@@ -464,6 +554,7 @@ class LitePickFaucet:
             return False, 0.0, "Captcha failed (skipped)"
         
         claim_hash = self._generate_claim_hash()
+        ft_cookie = self.session.cookies.get("_ft", "")
         
         data = {
             "action": "claim_hourly_faucet",
@@ -471,16 +562,16 @@ class LitePickFaucet:
             "captcha_type": "3",
             "g-recaptcha-response": "",
             "_iconcaptcha-token": "",
-            "ic-rq": "",
-            "ic-wid": "",
-            "ic-cid": "",
-            "ic-hp": "",
+            "ic-rq": "", "ic-wid": "", "ic-cid": "", "ic-hp": "",
             "h-captcha-response": "",
             "c_captcha_response": token,
             "pcaptcha_token": "",
-            "ft": self.session.cookies.get("_ft", ""),
+            "ft": ft_cookie,
             "csrf_test_name": self.csrf_token,
         }
+        
+        # Simpan balance sebelum claim (untuk deteksi perubahan)
+        old_balance = self.stats.balance
         
         resp = self.session.post(
             f"{self.base_url}/process.php",
@@ -493,44 +584,30 @@ class LitePickFaucet:
             }
         )
         
-        # ========== DEBUG RESPONSE YANG AMAN ==========
-        content_type = resp.headers.get("Content-Type", "")
-        body = resp.text.strip()
+        result, parse_status = self._parse_claim_response(resp)
         
-        debug_info = (
-            f"Status: {resp.status_code} | "
-            f"Content-Type: {content_type} | "
-            f"Length: {len(body)}"
-        )
-        self.stats.debug_info = debug_info
-        self.logs.append(f"🔍 {debug_info}")
-        
-        # Jika response kosong
-        if not body:
+        # ========== KALAU RESPONSE GAK BISA DIPARSE ==========
+        if result is None:
+            # Cek apakah balance berubah (kemungkinan claim sukses tapi response beda)
+            time.sleep(1)
+            new_balance = self.get_balance()
+            
+            if new_balance > old_balance:
+                reward = new_balance - old_balance
+                self.stats.last_claim = reward
+                self.stats.total_earned += reward
+                self.stats.claim_count += 1
+                self.stats.success_count += 1
+                self.stats.status = "Success (via balance check)"
+                self.logs.append(f"✅ Balance naik +{reward:.8f}")
+                self.get_cooldown()
+                return True, reward, "Claimed (verified via balance)"
+            
             self.stats.fail_count += 1
-            self.stats.status = "Empty Response"
-            return False, 0.0, "Server returned empty response"
+            self.stats.status = "Parse Failed"
+            return False, 0.0, parse_status
         
-        # Coba parsing JSON
-        try:
-            result = resp.json()
-        except json.JSONDecodeError:
-            # Server mengirim HTML atau text bukan JSON
-            preview = re.sub(r"\s+", " ", body[:300])
-            self.stats.fail_count += 1
-            self.stats.status = "Invalid JSON"
-            self.logs.append(f"❌ Invalid JSON: {preview}")
-            return False, 0.0, (
-                f"Invalid JSON | HTTP {resp.status_code} | "
-                f"Content-Type: {content_type} | Preview: {preview}"
-            )
-        
-        if not isinstance(result, dict):
-            self.stats.fail_count += 1
-            self.stats.status = "Invalid JSON Object"
-            return False, 0.0, "Server JSON bukan object"
-        
-        # Proses result JSON
+        # ========== PROSES JSON ==========
         if result.get("ret") == 1:
             raw_reward = float(result.get('reward', 0))
             reward = raw_reward
@@ -554,7 +631,7 @@ class LitePickFaucet:
             self.stats.claim_count += 1
             self.stats.success_count += 1
             self.stats.status = "Success"
-            # Update cooldown dari response (jika ada)
+            
             cd_from_resp = result.get('cooldown') or result.get('cooldown_remaining')
             if cd_from_resp is not None:
                 try:
@@ -565,35 +642,40 @@ class LitePickFaucet:
                 except:
                     pass
             return True, reward, result.get("mes", "Success")
-        else:
+        
+        elif result.get("ret") == 0:
             self.stats.fail_count += 1
             self.stats.status = "Failed"
             msg = result.get("mes", "Unknown error")
             
-            # Ekstrak cooldown dari pesan error
-            cd_match = re.search(r'(\d+)\s*minutes?,\s*(\d+)\s*seconds?', msg, re.IGNORECASE)
-            if cd_match:
-                mins = int(cd_match.group(1))
-                secs = int(cd_match.group(2))
-                cd = mins * 60 + secs
-                self.stats.cooldown = cd
-                self.stats.cooldown_until = datetime.now() + timedelta(seconds=cd)
-            else:
-                cd_match = re.search(r'(\d+)\s*minutes?\s+(\d+)\s*seconds?', msg, re.IGNORECASE)
-                if cd_match:
-                    mins = int(cd_match.group(1))
-                    secs = int(cd_match.group(2))
-                    cd = mins * 60 + secs
+            for pattern in [
+                r'(\d+)\s*minutes?[,\s]+(\d+)\s*seconds?',
+                r'(\d+)\s*minutes?',
+                r'(\d+)\s*seconds?',
+                r'(\d+)\s*hours?',
+            ]:
+                m = re.search(pattern, msg, re.IGNORECASE)
+                if m:
+                    groups = m.groups()
+                    if len(groups) == 2 and groups[0] and groups[1]:
+                        cd = int(groups[0]) * 60 + int(groups[1])
+                    elif 'hour' in m.group(0).lower():
+                        cd = int(groups[0]) * 3600
+                    elif 'minute' in m.group(0).lower():
+                        cd = int(groups[0]) * 60
+                    else:
+                        cd = int(groups[0])
                     self.stats.cooldown = cd
                     self.stats.cooldown_until = datetime.now() + timedelta(seconds=cd)
-                else:
-                    cd_match = re.search(r'(\d+)\s*seconds?', msg, re.IGNORECASE)
-                    if cd_match:
-                        cd = int(cd_match.group(1))
-                        self.stats.cooldown = cd
-                        self.stats.cooldown_until = datetime.now() + timedelta(seconds=cd)
+                    break
             
             return False, 0.0, msg
+        
+        else:
+            self.stats.fail_count += 1
+            self.stats.status = "Unknown Format"
+            preview = json.dumps(result)[:150]
+            return False, 0.0, f"Unknown: {preview}"
     
     def run_cycle(self) -> Dict:
         result = {
@@ -611,7 +693,6 @@ class LitePickFaucet:
                 return result
             self.logs.append(f"✅ Login successful")
         
-        # Get cooldown (gunakan cache jika memungkinkan)
         cooldown = self.get_cooldown()
         if cooldown > 0:
             result["message"] = f"Cooldown {cooldown}s"
@@ -660,7 +741,7 @@ class LitePickBot:
             cd_remaining = max(0, int((stats.cooldown_until - datetime.now()).total_seconds()))
         
         print(f"\n{C}{'='*60}{RESET}")
-        print(f"{C}              ⚡ LITEPICK.IO AUTO BOT{RESET}")
+        print(f"{C}              ⚡ LITEPICK.IO AUTO BOT v1.2{RESET}")
         print(f"{C}{'='*60}{RESET}\n")
         print(f"{M}|| 📋 SITE       : {G}LitePick.io{RESET}")
         print(f"{M}|| 💰 BALANCE    : {G}{balance} LTC{RESET}")
@@ -696,7 +777,7 @@ class LitePickBot:
         print(f"{C}{'='*60}{RESET}")
     
     def run(self):
-        print(f"\n{G}🚀 Starting LitePick.io Bot...{RESET}\n")
+        print(f"\n{G}🚀 Starting LitePick.io Bot v1.2...{RESET}\n")
         
         while self.running:
             os.system('clear' if os.name == 'posix' else 'cls')
@@ -714,10 +795,8 @@ class LitePickBot:
             else:
                 print(f"\n{R}❌ {result['message']}{RESET}")
             
-            # Refresh display
             time.sleep(2)
             
-            # Check cooldown
             cd_remaining = 0
             if self.faucet.stats.cooldown_until:
                 cd_remaining = max(0, int((self.faucet.stats.cooldown_until - datetime.now()).total_seconds()))
@@ -768,7 +847,7 @@ def main_menu():
     while True:
         os.system('clear' if os.name == 'posix' else 'cls')
         print(f"\n{C}{'='*60}{RESET}")
-        print(f"{C}              ⚡ LITEPICK.IO BOT v1.1{RESET}")
+        print(f"{C}              ⚡ LITEPICK.IO BOT v1.2{RESET}")
         print(f"{C}{'='*60}{RESET}\n")
         print(f"{M}|| [1] 🚀 START BOT{RESET}")
         print(f"{M}|| [2] ⚙️  CONFIGURATION{RESET}")
