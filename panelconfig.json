@@ -92,6 +92,16 @@
           "label": "LightQuest [ Only level 10 ] 🟢",
           "file": "light.py",
           "runner": "python3"
+        },
+        "9": {
+          "label": "Coming Soon",
+          "file": "",
+          "runner": "php"
+        },
+        "10": {
+          "label": "Coming Soon",
+          "file": "",
+          "runner": "php"
         }
       }
     },
@@ -217,6 +227,16 @@
           "label": "CoinFree X FaucetMini X Coinplay X FaucetFi 🟢",
           "file": "4in1.php",
           "runner": "php"
+        },
+        "25": {
+          "label": "Coming Soon",
+          "file": "",
+          "runner": "python3"
+        },
+        "26": {
+          "label": "Coming Soon",
+          "file": "",
+          "runner": "python3"
         }
       }
     },
