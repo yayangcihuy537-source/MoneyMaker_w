@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
 ╔═══════════════════════════════════════════════════════════════╗
-║   🚀 PEPEFLOW X CLOCKADS X MINIGRAMX X COINSZON - PARALLEL  ║
-║   AUTO CLAIM • AUTO GAMES • AUTO DOUBLE • AUTO SKIP LIMIT  ║
-║   🔐 AUTH via init_data (NO PHPSESSID)                     ║
-║   🎲 FINGERPRINT RANDOM (acak tiap reauth)                 ║
-║   🎁 AUTO CLAIM PENDING WIN (WITH AD PROOF)                ║
+║  🚀 PEPEFLOW X CLOCKADS X COINSZON X LITOSHIPAY              ║
+║  AUTO CLAIM • AUTO GAMES • AUTO DOUBLE • AUTO SKIP LIMIT      ║
+║  🔐 AUTH via init_data (NO PHPSESSID)                         ║
+║  🎲 FINGERPRINT RANDOM setiap reauth                          ║
+║  🎁 AUTO CLAIM PENDING WIN (WITH AD PROOF)                    ║
+║  📅 AUTO CLAIM DAILY BONUS                                    ║
 ╚═══════════════════════════════════════════════════════════════╝
 """
 
@@ -15,19 +16,20 @@ from collections import deque
 
 # ========== WARNA ==========
 R = '\033[91m'; G = '\033[92m'; Y = '\033[93m'; B = '\033[94m'; C = '\033[96m'; W = '\033[97m'
+M = '\033[95m'
 GOLD = '\033[38;5;220m'; PURPLE = '\033[38;5;141m'; PINK = '\033[38;5;206m'
 RESET = '\033[0m'
 
 # ========== KONFIGURASI ==========
-PEPE_CONFIG = "pepeflow_config.json"
+PEPE_CONFIG  = "pepeflow_config.json"
 CLOCK_CONFIG = "clockads_config.json"
-MINI_CONFIG  = "minigramx_config.json"
 COIN_CONFIG  = "coinszon_config.json"
+LITO_CONFIG  = "litoshipay_config.json"
 
-PEPE_URL = "https://pepeflow.com"
+PEPE_URL  = "https://pepeflow.com"
 CLOCK_URL = "https://clockads.in"
-MINI_URL  = "https://minigramx.top"
 COIN_URL  = "https://coinszon.com"
+LITO_URL  = "https://litoshipay.com"
 
 UA = "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.47 Mobile Safari/537.36 Telegram-Android/12.6.4"
 
@@ -35,44 +37,42 @@ UA = "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) 
 PEPE_GAMES = ["lucky_wheel"]
 PEPE_GAME_MAP = {"lucky_wheel": {"display": "SPIN", "icon": "🎡"}}
 
-# CLOCKADS: HANYA LUCKY WHEEL YANG AVAILABLE (slots/scratch/treasure_dig UNAVAILABLE)
 CLOCK_GAMES = ["lucky_wheel"]
-CLOCK_GAME_MAP = {
-    "lucky_wheel": {"display": "SPIN", "icon": "🎡"},
-}
-
-MINI_GAMES = ["lucky_wheel", "coin_catch", "flappy_coin"]
-MINI_GAME_MAP = {
-    "lucky_wheel": {"display": "SPIN", "icon": "🎡"},
-    "coin_catch":  {"display": "CATCH", "icon": "🪙"},
-    "flappy_coin": {"display": "FLAPPY", "icon": "🐦"},
-}
+CLOCK_GAME_MAP = {"lucky_wheel": {"display": "SPIN", "icon": "🎡"}}
 
 COIN_GAMES = ["lucky_wheel", "slots"]
 COIN_GAME_MAP = {
-    "lucky_wheel": {"display": "SPIN", "icon": "🎡"},
+    "lucky_wheel": {"display": "SPIN",  "icon": "🎡"},
     "slots":       {"display": "SLOTS", "icon": "🎰"},
 }
 
-# ========== Config (only init_data) ==========
+LITO_GAMES = ["lucky_wheel", "coin_catch"]
+LITO_GAME_MAP = {
+    "lucky_wheel": {"display": "SPIN",  "icon": "🎡"},
+    "coin_catch":  {"display": "CATCH", "icon": "🪙"},
+}
+
+# ========== CONFIG ==========
 class BaseConfig:
     def __init__(self, file):
         self.file = file
         self.init_data = None
         self.telegram_id = None
         self.telegram_username = None
+
     def load(self):
         if os.path.exists(self.file):
             try:
                 with open(self.file) as f:
                     d = json.load(f)
-                    self.init_data = d.get('init_data')
-                    self.telegram_id = d.get('telegram_id')
-                    self.telegram_username = d.get('telegram_username')
-                    return True
+                self.init_data = d.get('init_data')
+                self.telegram_id = d.get('telegram_id')
+                self.telegram_username = d.get('telegram_username')
+                return True
             except:
                 return False
         return False
+
     def save(self):
         with open(self.file, 'w') as f:
             json.dump({
@@ -81,30 +81,30 @@ class BaseConfig:
                 'telegram_username': self.telegram_username
             }, f, indent=2)
 
-# ========== Utility ==========
+# ========== UTILITY ==========
+def clear():
+    os.system('cls' if os.name == 'nt' else 'clear')
+
 def safe_float(val, default=0.0):
     if val is None: return default
     if isinstance(val, (int, float)): return float(val)
     if isinstance(val, str):
-        try:
-            return float(val.replace(',', '').strip())
-        except:
-            return default
+        try: return float(val.replace(',', '').strip())
+        except: return default
     return default
 
 def safe_int(val, default=0):
     return int(safe_float(val, default))
 
 def live_timer(seconds, msg="⏳ Menunggu"):
-    if seconds < 1:
-        return
+    if seconds < 1: return
     while seconds > 0:
         m, s = divmod(seconds, 60)
         sys.stdout.write(f"\r{Y}{msg} {m:02d}:{s:02d} {RESET}  ")
         sys.stdout.flush()
         time.sleep(1)
         seconds -= 1
-    sys.stdout.write("\r" + " " * 60 + "\r")
+    sys.stdout.write("\r" + " " * 70 + "\r")
     sys.stdout.flush()
 
 def ad_progress(seconds=10, label="📺 Watching ad"):
@@ -117,7 +117,7 @@ def ad_progress(seconds=10, label="📺 Watching ad"):
         time.sleep(1)
     print()
 
-# ========== Base Bot ==========
+# ========== BASE BOT ==========
 class BaseBot:
     def __init__(self, url, cfg, game_list, game_map, name, currency):
         self.url = url
@@ -154,9 +154,10 @@ class BaseBot:
         self.game_index = 0
         self.treasure_token = None
         self.limited_games = set()
-        self.unavailable_games = set()  # game yang unavailable
+        self.unavailable_games = set()
         self.consecutive_errors = 0
         self.max_consecutive_errors = 5
+        self.start_time = datetime.now()
         self._initial_auth()
 
     def fmt(self, sec):
@@ -167,7 +168,7 @@ class BaseBot:
     def log(self, msg):
         self.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
 
-    # ---------- AUTH (only init_data) ----------
+    # ---------- AUTH ----------
     def _initial_auth(self):
         if not self.cfg.init_data:
             self.log(f"{R}❌ init_data kosong! Bot tidak bisa jalan{RESET}")
@@ -179,15 +180,17 @@ class BaseBot:
         if not self.cfg.init_data:
             self.log(f"{R}❌ init_data tidak ada{RESET}")
             return False
+
         parsed = urllib.parse.parse_qs(self.cfg.init_data)
         user_str = parsed.get('user', [None])[0]
         tid, tuname = "0", ""
         if user_str:
             try:
                 u = json.loads(urllib.parse.unquote(user_str))
-                tid = str(u.get('id','0'))
-                tuname = u.get('username','')
+                tid = str(u.get('id', '0'))
+                tuname = u.get('username', '')
             except: pass
+
         self.cfg.telegram_id = tid
         self.cfg.telegram_username = tuname
         self.cfg.save()
@@ -202,11 +205,11 @@ class BaseBot:
             "fingerprint": (None, fingerprint),
         }
         try:
-            resp = self.session.post(f"{self.url}/actions/tg_auth.php", files=files)
+            resp = self.session.post(f"{self.url}/actions/tg_auth.php", files=files, timeout=30)
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get('status') == 'success':
-                    self.log(f"{G}✅ {self.name} auth OK (fingerprint: {fingerprint[:8]}...){RESET}")
+                    self.log(f"{G}✅ {self.name} auth OK (fp: {fingerprint[:8]}...){RESET}")
                     return True
                 else:
                     self.log(f"{R}❌ Auth gagal: {data.get('message', 'unknown')}{RESET}")
@@ -224,19 +227,20 @@ class BaseBot:
             return None
         url = f"{self.url}{endpoint}"
         try:
+            kwargs.setdefault('timeout', 30)
             resp = self.session.request(method, url, **kwargs)
-            
+
             if resp.status_code == 429:
                 self.consecutive_errors += 1
-                self.log(f"{R}🚫 429 Too Many Requests! ({self.consecutive_errors}/{self.max_consecutive_errors}){RESET}")
+                self.log(f"{R}🚫 429 ({self.consecutive_errors}/{self.max_consecutive_errors}){RESET}")
                 if self.consecutive_errors >= self.max_consecutive_errors:
-                    self.log(f"{R}🛑 {self.name} terlalu banyak 429! Bot di-stop{RESET}")
+                    self.log(f"{R}🛑 {self.name} terlalu banyak 429! Stop{RESET}")
                     self.running = False
                 return None
             else:
                 self.consecutive_errors = 0
-            
-            if resp.status_code in [401,403] or (resp.status_code==200 and "Not logged" in resp.text):
+
+            if resp.status_code in [401, 403] or (resp.status_code == 200 and "Not logged" in resp.text):
                 self.log(f"{Y}⚠️ Session expired, reauth...{RESET}")
                 if self.reauth():
                     resp = self.session.request(method, url, **kwargs)
@@ -244,14 +248,14 @@ class BaseBot:
                         self.log(f"{R}❌ Session masih invalid{RESET}")
                         return None
                 else:
-                    self.log(f"{R}❌ Reauth gagal, lanjut tanpa session{RESET}")
                     return None
+
             return resp
         except Exception as e:
             self.log(f"{R}❌ Request error: {e}{RESET}")
             self.consecutive_errors += 1
             if self.consecutive_errors >= self.max_consecutive_errors:
-                self.log(f"{R}🛑 {self.name} terlalu banyak error! Bot di-stop{RESET}")
+                self.log(f"{R}🛑 {self.name} terlalu banyak error! Stop{RESET}")
                 self.running = False
             return None
 
@@ -261,34 +265,28 @@ class BaseBot:
     def post(self, endpoint, files=None, data=None):
         return self._request('POST', endpoint, files=files, data=data)
 
-    # ---------- Pending Win with AD Proof ----------
+    # ---------- Pending Win ----------
     def get_pending(self):
         resp = self.post("/actions/mini_games.php", data={"action": "get_pending"})
         if resp and resp.status_code == 200:
-            try:
-                return resp.json()
-            except:
-                pass
+            try: return resp.json()
+            except: pass
         return None
 
     def issue_ad_proof(self, pending_id):
         data = {"action": "issue_ad_proof", "pending_id": str(pending_id)}
         resp = self.post("/actions/mini_games.php", data=data)
         if resp and resp.status_code == 200:
-            try:
-                return resp.json()
-            except:
-                pass
+            try: return resp.json()
+            except: pass
         return None
 
     def complete_ad_proof(self, proof_token):
         data = {"action": "complete_ad_proof", "proof_token": proof_token, "ad_clicked": "1"}
         resp = self.post("/actions/mini_games.php", data=data)
         if resp and resp.status_code == 200:
-            try:
-                return resp.json()
-            except:
-                pass
+            try: return resp.json()
+            except: pass
         return None
 
     def claim_pending_with_proof(self, pending_id, claim_token, proof_token):
@@ -301,49 +299,47 @@ class BaseBot:
         }
         resp = self.post("/actions/mini_games.php", data=data)
         if resp and resp.status_code == 200:
-            try:
-                return resp.json()
-            except:
-                pass
+            try: return resp.json()
+            except: pass
         return None
 
     def claim_pending(self):
         pending = self.get_pending()
         if not pending or pending.get('status') != 'success' or not pending.get('pending'):
             return False
-        
+
         pending_data = pending['pending']
         pending_id = pending_data.get('id')
         claim_token = pending_data.get('claim_token')
         if not pending_id or not claim_token:
             self.log(f"{R}❌ Pending data incomplete{RESET}")
             return False
-        
+
         reward = pending_data.get('reward', 0)
         self.log(f"{Y}🎁 Found pending win: {reward} {self.currency}{RESET}")
-        
+
         proof_resp = self.issue_ad_proof(pending_id)
         if not proof_resp or proof_resp.get('status') != 'success':
             self.log(f"{R}❌ Failed to issue ad proof{RESET}")
             return False
-        
+
         proof_token = proof_resp.get('proof_token')
         if not proof_token:
             self.log(f"{R}❌ No proof token received{RESET}")
             return False
-        
-        ad_progress(10, "📺 Watching ad for pending win")
-        
+
+        ad_progress(10, "📺 Watching ad for pending")
+
         complete_resp = self.complete_ad_proof(proof_token)
         if not complete_resp or complete_resp.get('status') != 'success':
             self.log(f"{R}❌ Failed to complete ad proof{RESET}")
             return False
-        
+
         claim_resp = self.claim_pending_with_proof(pending_id, claim_token, proof_token)
         if claim_resp and claim_resp.get('status') == 'success':
             reward_claimed = claim_resp.get('reward', 0)
             self.balance = safe_float(claim_resp.get('new_balance', self.balance))
-            self.log(f"{G}✅ Claimed pending win! +{reward_claimed} {self.currency} (Bal: {self.balance:.8f}){RESET}")
+            self.log(f"{G}✅ Claimed pending win! +{reward_claimed} {self.currency}{RESET}")
             return True
         else:
             err = claim_resp.get('message', 'unknown') if claim_resp else 'no response'
@@ -371,8 +367,7 @@ class BaseBot:
 
     # ---------- Game status ----------
     def get_games_status(self):
-        if not self.game_list:
-            return None
+        if not self.game_list: return None
         resp = self.get("/pages/load_games.php")
         if resp and resp.status_code == 200:
             html = resp.text
@@ -399,7 +394,6 @@ class BaseBot:
                                 self.limited_games.discard(g)
                     return data
                 except: pass
-            # Fallback
             for g in self.game_list:
                 pattern = rf'{g}.*?cooldown.*?(\d+)'
                 match = re.search(pattern, html, re.IGNORECASE | re.DOTALL)
@@ -409,59 +403,61 @@ class BaseBot:
         return None
 
     def has_ready_games(self):
-        if not self.game_list:
-            return False
+        if not self.game_list: return False
         try:
             self.get_games_status()
-            ready = [g for g in self.game_list if g not in self.limited_games and g not in self.unavailable_games and self.cooldowns.get(g, 0) <= 0]
+            ready = [g for g in self.game_list
+                     if g not in self.limited_games
+                     and g not in self.unavailable_games
+                     and self.cooldowns.get(g, 0) <= 0]
             return len(ready) > 0
         except:
             return False
 
     def get_ready_games(self):
-        if not self.game_list:
-            return []
+        if not self.game_list: return []
         try:
             self.get_games_status()
-            return [g for g in self.game_list if g not in self.limited_games and g not in self.unavailable_games and self.cooldowns.get(g, 0) <= 0]
+            return [g for g in self.game_list
+                    if g not in self.limited_games
+                    and g not in self.unavailable_games
+                    and self.cooldowns.get(g, 0) <= 0]
         except:
             return []
 
     def is_all_limited(self):
-        if not self.game_list:
-            return False
+        if not self.game_list: return False
         return all(g in self.limited_games or g in self.unavailable_games for g in self.game_list)
 
     # ---------- Play game ----------
-    def play_game(self, game, doubled=False, base_reward=None, pick=None, quiz_token=None, answer_index=None, double_token=None, score=None, bombed=None, diamonds=None, survived=None):
-        if not self.game_list:
-            return None
+    def play_game(self, game, doubled=False, base_reward=None, pick=None, quiz_token=None,
+                  answer_index=None, double_token=None, score=None, bombed=None,
+                  diamonds=None, survived=None):
+        if not self.game_list: return None
         if game in self.limited_games:
             self.log(f"{Y}⏭️ {game} sudah limit, skip{RESET}")
             return None
         if game in self.unavailable_games:
             self.log(f"{Y}⏭️ {game} unavailable, skip{RESET}")
             return None
-        files = {"action": (None, "play"), "game": (None, game),
-                 "doubled": (None, "1" if doubled else "0")}
+
+        files = {
+            "action": (None, "play"),
+            "game": (None, game),
+            "doubled": (None, "1" if doubled else "0")
+        }
         if doubled and base_reward is not None:
             files["base_reward"] = (None, str(base_reward))
         if doubled and double_token:
             files["double_token"] = (None, str(double_token))
-        if pick is not None:
-            files["pick"] = (None, str(pick))
-        if quiz_token is not None:
-            files["quiz_token"] = (None, str(quiz_token))
-        if answer_index is not None:
-            files["answer_index"] = (None, str(answer_index))
-        if score is not None:
-            files["score"] = (None, str(score))
-        if bombed is not None:
-            files["bombed"] = (None, "1" if bombed else "0")
-        if diamonds is not None:
-            files["diamonds"] = (None, str(diamonds))
-        if survived is not None:
-            files["survived"] = (None, "1" if survived else "0")
+        if pick is not None: files["pick"] = (None, str(pick))
+        if quiz_token is not None: files["quiz_token"] = (None, str(quiz_token))
+        if answer_index is not None: files["answer_index"] = (None, str(answer_index))
+        if score is not None: files["score"] = (None, str(score))
+        if bombed is not None: files["bombed"] = (None, "1" if bombed else "0")
+        if diamonds is not None: files["diamonds"] = (None, str(diamonds))
+        if survived is not None: files["survived"] = (None, "1" if survived else "0")
+
         resp = self.post("/actions/mini_games.php", files=files)
         if resp and resp.status_code == 200:
             try: return resp.json()
@@ -469,14 +465,13 @@ class BaseBot:
         return None
 
     def play_single(self, game):
-        if not self.game_list:
-            return None
+        if not self.game_list: return None
         if game in self.limited_games:
             self.log(f"{Y}⏭️ {game} sudah limit, skip{RESET}")
             return None
         if game in self.unavailable_games:
             return None
-            
+
         if self.doubled_available.get(game, False) and self.retry_doubled.get(game, True):
             ad_progress(10, f"📺 {self.game_map[game]['display']} double ad")
             base = random.uniform(1e-7, 5e-6)
@@ -489,7 +484,6 @@ class BaseBot:
             else:
                 return result
 
-        # Game-specific logic
         if game == "lucky_wheel":
             return self.play_game(game, doubled=False)
         elif game == "slots":
@@ -536,13 +530,12 @@ class BaseBot:
                     self.daily_claimed = True
                     self.log(f"{G}✅ Daily claimed! Bal: {self.balance:.8f} {self.currency}{RESET}")
                     return True
-                else:
-                    msg = result.get('message', '')
-                    if 'already claimed' in msg.lower():
-                        self.daily_claimed = True
-                        return True
-                    self.log(f"{R}❌ Daily gagal: {msg}{RESET}")
-                    return False
+                msg = result.get('message', '')
+                if 'already claimed' in msg.lower():
+                    self.daily_claimed = True
+                    return True
+                self.log(f"{R}❌ Daily gagal: {msg}{RESET}")
+                return False
             except:
                 if 'already' in str(resp.text).lower():
                     self.daily_claimed = True
@@ -554,57 +547,64 @@ class BaseBot:
     def display_dashboard(self):
         try:
             self.get_games_status()
+
+            elapsed = datetime.now() - self.start_time
+            h, r = divmod(int(elapsed.total_seconds()), 3600)
+            m, s = divmod(r, 60)
+            runtime = f"{h:02d}:{m:02d}:{s:02d}"
+
             lines = []
             lines.append(f"{GOLD}╔══════════════════════════════════════════════════════════╗")
-            lines.append(f"{GOLD}║{RESET}  {C}{self.name.upper()}{RESET}  ({self.currency})                            {GOLD}║")
+            lines.append(f"{GOLD}║{RESET}  {C}{self.name.upper()}{RESET}  ({self.currency})")
             lines.append(f"{GOLD}╠══════════════════════════════════════════════════════════╣")
-            lines.append(f"{GOLD}║{RESET}  Balance : {G}{self.balance:.8f}{RESET}   {GOLD}║")
+            lines.append(f"{GOLD}║{RESET}  💰 Balance : {G}{self.balance:.8f} {self.currency}{RESET}")
+            lines.append(f"{GOLD}║{RESET}  ⏱️  Runtime : {C}{runtime}{RESET}")
+
             if self.game_list:
                 lines.append(f"{GOLD}╠══════════════════════════════════════════════════════════╣")
                 for g in self.game_list:
                     icon = self.game_map[g]['icon']; disp = self.game_map[g]['display']
                     if g in self.limited_games:
-                        st = "LIMIT 🚫"
-                        sc = R
+                        st = "LIMIT 🚫"; sc = R
                     elif g in self.unavailable_games:
-                        st = "UNAVAIL ⛔"
-                        sc = R
+                        st = "UNAVAIL ⛔"; sc = R
                     else:
                         st = self.status[g]
                         sc = G if st == "Ready" else Y
-                    
+
                     twox = "2X" if self.doubled_available.get(g, False) and self.retry_doubled.get(g, True) else "-"
                     ply = self.play_counts[g]
                     rwd = self.rewards[g]
                     cd = self.fmt(self.cooldowns[g])
-                    
+
                     if rwd <= 0.00000001:
                         reward_str = f"{G}0.00000000{RESET}"
                     else:
                         reward_str = f"{G}{rwd:.8f}{RESET}" if rwd < 0.001 else f"{G}{rwd:.2f}{RESET}"
-                    
-                    line = f"{GOLD}║{RESET}  {icon} {disp:<6} {sc}{st:<10}{RESET}  {twox:<5} {ply:<5} {reward_str:<16} {cd:<6}{GOLD}║"
+
+                    line = f"{GOLD}║{RESET}  {icon} {disp:<6} {sc}{st:<10}{RESET} {twox:<4} {ply:<4} {reward_str:<16} {cd:<6}{GOLD}║"
                     lines.append(line)
+
             lines.append(f"{GOLD}╠══════════════════════════════════════════════════════════╣")
             for log in list(self.logs)[-6:]:
                 log_clean = log[:48] if len(log) > 48 else log
-                lines.append(f"{GOLD}║{RESET}  {log_clean}{' '*(50-len(log_clean))} {GOLD}║")
+                lines.append(f"{GOLD}║{RESET}  {log_clean}{' ' * (50 - len(log_clean))} {GOLD}║")
             lines.append(f"{GOLD}╚══════════════════════════════════════════════════════════╝")
             return "\n".join(lines)
         except Exception as e:
             return f"{R}❌ Error display: {e}{RESET}"
 
+    # ---------- Process ----------
     def process_one_game(self):
-        if not self.game_list:
-            return False
+        if not self.game_list: return False
         try:
             ready = self.get_ready_games()
             if not ready:
                 if self.is_all_limited():
-                    self.log(f"{R}🛑 {self.name} SEMUA GAME LIMIT/UNAVAILABLE! Bot di-stop{RESET}")
+                    self.log(f"{R}🛑 {self.name} SEMUA GAME LIMIT/UNAVAILABLE! Stop{RESET}")
                     self.running = False
                 return False
-            
+
             for i in range(len(self.game_list)):
                 idx = (self.game_index + i) % len(self.game_list)
                 g = self.game_list[idx]
@@ -616,13 +616,13 @@ class BaseBot:
 
             print(f"{C}🎮 {self.name} {self.game_map[g]['display']}...{RESET}")
             result = self.play_single(g)
-            
+
             if result and result.get('status') == 'error':
                 err_msg = result.get('message', '')
                 if 'pending' in err_msg.lower():
                     self.log(f"{Y}⚠️ Pending win detected, claiming...{RESET}")
                     if self.claim_pending():
-                        self.log(f"{G}↻ Retrying {self.game_map[g]['display']} after claim{RESET}")
+                        self.log(f"{G}↻ Retrying after claim{RESET}")
                         time.sleep(2)
                         result2 = self.play_single(g)
                         if result2 and result2.get('status') == 'success':
@@ -630,18 +630,14 @@ class BaseBot:
                             self.balance = safe_float(result2.get('new_balance', self.balance))
                             self.rewards[g] = rwd
                             self.play_counts[g] += 1
-                            self.log(f"{G}✔ {self.game_map[g]['display']} +{rwd:.8f} (after claim){RESET}")
+                            self.log(f"{G}✔ +{rwd:.8f} (after claim){RESET}")
                             return True
-                        else:
-                            self.log(f"{R}✖ {self.game_map[g]['display']} still failed after claim{RESET}")
-                    else:
-                        self.log(f"{R}✖ Failed to claim pending, skip this game{RESET}")
                     return False
                 elif 'unavailable' in err_msg.lower() or 'not available' in err_msg.lower():
                     self.unavailable_games.add(g)
-                    self.log(f"{Y}⏭️ {self.game_map[g]['display']} UNAVAILABLE, skip{RESET}")
+                    self.log(f"{Y}⏭️ UNAVAILABLE, skip{RESET}")
                     return False
-            
+
             if result and result.get('status') == 'success':
                 rwd = safe_float(result.get('reward', 0))
                 if rwd == 0:
@@ -652,18 +648,18 @@ class BaseBot:
                 if rwd > 0:
                     self.log(f"{G}✔ {self.game_map[g]['display']} +{rwd:.8f} (Bal: {self.balance:.8f}){RESET}")
                 else:
-                    self.log(f"{G}✔ {self.game_map[g]['display']} +0.00000000 (Bal: {self.balance:.8f}){RESET}")
+                    self.log(f"{G}✔ {self.game_map[g]['display']} +0.00000000{RESET}")
 
                 daily_played = result.get('daily_played')
                 daily_limit = result.get('daily_limit')
                 if daily_played is not None and daily_limit is not None and daily_limit > 0 and daily_played >= daily_limit:
                     self.limited_games.add(g)
-                    self.log(f"{Y}⏭️ {self.game_map[g]['display']} daily limit reached ({daily_played}/{daily_limit}){RESET}")
+                    self.log(f"{Y}⏭️ daily limit ({daily_played}/{daily_limit}){RESET}")
 
                 global_played = result.get('global_played')
                 global_limit = result.get('global_limit')
                 if global_played is not None and global_limit is not None and global_limit > 0 and global_played >= global_limit:
-                    self.log(f"{Y}🌍 Global limit reached ({global_played}/{global_limit}) — all games stop{RESET}")
+                    self.log(f"{Y}🌍 Global limit reached — stop all{RESET}")
                     for game in self.game_list:
                         self.limited_games.add(game)
 
@@ -679,22 +675,19 @@ class BaseBot:
                             self.balance = safe_float(result2.get('new_balance', self.balance))
                             self.rewards[g] = rwd
                             self.play_counts[g] += 1
-                            self.log(f"{G}✔ {self.game_map[g]['display']} +{rwd:.8f} [retry OK]{RESET}")
-                        else:
-                            self.log(f"{R}✖ {self.game_map[g]['display']} FAIL [retry]{RESET}")
-                    else:
-                        self.log(f"{R}✖ Reauth gagal, skip{RESET}")
+                            self.log(f"{G}✔ +{rwd:.8f} [retry OK]{RESET}")
                 elif 'daily_limit' in err.lower() or 'limit reached' in err.lower():
                     self.limited_games.add(g)
-                    self.log(f"{Y}⏭️ {self.game_map[g]['display']} LIMIT REACHED, skip{RESET}")
+                    self.log(f"{Y}⏭️ LIMIT, skip{RESET}")
                 elif 'unavailable' in err.lower() or 'not available' in err.lower():
                     self.unavailable_games.add(g)
-                    self.log(f"{Y}⏭️ {self.game_map[g]['display']} UNAVAILABLE, skip{RESET}")
+                    self.log(f"{Y}⏭️ UNAVAILABLE, skip{RESET}")
                 else:
-                    self.log(f"{R}✖ {self.game_map[g]['display']} FAIL: {err}{RESET}")
+                    self.log(f"{R}✖ FAIL: {err}{RESET}")
             else:
-                err = result.get('message','No resp') if result else 'No resp'
-                self.log(f"{R}✖ {self.game_map[g]['display']} FAIL: {err}{RESET}")
+                err = result.get('message', 'No resp') if result else 'No resp'
+                self.log(f"{R}✖ FAIL: {err}{RESET}")
+
             time.sleep(random.uniform(1, 3))
             self.get_dashboard()
             return True
@@ -702,45 +695,50 @@ class BaseBot:
             self.log(f"{R}✖ Process error: {e}{RESET}")
             return False
 
-# ========== BOT CLASSES ==========
+# ========== BOT SUBCLASSES ==========
 class PepeBot(BaseBot):
     def __init__(self, cfg):
         super().__init__(PEPE_URL, cfg, PEPE_GAMES, PEPE_GAME_MAP, "PepeFlow", "PEPE")
 
 class ClockBot(BaseBot):
     def __init__(self, cfg):
-        super().__init__(CLOCK_URL, cfg, CLOCK_GAMES, CLOCK_GAME_MAP, "Clockads", "TRX")
-
-class MiniGramBot(BaseBot):
-    def __init__(self, cfg):
-        super().__init__(MINI_URL, cfg, MINI_GAMES, MINI_GAME_MAP, "MiniGramX", "GRAM")
+        super().__init__(CLOCK_URL, cfg, CLOCK_GAMES, CLOCK_GAME_MAP, "ClockAds", "TRX")
 
 class CoinBot(BaseBot):
     def __init__(self, cfg):
         super().__init__(COIN_URL, cfg, COIN_GAMES, COIN_GAME_MAP, "Coinszon", "COIN")
 
-# ========== MODE PARALLEL ==========
+class LitoBot(BaseBot):
+    def __init__(self, cfg):
+        super().__init__(LITO_URL, cfg, LITO_GAMES, LITO_GAME_MAP, "LitoshiPay", "LITOSHI")
+
+# ========== PARALLEL RUNNER ==========
 def parallel_run(bots):
     for bot in bots:
         if hasattr(bot, 'claim_daily'):
-            bot.claim_daily()
-    
+            try:
+                bot.claim_daily()
+            except:
+                pass
+
     while any(b.running for b in bots):
         any_played = False
         for bot in bots:
-            if not bot.running:
-                continue
-            if bot.has_ready_games():
-                os.system('clear')
-                for b in bots:
-                    if b.running:
-                        print(b.display_dashboard())
-                        print()
-                print(f"{C}▶️ {bot.name} ada game ready, mainkan...{RESET}")
-                bot.process_one_game()
-                any_played = True
-                time.sleep(0.5)
-        
+            if not bot.running: continue
+            try:
+                if bot.has_ready_games():
+                    clear()
+                    for b in bots:
+                        if b.running:
+                            print(b.display_dashboard())
+                            print()
+                    print(f"{C}▶️ {bot.name} game ready, playing...{RESET}")
+                    bot.process_one_game()
+                    any_played = True
+                    time.sleep(0.3)
+            except Exception as e:
+                bot.log(f"{R}✖ {e}{RESET}")
+
         if not any_played:
             all_cds = []
             for bot in bots:
@@ -748,22 +746,32 @@ def parallel_run(bots):
                     all_cds.extend([cd for cd in bot.cooldowns.values() if cd > 0])
             if all_cds:
                 min_cd = min(all_cds)
-                os.system('clear')
+                clear()
                 for b in bots:
                     if b.running:
                         print(b.display_dashboard())
                         print()
                 print(f"{Y}⏳ Semua bot cooldown. Menunggu {min_cd} detik...{RESET}")
-                live_timer(min_cd, f"⏳ Menunggu cooldown {min_cd}s")
+                live_timer(min_cd, f"⏳ Cooldown {min_cd}s")
             else:
                 time.sleep(1)
 
 # ========== SETUP ==========
 def setup_bot(name, config_file, prompt):
-    print(f"{Y}📝 Setup {name}{RESET}")
+    clear()
+    print(f"\n{PURPLE}╔══════════════════════════════════════════════════════════╗")
+    print(f"║   {GOLD}⚙️  SETUP {name:<40} {PURPLE}║")
+    print(f"╚══════════════════════════════════════════════════════════╝{RESET}\n")
+    print(f"{Y}Cara ambil init_data:{RESET}")
+    print(f"{W}1. Buka Mini App di Telegram")
+    print(f"2. Klik titik 3 → Open in Browser")
+    print(f"3. DevTools (F12) → Console")
+    print(f"4. Ketik: window.Telegram.WebApp.initData")
+    print(f"5. Copy hasilnya{RESET}\n")
+
     init = input(f"{C}{prompt}: {W}").strip()
     if not init:
-        print(f"{R}❌ init_data kosong!{RESET}")
+        print(f"{R}❌ Kosong, tidak disimpan{RESET}")
         return
     cfg = BaseConfig(config_file)
     cfg.init_data = init
@@ -772,81 +780,112 @@ def setup_bot(name, config_file, prompt):
         user_str = parsed.get('user', [None])[0]
         if user_str:
             u = json.loads(urllib.parse.unquote(user_str))
-            cfg.telegram_id = str(u.get('id',''))
-            cfg.telegram_username = u.get('username','')
-    except:
-        pass
+            cfg.telegram_id = str(u.get('id', ''))
+            cfg.telegram_username = u.get('username', '')
+    except: pass
     cfg.save()
-    print(f"{G}✅ {name} tersimpan{RESET}")
+    print(f"\n{G}✅ {name} tersimpan di {config_file}{RESET}")
+    if cfg.telegram_id:
+        print(f"{G}✅ User ID: {cfg.telegram_id}{RESET}")
+    if cfg.telegram_username:
+        print(f"{G}✅ Username: @{cfg.telegram_username}{RESET}")
+
+def check_config(name, config_file):
+    cfg = BaseConfig(config_file)
+    if cfg.load() and cfg.init_data:
+        return f"{G}✓{RESET} {name:<12} {M}ID:{RESET} {cfg.telegram_id or '?':<15} {M}@{cfg.telegram_username or '?':<15} {M}init:{RESET} {len(cfg.init_data)} chars"
+    return f"{R}✗{RESET} {name:<12} {R}belum disetup{RESET}"
 
 # ========== MAIN ==========
 def main():
     while True:
-        os.system('clear')
+        clear()
         print(f"""
 {PURPLE}╔══════════════════════════════════════════════════════════╗
-║   {GOLD}🚀 PEPEFLOW X CLOCKADS X MINIGRAMX X COINSZON    {PURPLE}║
+║   {GOLD}🚀 PEPEFLOW X CLOCKADS X COINSZON X LITOSHIPAY  {PURPLE}║
+╠══════════════════════════════════════════════════════════╣
 ║   {PINK}🔐 AUTH via init_data (NO PHPSESSID)              {PURPLE}║
 ║   {PINK}🎲 FINGERPRINT RANDOM setiap reauth               {PURPLE}║
 ║   {PINK}🚫 AUTO SKIP LIMIT (daily + global)               {PURPLE}║
 ║   {PINK}🎁 AUTO CLAIM PENDING WIN (WITH AD PROOF)         {PURPLE}║
+║   {PINK}📅 AUTO CLAIM DAILY BONUS                         {PURPLE}║
 ║   {PINK}⛔ AUTO SKIP UNAVAILABLE GAMES                    {PURPLE}║
 ╠══════════════════════════════════════════════════════════╣
-║   {G}[1]{RESET} 🔄 Start all bots (parallel)               ║
-║   {Y}[2]{RESET} Setup PepeFlow (init_data)                 ║
-║   {Y}[3]{RESET} Setup Clockads (init_data)                 ║
-║   {Y}[4]{RESET} Setup MiniGramX (init_data)                ║
-║   {Y}[5]{RESET} Setup Coinszon (init_data)                 ║
-║   {R}[0]{RESET} Exit                                     ║
+║   {G}[1]{RESET}  🚀 Start ALL bots (parallel)                  ║
+║   {Y}[2]{RESET}  ⚙️  Setup PepeFlow                             ║
+║   {Y}[3]{RESET}  ⚙️  Setup ClockAds                             ║
+║   {Y}[4]{RESET}  ⚙️  Setup Coinszon                             ║
+║   {Y}[5]{RESET}  ⚙️  Setup LitoshiPay                           ║
+║   {B}[6]{RESET}  📊 Check semua config                          ║
+║   {R}[0]{RESET}  ❌ Exit                                         ║
 ╚══════════════════════════════════════════════════════════╝{RESET}
 """)
         choice = input(f"{PURPLE}❯ Pilih: {RESET}").strip()
+
         if choice == '0':
+            print(f"\n{G}👋 Bye bos!{RESET}")
             sys.exit(0)
+
         elif choice == '1':
             pcfg = BaseConfig(PEPE_CONFIG)
             ccfg = BaseConfig(CLOCK_CONFIG)
-            mcfg = BaseConfig(MINI_CONFIG)
             xcfg = BaseConfig(COIN_CONFIG)
-            if not pcfg.load() or not pcfg.init_data:
-                print(f"{R}❌ PepeFlow init_data belum disetup (menu 2){RESET}")
-                input("Enter...")
+            lcfg = BaseConfig(LITO_CONFIG)
+
+            missing = []
+            if not pcfg.load() or not pcfg.init_data: missing.append("PepeFlow (menu 2)")
+            if not ccfg.load() or not ccfg.init_data: missing.append("ClockAds (menu 3)")
+            if not xcfg.load() or not xcfg.init_data: missing.append("Coinszon (menu 4)")
+            if not lcfg.load() or not lcfg.init_data: missing.append("LitoshiPay (menu 5)")
+
+            if missing:
+                print(f"\n{R}❌ Setup dulu:{RESET}")
+                for m in missing:
+                    print(f"   {R}✗{RESET} {m}")
+                input("\nEnter...")
                 continue
-            if not ccfg.load() or not ccfg.init_data:
-                print(f"{R}❌ Clockads init_data belum disetup (menu 3){RESET}")
-                input("Enter...")
-                continue
-            if not mcfg.load() or not mcfg.init_data:
-                print(f"{R}❌ MiniGramX init_data belum disetup (menu 4){RESET}")
-                input("Enter...")
-                continue
-            if not xcfg.load() or not xcfg.init_data:
-                print(f"{R}❌ Coinszon init_data belum disetup (menu 5){RESET}")
-                input("Enter...")
-                continue
+
             pbot = PepeBot(pcfg)
             cbot = ClockBot(ccfg)
-            mbot = MiniGramBot(mcfg)
             xbot = CoinBot(xcfg)
+            lbot = LitoBot(lcfg)
+
+            bots = [pbot, cbot, xbot, lbot]
+            print(f"\n{G}🚀 Starting {len(bots)} bots parallel...{RESET}")
+            time.sleep(1)
+
             try:
-                parallel_run([pbot, cbot, mbot, xbot])
+                parallel_run(bots)
             except KeyboardInterrupt:
-                pass
-            input("Enter...")
+                print(f"\n{Y}👋 Dihentikan.{RESET}")
+            input("\nEnter...")
+
         elif choice == '2':
-            setup_bot("PepeFlow", PEPE_CONFIG, "Masukkan init_data untuk PepeFlow")
+            setup_bot("PepeFlow", PEPE_CONFIG, "Masukkan init_data PepeFlow")
             input("Enter...")
         elif choice == '3':
-            setup_bot("Clockads", CLOCK_CONFIG, "Masukkan init_data untuk Clockads")
+            setup_bot("ClockAds", CLOCK_CONFIG, "Masukkan init_data ClockAds")
             input("Enter...")
         elif choice == '4':
-            setup_bot("MiniGramX", MINI_CONFIG, "Masukkan init_data untuk MiniGramX")
+            setup_bot("Coinszon", COIN_CONFIG, "Masukkan init_data Coinszon")
             input("Enter...")
         elif choice == '5':
-            setup_bot("Coinszon", COIN_CONFIG, "Masukkan init_data untuk Coinszon")
+            setup_bot("LitoshiPay", LITO_CONFIG, "Masukkan init_data LitoshiPay")
             input("Enter...")
+
+        elif choice == '6':
+            clear()
+            print(f"\n{PURPLE}╔══════════════════════════════════════════════════════════╗")
+            print(f"║   {GOLD}📊 CONFIG INFO                                     {PURPLE}║")
+            print(f"╚══════════════════════════════════════════════════════════╝{RESET}\n")
+            print(check_config("PepeFlow",   PEPE_CONFIG))
+            print(check_config("ClockAds",   CLOCK_CONFIG))
+            print(check_config("Coinszon",   COIN_CONFIG))
+            print(check_config("LitoshiPay", LITO_CONFIG))
+            input("\nEnter...")
+
         else:
-            print(f"{R}❌ Invalid{RESET}")
+            print(f"{R}❌ Pilihan invalid{RESET}")
             time.sleep(1)
 
 if __name__ == "__main__":
