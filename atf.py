@@ -19,7 +19,7 @@ class Colors:
     RED = '\033[91m'
     PINK = '\033[38;5;206m'
     WHITE = '\033[97m'
-    GRAY = '\033[90m'        # <--- sudah ditambahkan
+    GRAY = '\033[90m'
     BOLD = '\033[1m'
     END = '\033[0m'
 
@@ -39,6 +39,7 @@ BANNER = f"""
 {Colors.CYAN}================================================{Colors.END}
 {Colors.GREEN}   [✓] MINING     [✓] CLAIM{Colors.END}
 {Colors.GREEN}   [✓] REWARD     [✓] AUTO RUN{Colors.END}
+{Colors.GREEN}   [✓] AUTO TASK  [✓] SKIP EMPTY{Colors.END}
 {Colors.CYAN}================================================{Colors.END}
 """
 
@@ -47,10 +48,23 @@ def print_banner():
     print(BANNER)
 
 # ============================================================
-# SINGLE USE BOT (tanpa file, tanpa session)
+# SINGLE USE BOT
 # ============================================================
 
 class ATFMinerBot:
+    # List task ID yang bakal dicoba
+    # dari network log: telegram_join, kemungkinan ada lain
+    KNOWN_TASKS = [
+        "telegram_join",
+        "telegram_channel",
+        "telegram_group",
+        "twitter_follow",
+        "youtube_subscribe",
+        "tiktok_follow",
+        "instagram_follow",
+        "daily_checkin",
+    ]
+
     def __init__(self):
         self.device_id = f"dev-{uuid.uuid4()}"
         self.base_url = "https://atfminers.asloni.online"
@@ -66,14 +80,13 @@ class ATFMinerBot:
         self.total_boost = 0
         self.mining_freeze_at = 0
         self.username = "Unknown"
+        self.tg_id = "0"
         self.init_data = ""
         self.is_logged_in = False
 
-        # Minta initData dari user
         self.get_init_data()
 
     def get_init_data(self):
-        """Minta initData dari user, validasi sederhana"""
         print(f"{Colors.CYAN}╔════════════════════════════════════════╗{Colors.END}")
         print(f"{Colors.CYAN}║{Colors.END}  {Colors.BOLD}MASUKKAN TELEGRAM INIT DATA{Colors.END}    {Colors.CYAN}║{Colors.END}")
         print(f"{Colors.CYAN}║{Colors.END}  {Colors.GRAY}(copy dari WebView / network log){Colors.END} {Colors.CYAN}║{Colors.END}")
@@ -85,12 +98,10 @@ class ATFMinerBot:
             print(f"{Colors.RED}❌ InitData tidak boleh kosong!{Colors.END}")
             sys.exit(1)
 
-        # Validasi sederhana: harus mengandung query_id= dan user=
         if 'query_id=' not in self.init_data or 'user=' not in self.init_data:
-            print(f"{Colors.YELLOW}⚠️ InitData sepertinya tidak lengkap (harus ada query_id= dan user=){Colors.END}")
+            print(f"{Colors.YELLOW}⚠️ InitData sepertinya tidak lengkap{Colors.END}")
             retry = input(f"{Colors.YELLOW}Lanjutkan tetap? (y/n): {Colors.END}").strip().lower()
             if retry != 'y':
-                print(f"{Colors.RED}Mengulang input...{Colors.END}")
                 self.get_init_data()
                 return
 
@@ -103,9 +114,10 @@ class ATFMinerBot:
             if 'user' in parsed:
                 user = json.loads(parsed['user'][0])
                 self.username = user.get('username') or user.get('first_name', 'Unknown')
-                print(f"{Colors.GREEN}✅ User terdeteksi: {self.username}{Colors.END}")
+                self.tg_id = str(user.get('id', '0'))
+                print(f"{Colors.GREEN}✅ User terdeteksi: {self.username} (ID: {self.tg_id}){Colors.END}")
             else:
-                print(f"{Colors.YELLOW}⚠️ InitData tidak mengandung 'user', tapi tetap dicoba{Colors.END}")
+                print(f"{Colors.YELLOW}⚠️ InitData tidak mengandung 'user'{Colors.END}")
         except Exception as e:
             print(f"{Colors.YELLOW}⚠️ Parse error: {e}{Colors.END}")
 
@@ -123,13 +135,14 @@ class ATFMinerBot:
         try:
             resp = self.session.post(url, params=params, json=payload, timeout=30)
             if resp.status_code == 200:
-                return resp.json()
+                try:
+                    return resp.json()
+                except Exception:
+                    return {"status": "error", "raw": resp.text[:300]}
             else:
-                print(f"{Colors.RED}❌ HTTP {resp.status_code}{Colors.END}")
-                print(f"{Colors.GRAY}Response: {resp.text[:300]}{Colors.END}")
+                return {"status": "error", "http": resp.status_code}
         except Exception as e:
-            print(f"{Colors.RED}❌ Request error: {e}{Colors.END}")
-        return None
+            return {"status": "error", "msg": str(e)}
 
     def login(self):
         print(f"\n{Colors.CYAN}🔄 Mencoba login...{Colors.END}")
@@ -156,7 +169,6 @@ class ATFMinerBot:
             if result and result.get('reason'):
                 print(f"{Colors.RED}Alasan: {result.get('reason')}{Colors.END}")
 
-            # Tawarkan input ulang
             retry = input(f"\n{Colors.YELLOW}Masukkan initData baru? (y/n): {Colors.END}").strip().lower()
             if retry == 'y':
                 self.get_init_data()
@@ -170,6 +182,91 @@ class ATFMinerBot:
             time.sleep(1)
         print(f"\r{Colors.GREEN}{msg} selesai!{Colors.END}          ")
 
+    # ==================== TASK ====================
+    def try_claim_task(self, task_id):
+        """
+        Coba claim 1 task.
+        Return: 'claimed' / 'skip' / 'already' / 'not_found' / 'error'
+        """
+        extra = {
+            "tg_id": self.tg_id,
+            "task_id": task_id,
+            "client_started_at": 0,
+        }
+        result = self._call_api("claim_task", extra)
+
+        if not result:
+            return 'error', 0
+
+        status = str(result.get('status', '')).lower()
+        msg = str(result.get('message', '')).lower()
+
+        # sukses
+        if status == 'success':
+            reward = result.get('reward', 0)
+            return 'claimed', reward
+
+        # sudah pernah / already
+        for kw in ['already', 'sudah', 'claimed', 'duplicate']:
+            if kw in msg:
+                return 'already', 0
+
+        # task gak ada / belum dibuka
+        for kw in ['not found', 'invalid task', 'unknown', 'tidak ada', 'unavailable', 'not available']:
+            if kw in msg or status in ('not_found', 'invalid'):
+                return 'not_found', 0
+
+        # task belum bisa (harus join dulu dll)
+        for kw in ['not completed', 'belum', 'must join', 'please join', 'requirement', 'need to']:
+            if kw in msg:
+                return 'skip', 0
+
+        # rate limited
+        if status == 'rate_limited':
+            return 'skip', 0
+
+        # default
+        return 'skip', 0
+
+    def run_tasks(self):
+        """Auto kerjakan semua task yang bisa, skip yang gagal/empty"""
+        print(f"\n{Colors.CYAN}{'═' * 50}{Colors.END}")
+        print(f"{Colors.BOLD}{Colors.WHITE}📋 AUTO TASK{Colors.END}")
+        print(f"{Colors.CYAN}{'═' * 50}{Colors.END}")
+
+        total_claimed = 0
+        total_reward = 0
+
+        for task_id in self.KNOWN_TASKS:
+            print(f"{Colors.GRAY}➜ Coba task: {Colors.WHITE}{task_id}{Colors.END}", end=" ")
+            res, reward = self.try_claim_task(task_id)
+
+            if res == 'claimed':
+                print(f"{Colors.GREEN}✅ +{reward} ATF{Colors.END}")
+                total_claimed += 1
+                total_reward += float(reward or 0)
+            elif res == 'already':
+                print(f"{Colors.GRAY}↺ sudah claim{Colors.END}")
+            elif res == 'not_found':
+                print(f"{Colors.GRAY}⏭ tidak ada{Colors.END}")
+            elif res == 'skip':
+                print(f"{Colors.YELLOW}⏭ skip (belum memenuhi){Colors.END}")
+            else:
+                print(f"{Colors.RED}✗ error{Colors.END}")
+
+            # delay kecil biar gak rate limited
+            time.sleep(1.2)
+
+        print(f"{Colors.CYAN}{'═' * 50}{Colors.END}")
+        if total_claimed > 0:
+            print(f"{Colors.GREEN}✅ Task selesai: {total_claimed} claimed | +{total_reward} ATF{Colors.END}")
+        else:
+            print(f"{Colors.YELLOW}ℹ️ Tidak ada task baru hari ini{Colors.END}")
+        print(f"{Colors.CYAN}{'═' * 50}{Colors.END}\n")
+
+        return total_claimed, total_reward
+
+    # ==================== CLAIM ====================
     def claim(self):
         print(f"{Colors.CYAN}🔄 Claiming reward...{Colors.END}")
         result = self._call_api("claim")
@@ -193,8 +290,8 @@ class ATFMinerBot:
             print(f"{Colors.RED}❌ Claim status: {status}{Colors.END}")
         return False
 
+    # ==================== BOOST ====================
     def do_boost(self):
-        # Cek frozen
         if self.mining_freeze_at > 0 and int(time.time()) >= self.mining_freeze_at:
             print(f"{Colors.YELLOW}⛔ Mining frozen! Claim dulu...{Colors.END}")
             if not self.claim():
@@ -248,22 +345,34 @@ class ATFMinerBot:
             print(f"{Colors.RED}❌ Boost gagal: {status}{Colors.END}")
             return False
 
+    # ==================== RUN ====================
     def run(self):
+        # ===== AUTO TASK DULU =====
+        print(f"\n{Colors.GREEN}{Colors.BOLD}📋 AUTO TASK RUN{Colors.END}")
+        self.run_tasks()
+
         print(f"\n{Colors.GREEN}{Colors.BOLD}🚀 START AUTO BOOST{Colors.END}")
         print(f"{Colors.CYAN}{'═' * 50}{Colors.END}")
         print(f"{Colors.GRAY}Press Ctrl+C to stop{Colors.END}\n")
 
         boost_count = 0
+        task_check_counter = 0
+
         while True:
             try:
+                # ===== CEK TASK SETIAP 20 BOOST =====
+                if task_check_counter >= 20:
+                    self.run_tasks()
+                    task_check_counter = 0
+
                 if self.do_boost():
                     boost_count += 1
+                    task_check_counter += 1
                     print(f"{Colors.GRAY}➜ Total boost sesi ini: {boost_count}{Colors.END}")
                 else:
                     print(f"{Colors.RED}❌ Boost gagal, tunggu 5 detik...{Colors.END}")
                     time.sleep(5)
 
-                # Cooldown 15 detik
                 self.countdown(15, "⏳ Cooling down")
 
             except KeyboardInterrupt:
