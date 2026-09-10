@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+__OWN__ = "ScriptyXSouu Style"
+__OBF__ = ""
+__USR__ = "Cool Sentinel Client Protection Layer"
+__MSG__ = "Nice try to decode it"
+
+#!/usr/bin/env python3
 """
 DOGEMINING AUTO CLAIM V2 - BANNER EDITION
 - Menu interaktif dengan ASCII art
 - Auto login + claim
-- Live countdown 60 menit
+- Live countdown 10 menit
 - Dev: ScriptyXSou | Admin: MoneyMaker
 """
 
@@ -34,6 +41,18 @@ class Colors:
     reset = "\033[0m"
 C = Colors()
 
+# ===================== BANNER I LOVE BONCEL =====================
+def banner_boncel():
+    print(f"""{C.cyan}╔════════════════════════════════════════════════════════════╗{C.reset}
+{C.cyan}║                                                            ║{C.reset}
+{C.cyan}║                 {C.bold}{C.kuning}I @Ahd1905 LOVE @Wulandari9832{C.reset}{C.cyan}                         ║{C.reset}
+{C.cyan}║                                                            ║{C.reset}
+{C.cyan}║        {C.putih}Copyright by @Ahd1905 ❤️ @Wulandari9832{C.reset}{C.cyan}                         ║{C.reset}
+{C.cyan}║        {C.putih}supported by @MoneyMaker_w{C.reset}{C.cyan}                    ║{C.reset}
+{C.cyan}║                                                            ║{C.reset}
+{C.cyan}╚════════════════════════════════════════════════════════════╝{C.reset}
+""")
+
 # ===================== BANNER MENU =====================
 def banner_menu():
     os.system('clear' if os.name != 'nt' else 'cls')
@@ -62,7 +81,7 @@ def banner_menu():
 """)
 
 # ===================== BANNER CLAIM =====================
-def banner_claim(email, balance, delay_minutes=60):
+def banner_claim(email, balance, delay_minutes=10):
     os.system('clear' if os.name != 'nt' else 'cls')
     status = f"{C.hijau}● RUNNING{C.reset}"
     print(f"""{C.cyan}╔════════════════════════════════════════════════════════════╗{C.reset}
@@ -256,7 +275,7 @@ def auto_claim_loop(email, fingerprint):
         balance = 0.0
     
     claim_count = 0
-    delay_seconds = 3600  # 60 menit
+    delay_seconds = 600  # 10 menit
     
     while True:
         # Tampilkan banner claim
@@ -299,7 +318,7 @@ def auto_claim_loop(email, fingerprint):
         
         print(f"\n{C.cyan}──────────────────────────────────────────────────────────────────{C.reset}")
         
-        # Countdown 60 menit
+        # Countdown 10 menit
         for remaining in range(delay_seconds, 0, -1):
             mins = remaining // 60
             secs = remaining % 60
@@ -315,78 +334,242 @@ def auto_claim_loop(email, fingerprint):
                 time.sleep(1)
         print()
 
-# ===================== MENU =====================
-def main():
+
+# ===================== MULTI ACCOUNT =====================
+
+CONFIG_FILE = "config_doge.json"
+PRINT_LOCK = __import__("threading").Lock()
+
+def safe_print(*args, **kwargs):
+    """Prevent output from different worker threads mixing together."""
+    with PRINT_LOCK:
+        print(*args, **kwargs, flush=True)
+
+def load_accounts():
     config = load_config()
-    email = config.get('email', '')
-    fingerprint = get_fingerprint()
-    
-    while True:
-        banner_menu()
-        print()
-        # Tampilkan email saat ini
-        if email:
-            print(f"{C.putih}╭─[ {C.bold}{C.kuning}Current Account{C.reset}{C.putih} ]─────────────────────────────────╮{C.reset}")
-            print(f"{C.putih}│  {C.kuning}{email}{C.reset}{C.putih}                                      │{C.reset}")
-            print(f"{C.putih}╰────────────────────────────────────────────────────────────╯{C.reset}")
-        else:
-            print(f"{C.putih}╭─[ {C.bold}{C.merah}No Email Set{C.reset}{C.putih} ]─────────────────────────────────╮{C.reset}")
-            print(f"{C.putih}│  {C.merah}Please set email via option 3{C.reset}{C.putih}                          │{C.reset}")
-            print(f"{C.putih}╰────────────────────────────────────────────────────────────╯{C.reset}")
-        print()
-        pilihan = input(f"{C.putih}╭─[ {C.bold}{C.cyan}SELECT OPTION{C.reset}{C.putih} ]────────────────────────────────╮{C.reset}\n{C.putih}│  ➜ {C.reset}")
-        pilihan = pilihan.strip()
-        
-        if pilihan == "1":
-            if not email:
-                print(f"\n{C.merah}[!] Email belum diatur!{C.reset}")
-                input(f"{C.putih}Tekan Enter untuk kembali...{C.reset}")
-                continue
-            auto_claim_loop(email, fingerprint)
-            
-        elif pilihan == "2":
-            print(f"\n{C.putih}[*] Mengecek balance...{C.reset}")
-            session = create_session()
-            if email:
-                if not login(session, email, fingerprint):
-                    print(f"{C.merah}[!] Login gagal.{C.reset}")
-                    input(f"{C.putih}Tekan Enter untuk kembali...{C.reset}")
+    accounts = config.get("accounts", [])
+    if not isinstance(accounts, list):
+        accounts = []
+    old_email = str(config.get("email", "")).strip()
+    result = [str(x).strip() for x in accounts if str(x).strip()]
+    if old_email and old_email not in result:
+        result.insert(0, old_email)
+    return list(dict.fromkeys(result)), config
+
+def save_accounts(accounts, config):
+    accounts = list(dict.fromkeys(str(x).strip() for x in accounts if str(x).strip()))
+    config["accounts"] = accounts
+    config["email"] = accounts[0] if accounts else ""
+    save_config(config)
+
+def run_account(email, fingerprint):
+    """
+    Each account gets its own requests.Session().
+    The server-side fingerprint is intentionally kept unchanged.
+    This avoids pretending to be different devices/accounts.
+    """
+    try:
+        safe_print(f"\n{C.cyan}[Akun] {email} -> membuat session terpisah...{C.reset}")
+        session = create_session()
+
+        if not login(session, email, fingerprint):
+            safe_print(
+                f"{C.merah}[!] {email}: login ditolak/gagal. "
+                f"Fingerprint yang dipakai sama seperti konfigurasi asli.{C.reset}"
+            )
+            return
+
+        if not check_session(session):
+            safe_print(f"{C.merah}[!] {email}: session tidak valid.{C.reset}")
+            return
+
+        safe_print(f"{C.hijau}[✓] {email}: login berhasil, worker berjalan.{C.reset}")
+
+        balance = get_balance(session)
+        if balance is None:
+            balance = 0.0
+
+        claim_count = 0
+        delay_seconds = 600
+
+        while True:
+            safe_print(
+                f"\n{C.cyan}[{datetime.now().strftime('%H:%M:%S')}] "
+                f"{email} | Claim #{claim_count + 1} | "
+                f"Balance {balance:.8f} DOGE{C.reset}"
+            )
+
+            svg = fetch_captcha(session)
+            if not svg:
+                safe_print(f"{C.merah}[!] {email}: captcha gagal, mencoba login ulang...{C.reset}")
+                if login(session, email, fingerprint):
+                    svg = fetch_captcha(session)
+                if not svg:
+                    safe_print(f"{C.merah}[!] {email}: captcha tetap gagal; tunggu 30 detik.{C.reset}")
+                    time.sleep(30)
                     continue
-                balance = get_balance(session)
-                if balance is not None:
-                    print(f"{C.hijau}[✓] Balance: {C.bold}{balance:.8f} DOGE{C.reset}")
-                else:
-                    print(f"{C.merah}[!] Gagal ambil balance.{C.reset}")
+
+            captcha = parse_svg_captcha(svg)
+            if not captcha or len(captcha) != 4:
+                safe_print(f"{C.merah}[!] {email}: captcha tidak valid: {captcha}{C.reset}")
+                time.sleep(10)
+                continue
+
+            result = do_claim(session, captcha)
+            if result and result.get("success"):
+                claimed = float(result.get("amount", 0))
+                balance = float(result.get("balance", 0))
+                claim_count += 1
+                safe_print(
+                    f"{C.hijau}[✓] {email}: +{claimed:.8f} DOGE | "
+                    f"Balance {balance:.8f} DOGE{C.reset}"
+                )
             else:
-                print(f"{C.merah}[!] Email belum diatur.{C.reset}")
-            input(f"{C.putih}Tekan Enter untuk kembali...{C.reset}")
-            
-        elif pilihan == "3":
-            print(f"{C.putih}[*] Masukkan email Faucetpay:{C.reset}")
-            new_email = input(f"{C.kuning}Email: {C.reset}").strip()
-            if new_email:
-                config['email'] = new_email
-                save_config(config)
-                email = new_email
-                print(f"{C.hijau}[✓] Email disimpan: {email}{C.reset}")
-            else:
-                print(f"{C.merah}[!] Email kosong.{C.reset}")
-            input(f"{C.putih}Tekan Enter untuk kembali...{C.reset}")
-            
-        elif pilihan == "0":
-            print(f"{C.kuning}[!] Keluar...{C.reset}")
-            sys.exit(0)
+                msg = result.get("message", "unknown") if result else "unknown"
+                safe_print(f"{C.merah}[✗] {email}: claim gagal: {msg}{C.reset}")
+
+            # Countdown without clearing the terminal, so multiple accounts
+            # can visibly run at the same time.
+            for remaining in range(delay_seconds, 0, -1):
+                if remaining % 60 == 0 or remaining <= 5:
+                    mins = remaining // 60
+                    secs = remaining % 60
+                    safe_print(
+                        f"{C.kuning}[⏳] {email}: next claim in {mins:02d}:{secs:02d}{C.reset}"
+                    )
+                time.sleep(1)
+
+    except Exception as exc:
+        safe_print(f"{C.merah}[!] {email}: worker error: {exc}{C.reset}")
+
+def start_all_accounts(accounts, fingerprint):
+    from concurrent.futures import ThreadPoolExecutor
+
+    if len(accounts) < 2:
+        safe_print(f"{C.kuning}[!] Tambahkan minimal 2 akun untuk mode bersamaan.{C.reset}")
+        return
+
+    safe_print(
+        f"\n{C.cyan}[*] Memulai {len(accounts)} akun secara CONCURRENT...{C.reset}"
+    )
+    safe_print(
+        f"{C.kuning}[*] Setiap akun memiliki requests.Session() sendiri.{C.reset}"
+    )
+    safe_print(
+        f"{C.kuning}[*] Jika hanya satu akun diterima, kemungkinan server membatasi "
+        f"beberapa akun pada fingerprint yang sama.{C.reset}\n"
+    )
+
+    with ThreadPoolExecutor(max_workers=len(accounts)) as pool:
+        futures = [pool.submit(run_account, email, fingerprint) for email in accounts]
+        try:
+            for future in futures:
+                future.result()
+        except KeyboardInterrupt:
+            safe_print(f"\n{C.kuning}[!] Menghentikan worker...{C.reset}")
+            raise
+
+def main():
+    accounts, config = load_accounts()
+    fingerprint = get_fingerprint()
+
+    while True:
+        os.system('clear' if os.name != 'nt' else 'cls')
+        banner_boncel()
+        print(f"{C.cyan}=== DOGE AUTO CLAIM - MULTI ACCOUNT ==={C.reset}\n")
+
+        if accounts:
+            for i, acc in enumerate(accounts, 1):
+                print(f"{i}. {acc}")
         else:
-            print(f"{C.merah}[!] Pilihan tidak valid.{C.reset}")
-            time.sleep(1)
+            print("Belum ada akun.")
+
+        print("""
+[1] Jalankan 1 akun
+[2] Jalankan SEMUA akun bersamaan
+[3] Tambah akun
+[4] Hapus akun
+[5] Cek balance akun
+[0] Keluar
+""")
+
+        choice = input("Pilih: ").strip()
+
+        if choice == "1":
+            if not accounts:
+                input("Belum ada akun. Enter...")
+                continue
+            try:
+                n = int(input("Nomor akun: "))
+                if 1 <= n <= len(accounts):
+                    run_account(accounts[n-1], fingerprint)
+                else:
+                    print("Nomor tidak valid.")
+            except ValueError:
+                print("Masukkan nomor.")
+            except KeyboardInterrupt:
+                pass
+
+        elif choice == "2":
+            try:
+                start_all_accounts(accounts, fingerprint)
+            except KeyboardInterrupt:
+                pass
+
+        elif choice == "3":
+            email = input("Email akun baru: ").strip()
+            if email and email not in accounts:
+                accounts.append(email)
+                save_accounts(accounts, config)
+                print(f"{C.hijau}[✓] Akun ditambahkan.{C.reset}")
+            else:
+                print("Email kosong atau sudah ada.")
+            input("Enter...")
+
+        elif choice == "4":
+            if not accounts:
+                input("Tidak ada akun. Enter...")
+                continue
+            try:
+                n = int(input("Nomor akun yang dihapus: "))
+                if 1 <= n <= len(accounts):
+                    removed = accounts.pop(n-1)
+                    save_accounts(accounts, config)
+                    print(f"{C.hijau}[✓] Dihapus: {removed}{C.reset}")
+                else:
+                    print("Nomor tidak valid.")
+            except ValueError:
+                print("Masukkan nomor.")
+            input("Enter...")
+
+        elif choice == "5":
+            if not accounts:
+                input("Tidak ada akun. Enter...")
+                continue
+            try:
+                n = int(input("Nomor akun: "))
+                if 1 <= n <= len(accounts):
+                    email = accounts[n-1]
+                    session = create_session()
+                    if login(session, email, fingerprint):
+                        balance = get_balance(session)
+                        print(f"{C.hijau}[✓] {email}: {balance:.8f} DOGE{C.reset}")
+                    else:
+                        print(f"{C.merah}[!] Login {email} ditolak/gagal.{C.reset}")
+                else:
+                    print("Nomor tidak valid.")
+            except ValueError:
+                print("Masukkan nomor.")
+            input("Enter...")
+
+        elif choice == "0":
+            break
+        else:
+            print("Pilihan tidak valid.")
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print(f"\n{C.kuning}[!] Dihentikan user.{C.reset}")
-        sys.exit(0)
-    except Exception as e:
-        print(f"{C.merah}[!] Error: {e}{C.reset}")
-        sys.exit(1)
+        print("\nDihentikan.")
 
