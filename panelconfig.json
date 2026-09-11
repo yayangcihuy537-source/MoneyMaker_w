@@ -24,7 +24,7 @@
           "runner": "python3"
         },
         "5": {
-          "label": "ARUBLE 🟢",
+          "label": "Aruble 🟢",
           "file": "aruble.php",
           "runner": "php"
         },
@@ -119,7 +119,7 @@
           "runner": "python3"
         },
         "3": {
-          "label": "Pepeflow X CloakAds X ListohiPay X CoinsZon 🟢",
+          "label": "Pepeflow X CloakAds X CoinsZon 🟢",
           "file": "pepe.py",
           "runner": "python3"
         },
