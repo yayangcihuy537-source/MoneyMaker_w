@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ╔═══════════════════════════════════════════════════════════════╗
-║  🚀 PEPEFLOW X CLOCKADS X COINSZON X LITOSHIPAY              ║
+║  🚀 PEPEFLOW X CLOCKADS X COINSZON                           ║
 ║  AUTO CLAIM • AUTO GAMES • AUTO DOUBLE • AUTO SKIP LIMIT      ║
 ║  🔐 AUTH via init_data (NO PHPSESSID)                         ║
 ║  🎲 FINGERPRINT RANDOM setiap reauth                          ║
@@ -24,12 +24,10 @@ RESET = '\033[0m'
 PEPE_CONFIG  = "pepeflow_config.json"
 CLOCK_CONFIG = "clockads_config.json"
 COIN_CONFIG  = "coinszon_config.json"
-LITO_CONFIG  = "litoshipay_config.json"
 
 PEPE_URL  = "https://pepeflow.com"
 CLOCK_URL = "https://clockads.in"
 COIN_URL  = "https://coinszon.com"
-LITO_URL  = "https://litoshipay.com"
 
 UA = "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.47 Mobile Safari/537.36 Telegram-Android/12.6.4"
 
@@ -44,12 +42,6 @@ COIN_GAMES = ["lucky_wheel", "slots"]
 COIN_GAME_MAP = {
     "lucky_wheel": {"display": "SPIN",  "icon": "🎡"},
     "slots":       {"display": "SLOTS", "icon": "🎰"},
-}
-
-LITO_GAMES = ["lucky_wheel", "coin_catch"]
-LITO_GAME_MAP = {
-    "lucky_wheel": {"display": "SPIN",  "icon": "🎡"},
-    "coin_catch":  {"display": "CATCH", "icon": "🪙"},
 }
 
 # ========== CONFIG ==========
@@ -708,10 +700,6 @@ class CoinBot(BaseBot):
     def __init__(self, cfg):
         super().__init__(COIN_URL, cfg, COIN_GAMES, COIN_GAME_MAP, "Coinszon", "COIN")
 
-class LitoBot(BaseBot):
-    def __init__(self, cfg):
-        super().__init__(LITO_URL, cfg, LITO_GAMES, LITO_GAME_MAP, "LitoshiPay", "LITOSHI")
-
 # ========== PARALLEL RUNNER ==========
 def parallel_run(bots):
     for bot in bots:
@@ -802,7 +790,7 @@ def main():
         clear()
         print(f"""
 {PURPLE}╔══════════════════════════════════════════════════════════╗
-║   {GOLD}🚀 PEPEFLOW X CLOCKADS X COINSZON X LITOSHIPAY  {PURPLE}║
+║   {GOLD}🚀 PEPEFLOW X CLOCKADS X COINSZON                {PURPLE}║
 ╠══════════════════════════════════════════════════════════╣
 ║   {PINK}🔐 AUTH via init_data (NO PHPSESSID)              {PURPLE}║
 ║   {PINK}🎲 FINGERPRINT RANDOM setiap reauth               {PURPLE}║
@@ -815,8 +803,7 @@ def main():
 ║   {Y}[2]{RESET}  ⚙️  Setup PepeFlow                             ║
 ║   {Y}[3]{RESET}  ⚙️  Setup ClockAds                             ║
 ║   {Y}[4]{RESET}  ⚙️  Setup Coinszon                             ║
-║   {Y}[5]{RESET}  ⚙️  Setup LitoshiPay                           ║
-║   {B}[6]{RESET}  📊 Check semua config                          ║
+║   {B}[5]{RESET}  📊 Check semua config                          ║
 ║   {R}[0]{RESET}  ❌ Exit                                         ║
 ╚══════════════════════════════════════════════════════════╝{RESET}
 """)
@@ -830,13 +817,11 @@ def main():
             pcfg = BaseConfig(PEPE_CONFIG)
             ccfg = BaseConfig(CLOCK_CONFIG)
             xcfg = BaseConfig(COIN_CONFIG)
-            lcfg = BaseConfig(LITO_CONFIG)
 
             missing = []
             if not pcfg.load() or not pcfg.init_data: missing.append("PepeFlow (menu 2)")
             if not ccfg.load() or not ccfg.init_data: missing.append("ClockAds (menu 3)")
             if not xcfg.load() or not xcfg.init_data: missing.append("Coinszon (menu 4)")
-            if not lcfg.load() or not lcfg.init_data: missing.append("LitoshiPay (menu 5)")
 
             if missing:
                 print(f"\n{R}❌ Setup dulu:{RESET}")
@@ -848,9 +833,8 @@ def main():
             pbot = PepeBot(pcfg)
             cbot = ClockBot(ccfg)
             xbot = CoinBot(xcfg)
-            lbot = LitoBot(lcfg)
 
-            bots = [pbot, cbot, xbot, lbot]
+            bots = [pbot, cbot, xbot]
             print(f"\n{G}🚀 Starting {len(bots)} bots parallel...{RESET}")
             time.sleep(1)
 
@@ -869,19 +853,15 @@ def main():
         elif choice == '4':
             setup_bot("Coinszon", COIN_CONFIG, "Masukkan init_data Coinszon")
             input("Enter...")
-        elif choice == '5':
-            setup_bot("LitoshiPay", LITO_CONFIG, "Masukkan init_data LitoshiPay")
-            input("Enter...")
 
-        elif choice == '6':
+        elif choice == '5':
             clear()
             print(f"\n{PURPLE}╔══════════════════════════════════════════════════════════╗")
             print(f"║   {GOLD}📊 CONFIG INFO                                     {PURPLE}║")
             print(f"╚══════════════════════════════════════════════════════════╝{RESET}\n")
-            print(check_config("PepeFlow",   PEPE_CONFIG))
-            print(check_config("ClockAds",   CLOCK_CONFIG))
-            print(check_config("Coinszon",   COIN_CONFIG))
-            print(check_config("LitoshiPay", LITO_CONFIG))
+            print(check_config("PepeFlow", PEPE_CONFIG))
+            print(check_config("ClockAds", CLOCK_CONFIG))
+            print(check_config("Coinszon", COIN_CONFIG))
             input("\nEnter...")
 
         else:
