@@ -744,6 +744,27 @@ def parallel_run(bots):
             else:
                 time.sleep(1)
 
+# ========== BOT FACTORY ==========
+BOT_MAP = {
+    'pepe':  ('PepeFlow',  PEPE_CONFIG,  PepeBot),
+    'clock': ('ClockAds',  CLOCK_CONFIG, ClockBot),
+    'coin':  ('Coinszon',  COIN_CONFIG,  CoinBot),
+}
+
+def build_bots(keys):
+    """Bikin list bot berdasarkan keys. Return (bots, missing_names)"""
+    bots = []
+    missing = []
+    for k in keys:
+        if k not in BOT_MAP: continue
+        name, cfgfile, cls = BOT_MAP[k]
+        cfg = BaseConfig(cfgfile)
+        if not cfg.load() or not cfg.init_data:
+            missing.append(name)
+            continue
+        bots.append(cls(cfg))
+    return bots, missing
+
 # ========== SETUP ==========
 def setup_bot(name, config_file, prompt):
     clear()
@@ -784,6 +805,30 @@ def check_config(name, config_file):
         return f"{G}✓{RESET} {name:<12} {M}ID:{RESET} {cfg.telegram_id or '?':<15} {M}@{cfg.telegram_username or '?':<15} {M}init:{RESET} {len(cfg.init_data)} chars"
     return f"{R}✗{RESET} {name:<12} {R}belum disetup{RESET}"
 
+# ========== RUNNER WRAPPER ==========
+def run_selection(keys, label):
+    """Jalanin subset bot."""
+    bots, missing = build_bots(keys)
+    if missing:
+        print(f"\n{R}❌ Setup dulu:{RESET}")
+        for m in missing:
+            print(f"   {R}✗{RESET} {m}")
+        input("\nEnter...")
+        return
+    if not bots:
+        print(f"\n{R}❌ Gak ada bot yang bisa dijalanin{RESET}")
+        input("\nEnter...")
+        return
+
+    print(f"\n{G}🚀 {label}{RESET}")
+    print(f"{C}   Bots: {', '.join(b.name for b in bots)}{RESET}")
+    time.sleep(1)
+    try:
+        parallel_run(bots)
+    except KeyboardInterrupt:
+        print(f"\n{Y}👋 Dihentikan.{RESET}")
+    input("\nEnter...")
+
 # ========== MAIN ==========
 def main():
     while True:
@@ -799,11 +844,17 @@ def main():
 ║   {PINK}📅 AUTO CLAIM DAILY BONUS                         {PURPLE}║
 ║   {PINK}⛔ AUTO SKIP UNAVAILABLE GAMES                    {PURPLE}║
 ╠══════════════════════════════════════════════════════════╣
-║   {G}[1]{RESET}  🚀 Start ALL bots (parallel)                  ║
-║   {Y}[2]{RESET}  ⚙️  Setup PepeFlow                             ║
-║   {Y}[3]{RESET}  ⚙️  Setup ClockAds                             ║
-║   {Y}[4]{RESET}  ⚙️  Setup Coinszon                             ║
-║   {B}[5]{RESET}  📊 Check semua config                          ║
+║   {G}▶️  RUN MODE{RESET}
+║   {G}[1]{RESET}  🚀 Start ALL (PepeFlow + ClockAds + Coinszon)  ║
+║   {C}[2]{RESET}  🎯 PepeFlow X Coinszon                          ║
+║   {C}[3]{RESET}  🎯 Coinszon X ClockAds                          ║
+║   {C}[4]{RESET}  🎯 ClockAds X PepeFlow                          ║
+╠══════════════════════════════════════════════════════════╣
+║   {Y}⚙️  SETUP{RESET}
+║   {Y}[5]{RESET}  ⚙️  Setup PepeFlow                             ║
+║   {Y}[6]{RESET}  ⚙️  Setup ClockAds                             ║
+║   {Y}[7]{RESET}  ⚙️  Setup Coinszon                             ║
+║   {B}[8]{RESET}  📊 Check semua config                          ║
 ║   {R}[0]{RESET}  ❌ Exit                                         ║
 ╚══════════════════════════════════════════════════════════╝{RESET}
 """)
@@ -814,47 +865,28 @@ def main():
             sys.exit(0)
 
         elif choice == '1':
-            pcfg = BaseConfig(PEPE_CONFIG)
-            ccfg = BaseConfig(CLOCK_CONFIG)
-            xcfg = BaseConfig(COIN_CONFIG)
-
-            missing = []
-            if not pcfg.load() or not pcfg.init_data: missing.append("PepeFlow (menu 2)")
-            if not ccfg.load() or not ccfg.init_data: missing.append("ClockAds (menu 3)")
-            if not xcfg.load() or not xcfg.init_data: missing.append("Coinszon (menu 4)")
-
-            if missing:
-                print(f"\n{R}❌ Setup dulu:{RESET}")
-                for m in missing:
-                    print(f"   {R}✗{RESET} {m}")
-                input("\nEnter...")
-                continue
-
-            pbot = PepeBot(pcfg)
-            cbot = ClockBot(ccfg)
-            xbot = CoinBot(xcfg)
-
-            bots = [pbot, cbot, xbot]
-            print(f"\n{G}🚀 Starting {len(bots)} bots parallel...{RESET}")
-            time.sleep(1)
-
-            try:
-                parallel_run(bots)
-            except KeyboardInterrupt:
-                print(f"\n{Y}👋 Dihentikan.{RESET}")
-            input("\nEnter...")
+            run_selection(['pepe', 'clock', 'coin'], "Start ALL bots parallel")
 
         elif choice == '2':
+            run_selection(['pepe', 'coin'], "PepeFlow X Coinszon")
+
+        elif choice == '3':
+            run_selection(['coin', 'clock'], "Coinszon X ClockAds")
+
+        elif choice == '4':
+            run_selection(['clock', 'pepe'], "ClockAds X PepeFlow")
+
+        elif choice == '5':
             setup_bot("PepeFlow", PEPE_CONFIG, "Masukkan init_data PepeFlow")
             input("Enter...")
-        elif choice == '3':
+        elif choice == '6':
             setup_bot("ClockAds", CLOCK_CONFIG, "Masukkan init_data ClockAds")
             input("Enter...")
-        elif choice == '4':
+        elif choice == '7':
             setup_bot("Coinszon", COIN_CONFIG, "Masukkan init_data Coinszon")
             input("Enter...")
 
-        elif choice == '5':
+        elif choice == '8':
             clear()
             print(f"\n{PURPLE}╔══════════════════════════════════════════════════════════╗")
             print(f"║   {GOLD}📊 CONFIG INFO                                     {PURPLE}║")
