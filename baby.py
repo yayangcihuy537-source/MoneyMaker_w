@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 ╔═══════════════════════════════════════════════════════════════════╗
-║  🐶 BABYDOGE TAP BOT v4.0 — Fixed 20 Taps per Request          ║
-║  🔐 Login via InitData                                         ║
-║  👆 Auto Tap (batch mode, 20 taps per request)                ║
-║  🎯 Auto Claim (Streak + Spin + Tasks)                       ║
-║  🔄 Auto re-init jika token expired                          ║
-║  🔑 Auto update tapToken setiap tap                          ║
-║  📊 Set Tap Limit & Batch Size                              ║
-║  💸 Withdraw dengan input nominal & set address            ║
-║  👑 Owner: @MoneyMaker_w                                      ║
+║  🐶 BABYDOGE RUSH TAP BOT v5.1 — HACKED EDITION                 ║
+║  🔐 Login via InitData + AUTO REFRESH setelah 3x gagal          ║
+║  👆 Auto Tap (20 taps per request)                              ║
+║  🎯 Auto Claim (Streak + Spin + Tasks)                         ║
+║  🔄 Auto re-init jika token expired                            ║
+║  🔑 Auto update tapToken setiap tap                            ║
+║  💸 Withdraw dengan input nominal & set address                ║
+║  🎬 Hacker-style animation (boot, matrix, glitch, scan)        ║
+║  👑 Owner: @MoneyMaker_w                                        ║
 ╚═══════════════════════════════════════════════════════════════════╝
 """
 
@@ -21,6 +22,7 @@ import time
 import random
 import re
 import uuid
+import threading
 from datetime import datetime
 
 # ==================== WARNA ====================
@@ -37,7 +39,110 @@ DIM = "\033[90m"
 WHITE = "\033[1;97m"
 RESET = "\033[0m"
 
-# ==================== BANNER (UPDATED) ====================
+MATRIX1 = "\033[38;5;46m"
+MATRIX2 = "\033[38;5;82m"
+MATRIX3 = "\033[38;5;118m"
+RED_GLOW = "\033[38;5;196m"
+CYAN_GLOW = "\033[38;5;51m"
+
+# ==================== ANIMASI ====================
+PRINT_LOCK = threading.Lock()
+
+def _clear():
+    os.system('cls' if os.name == 'nt' else 'clear')
+
+def hacking_boot():
+    _clear()
+    logo = f"""{MATRIX1}
+    ██████╗  █████╗ ██████╗ ██╗   ██╗██████╗  ██████╗  ██████╗ ███████╗
+    ██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝██╔══██╗██╔═══██╗██╔════╝ ██╔════╝
+    ██████╔╝███████║██████╔╝ ╚████╔╝ ██████╔╝██║   ██║██║  ███╗█████╗  
+    ██╔══██╗██╔══██║██╔══██╗  ╚██╔╝  ██╔══██╗██║   ██║██║   ██║██╔══╝  
+    ██████╔╝██║  ██║██████╔╝   ██║   ██████╔╝╚██████╔╝╚██████╔╝███████╗
+    ╚═════╝ ╚═╝  ╚═╝╚═════╝    ╚═╝   ╚═════╝  ╚═════╝  ╚═════╝ ╚══════╝
+    {RESET}"""
+    print(logo)
+    print(f"{RED_GLOW}{'═'*66}{RESET}\n")
+
+    boot_lines = [
+        (f"{MATRIX2}[✓]{RESET} Establishing secure connection to tapgame.bleon.net...", 0.2),
+        (f"{MATRIX2}[✓]{RESET} Loading kernel modules...", 0.15),
+        (f"{MATRIX2}[✓]{RESET} Bypassing rate limit detection...", 0.25),
+        (f"{MATRIX2}[✓]{RESET} Injecting tapToken rotation hook...", 0.2),
+        (f"{MATRIX2}[✓]{RESET} Spawning tap engine (batch=20)...", 0.15),
+        (f"{MATRIX2}[✓]{RESET} Auto-refresh initData: ENABLED (3x retry)", 0.15),
+        (f"{GOLD}[⚡]{RESET} Node status: ONLINE", 0.15),
+        (f"{GREEN}[★]{RESET} System ready. Welcome, Operative.", 0.2),
+    ]
+    for line, delay in boot_lines:
+        print(f"  {line}")
+        time.sleep(delay)
+    print(f"\n{RED_GLOW}{'═'*66}{RESET}")
+    time.sleep(0.3)
+
+def loading_bar(label="INITIALIZING", duration=2.0):
+    frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+    start = time.time()
+    i = 0
+    while time.time() - start < duration:
+        progress = (time.time() - start) / duration
+        bar_len = 30
+        filled = int(bar_len * progress)
+        bar = "█" * filled + "░" * (bar_len - filled)
+        frame = frames[i % len(frames)]
+        hex_noise = "".join(random.choices("0123456789ABCDEF", k=8))
+        line = (f"\r{MATRIX1}┃{RESET} {RED_GLOW}{frame}{RESET} "
+                f"{MATRIX2}{label:<22}{RESET} {CYAN_GLOW}[{bar}]{RESET} "
+                f"{MATRIX3}{int(progress*100):>3}%{RESET} {DIM}0x{hex_noise}{RESET}")
+        sys.stdout.write(line)
+        sys.stdout.flush()
+        time.sleep(0.06)
+        i += 1
+    sys.stdout.write("\r" + " " * 110 + "\r")
+    sys.stdout.flush()
+
+def glitch_text(text, duration=1.0):
+    glitch_chars = "!@#$%^&*()_+{}|:<>?~`"
+    start = time.time()
+    while time.time() - start < duration:
+        result = "".join(random.choice(glitch_chars) if random.random() < 0.3 else ch for ch in text)
+        sys.stdout.write(f"\r{MATRIX1}{result}{RESET}")
+        sys.stdout.flush()
+        time.sleep(0.05)
+    sys.stdout.write(f"\r{MATRIX1}{text}{RESET}\n")
+
+def scan_animation(label="Scanning target"):
+    bar_len = 40
+    for i in range(bar_len + 1):
+        bar = f"{MATRIX1}{'█' * i}{DIM}{'░' * (bar_len - i)}{RESET}"
+        noise = "".join(random.choices("01", k=16))
+        sys.stdout.write(f"\r{RED_GLOW}┃{RESET} {GOLD}{label}{RESET} {bar} {MATRIX2}[{noise}]{RESET}")
+        sys.stdout.flush()
+        time.sleep(0.04)
+    sys.stdout.write("\n")
+
+def matrix_rain(width=60, height=6, duration=1.0):
+    chars = "ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉ0123456789"
+    start = time.time()
+    lines = [[' ' for _ in range(width)] for _ in range(height)]
+    while time.time() - start < duration:
+        for _ in range(3):
+            col = random.randint(0, width - 1)
+            lines[0][col] = random.choice(chars)
+        for y in range(height - 1, 0, -1):
+            lines[y] = lines[y-1].copy()
+            lines[0] = [' ' for _ in range(width)]
+        output = ""
+        for y, row in enumerate(lines):
+            line = "".join(row)
+            intensity = MATRIX1 if y < 2 else (MATRIX2 if y < 4 else DIM)
+            output += f"{intensity}{line}{RESET}\n"
+        sys.stdout.write(f"\033[{height}A")
+        sys.stdout.write(output)
+        sys.stdout.flush()
+        time.sleep(0.08)
+
+# ==================== BANNER ====================
 BANNER = rf"""{CYAN}
 ╔═══════════════════════════════════════════════════════════════════╗
 ║                                                                   ║
@@ -48,9 +153,9 @@ BANNER = rf"""{CYAN}
 ║  {WHITE}██████╔╝██║  ██║██████╔╝   ██║   ██████╔╝╚██████╔╝╚██████╔╝███████╗{CYAN}║
 ║  {WHITE}╚═════╝ ╚═╝  ╚═╝╚═════╝    ╚═╝   ╚═════╝  ╚═════╝  ╚═════╝ ╚══════╝{CYAN}║
 ║                                                                   ║
-║            {GREEN}🐶 BABYDOGE AUTO TAP BOT v4.0 🐶{CYAN}                 ║
+║           {GREEN}🐶 BABYDOGE RUSH AUTO TAP BOT v5.1 🐶{CYAN}                 ║
 ║                                                                   ║
-║  {YELLOW}⚡ 20 Taps per Request  •  Batch Mode  •  Auto Claim{RESET}{CYAN}     ║
+║  {YELLOW}⚡ 20 Taps/Req  •  Batch Mode  •  Auto Claim  •  Auto Refresh{RESET}{CYAN} ║
 ║  {PINK}👑 Owner: ScriptyXSouu  •  📢 TG: @MoneyMaker_w{RESET}{CYAN}         ║
 ║                                                                   ║
 ╚═══════════════════════════════════════════════════════════════════╝{RESET}
@@ -59,7 +164,7 @@ BANNER = rf"""{CYAN}
 # ==================== KONFIGURASI ====================
 CONFIG_FILE = "babydoge_config.json"
 BASE_URL = "https://panel-api.bleon.net"
-BOT_NAME = "BabyDOGETapbot"
+BOT_NAME = "BabyDOGERushbot"
 
 class Config:
     def __init__(self):
@@ -69,6 +174,7 @@ class Config:
         self.tap_batch_size = 50
         self.tap_batch_delay_min = 3
         self.tap_batch_delay_max = 7
+        self.max_init_retry = 3
 
     def load(self):
         if os.path.exists(CONFIG_FILE):
@@ -80,6 +186,7 @@ class Config:
                 self.tap_batch_size = data.get('tap_batch_size', 50)
                 self.tap_batch_delay_min = data.get('tap_batch_delay_min', 3)
                 self.tap_batch_delay_max = data.get('tap_batch_delay_max', 7)
+                self.max_init_retry = data.get('max_init_retry', 3)
                 return True
         return False
 
@@ -91,7 +198,8 @@ class Config:
                 'withdraw_address': self.withdraw_address,
                 'tap_batch_size': self.tap_batch_size,
                 'tap_batch_delay_min': self.tap_batch_delay_min,
-                'tap_batch_delay_max': self.tap_batch_delay_max
+                'tap_batch_delay_max': self.tap_batch_delay_max,
+                'max_init_retry': self.max_init_retry
             }, f, indent=2)
 
 # ==================== UTILITY ====================
@@ -120,6 +228,19 @@ def countdown_timer(seconds, message="⏳ Waiting"):
         frame_idx = (frame_idx + 1) % len(frames)
     print(f"\r{YELLOW}{message}: 00:00 ✅{RESET}")
 
+def fmt_big(n):
+    try:
+        n = int(n)
+    except:
+        return str(n)
+    if n >= 1_000_000_000:
+        return f"{n/1_000_000_000:.2f}B"
+    if n >= 1_000_000:
+        return f"{n/1_000_000:.2f}M"
+    if n >= 1_000:
+        return f"{n/1_000:.2f}k"
+    return str(n)
+
 # ==================== BABYDOGE BOT ====================
 class BabyDogeBot:
     def __init__(self, init_data, tap_limit=0, withdraw_address="", batch_size=50, batch_delay_min=3, batch_delay_max=7):
@@ -133,7 +254,7 @@ class BabyDogeBot:
         self.base_url = BASE_URL
         self.bot_name = BOT_NAME
         self.headers = {
-            "User-Agent": "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.124 Mobile Safari/537.36 Telegram-Android/12.6.4 (Samsung SM-A556E; Android 16; SDK 36; HIGH)",
+            "User-Agent": "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.7977.87 Mobile Safari/537.36 Telegram-Android/12.9.2 (Samsung SM-A556E; Android 16; SDK 36; HIGH)",
             "Accept": "*/*",
             "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
             "Content-Type": "application/json",
@@ -145,7 +266,6 @@ class BabyDogeBot:
             "Sec-Fetch-Dest": "empty",
             "Connection": "keep-alive",
         }
-        self.token = ""
         self.tap_token = ""
         self.balance = 0
         self.energy = 0
@@ -155,16 +275,17 @@ class BabyDogeBot:
         self.completed_tasks = []
         self.withdraw_address_set = withdraw_address
         self.init_retry_count = 0
+        self.cfg = {}
 
     def log(self, msg: str, level: str = "INFO"):
         t = datetime.now().strftime("%H:%M:%S")
-        prefix = {"INFO": CYAN, "SUCCESS": GREEN, "WARNING": YELLOW, "ERROR": RED}.get(level, WHITE)
-        print(f"{prefix}[{t}] {msg}{RESET}")
+        prefix = {"INFO": CYAN, "SUCCESS": GREEN, "WARNING": YELLOW, "ERROR": RED, "DEBUG": DIM}.get(level, WHITE)
+        with PRINT_LOCK:
+            print(f"{prefix}[{t}] {msg}{RESET}")
 
     def _request(self, endpoint: str, data: dict = None, multipart: bool = False) -> dict:
         url = f"{self.base_url}{endpoint}"
         headers = self.headers.copy()
-
         try:
             if multipart:
                 headers.pop("Content-Type", None)
@@ -200,37 +321,88 @@ class BabyDogeBot:
             withdraw_to = player.get("withdrawTo", "")
             if withdraw_to:
                 self.withdraw_address_set = withdraw_to
-        else:
-            self.balance = data.get("balance", self.balance)
-            self.energy = data.get("energy", self.energy)
+
+        cfg = data.get("config", {})
+        if cfg:
+            self.cfg = cfg
+
+        new_tap = data.get("tapToken")
+        if new_tap:
+            self.tap_token = new_tap
+
+    # ==================== AUTO REFRESH INIT_DATA ====================
+    def _prompt_refresh_initdata(self):
+        """Minta user input init_data baru setelah 3x init gagal."""
+        print(f"\n{RED}╔══════════════════════════════════════════════════════════╗{RESET}")
+        print(f"{RED}║  ⛔ INIT GAGAL 3x — INIT_DATA KEMUNGKINAN EXPIRED        ║{RESET}")
+        print(f"{RED}╚══════════════════════════════════════════════════════════╝{RESET}\n")
+
+        print(f"{YELLOW}Cara ambil init_data baru:{RESET}")
+        print(f"{DIM}1. Buka BabyDoge Rush di Telegram{RESET}")
+        print(f"{DIM}2. Buka Reqable / DevTools → Network{RESET}")
+        print(f"{DIM}3. Trigger request ke /v1/game/init{RESET}")
+        print(f"{DIM}4. Copy value 'initData' dari body request{RESET}\n")
+
+        choice = input(f"{PINK}Paste init_data baru (atau ENTER untuk skip): {RESET}").strip()
+        if not choice:
+            self.log("❌ User skip refresh, kembali ke menu.", "WARNING")
+            return False
+
+        # Simpan ke config file
+        self.init_data = choice
+        config = Config()
+        config.load()
+        config.init_data = choice
+        config.save()
+
+        # Reset state
+        self.init_retry_count = 0
+        self.tap_token = ""
+
+        loading_bar("Saving new initData", 0.8)
+        self.log("✅ InitData baru disimpan, mencoba init ulang...", "SUCCESS")
+        return True
 
     def init(self) -> bool:
         self.log("🔐 Init game...", "INFO")
         payload = {
             "bot": self.bot_name,
-            "initData": self.init_data
+            "initData": self.init_data,
+            "open": True
         }
         result = self._request("/v1/game/init", data=payload)
         if result and result.get("ok"):
-            self.token = result.get("token") or result.get("data", {}).get("token", "")
-            self.tap_token = result.get("tapToken") or result.get("data", {}).get("tapToken", "")
+            self.tap_token = result.get("tapToken", "")
             self._update_player(result)
             self.init_retry_count = 0
-            token_preview = self.token[:20] if self.token else "(empty)"
+
             tap_preview = self.tap_token[:20] if self.tap_token else "(empty)"
-            self.log(f"✅ Init OK | Balance: {self.balance} | Energy: {self.energy} | Token: {token_preview}... | TapToken: {tap_preview}...", "SUCCESS")
+            coin = self.cfg.get("coin", "?")
+            max_e = self.cfg.get("maxEnergy", "?")
+            self.log(
+                f"✅ Init OK | {coin} | Balance: {fmt_big(self.balance)} | "
+                f"Energy: {self.energy}/{max_e} | TapToken: {tap_preview}...",
+                "SUCCESS"
+            )
             return True
         else:
             error = result.get('error') if result else 'No response'
-            self.log(f"❌ Init failed: {error}", "ERROR")
             self.init_retry_count += 1
+            self.log(f"❌ Init failed ({self.init_retry_count}/3): {error}", "ERROR")
+
+            # ==== AUTO REFRESH INIT_DATA SETELAH 3x GAGAL ====
             if self.init_retry_count >= 3:
-                self.log("⛔ Too many init failures. Returning to menu.", "ERROR")
+                self.log("⛔ Init gagal 3x — minta init_data baru", "WARNING")
+                if self._prompt_refresh_initdata():
+                    # Coba init ulang dengan init_data baru
+                    return self.init()
+                else:
+                    return False
             return False
 
     def ensure_token(self) -> bool:
-        if not self.token or not self.tap_token:
-            self.log("⚠️ Token missing, attempting init...", "WARNING")
+        if not self.tap_token:
+            self.log("⚠️ TapToken missing, attempting init...", "WARNING")
             if not self.init():
                 return False
         return True
@@ -239,18 +411,16 @@ class BabyDogeBot:
         self.log("🔄 Refresh tapToken...", "INFO")
         return self.init()
 
-    # ==================== TAP - FIXED 20 TAPS ====================
-    def tap(self, taps: int = 20) -> bool:   # default 20
+    # ==================== TAP ====================
+    def tap(self, taps: int = 20) -> bool:
         if not self.ensure_token():
             return False
-
-        tap_token_to_use = self.tap_token if self.tap_token else self.token
 
         payload = {
             "bot": self.bot_name,
             "initData": self.init_data,
             "taps": taps,
-            "token": tap_token_to_use
+            "token": self.tap_token
         }
         result = self._request("/v1/game/tap", data=payload)
 
@@ -261,11 +431,12 @@ class BabyDogeBot:
             self.tap_count += taps
 
             new_tap_token = result.get("tapToken")
-            if new_tap_token:
-                self.tap_token = new_tap_token
-                self.log(f"✅ Tap {taps}x | Earned: {earned} | Balance: {self.balance} | Energy: {self.energy} | TapToken updated", "SUCCESS")
-            else:
-                self.log(f"✅ Tap {taps}x | Earned: {earned} | Balance: {self.balance} | Energy: {self.energy}", "SUCCESS")
+            marker = "🔄" if new_tap_token else "  "
+            self.log(
+                f"✅ Tap {taps}x | +{fmt_big(earned)} | "
+                f"Bal: {fmt_big(self.balance)} | Energy: {self.energy} {marker}",
+                "SUCCESS"
+            )
             return True
         else:
             error = result.get('error') if result else 'No response'
@@ -284,7 +455,6 @@ class BabyDogeBot:
                 return self.tap(taps)
             elif 'token' in str(error).lower() or 'invalid' in str(error).lower():
                 self.log(f"⚠️ Token error, re-init...", "WARNING")
-                self.token = ""
                 self.tap_token = ""
                 if not self.init():
                     return False
@@ -293,7 +463,7 @@ class BabyDogeBot:
                 self.log(f"❌ Tap failed: {error}", "ERROR")
                 return False
 
-    # ==================== TAP BATCH - 20 PER REQUEST ====================
+    # ==================== TAP BATCH ====================
     def tap_batch(self):
         batch_size = self.batch_size
         if batch_size <= 0:
@@ -308,38 +478,36 @@ class BabyDogeBot:
                     return False
                 continue
 
-            # ==== PERUBAHAN: setiap request = 20 tap (atau sisa) ====
             t = min(20, batch_size - taps_done_in_batch)
             if t <= 0:
                 break
 
             if not self.tap(t):
-                return False  # Jika tap gagal karena token invalid, hentikan batch
+                return False
 
             taps_done_in_batch += t
             if taps_done_in_batch < batch_size:
                 jeda = random.uniform(1.5, 3.5)
                 time.sleep(jeda)
 
-        self.log(f"✅ Batch {batch_size} taps selesai (total request: { (batch_size + 19)//20 } kali)", "SUCCESS")
+        total_req = (batch_size + 19) // 20
+        self.log(f"✅ Batch {batch_size} taps selesai (total request: {total_req} kali)", "SUCCESS")
         return True
 
+    # ==================== CLAIM ====================
     def claim_streak(self) -> bool:
         if not self.ensure_token():
             return False
 
         self.log("🔥 Claim streak...", "INFO")
-        payload = {
-            "bot": self.bot_name,
-            "initData": self.init_data
-        }
+        payload = {"bot": self.bot_name, "initData": self.init_data}
         result = self._request("/v1/game/streak", data=payload)
         if result and result.get("ok"):
             reward = result.get("reward", 0)
             self._update_player(result)
             self.streak_count += 1
             self.total_earned += reward
-            self.log(f"✅ Streak claimed! Reward: {reward} | Balance: {self.balance}", "SUCCESS")
+            self.log(f"✅ Streak claimed! +{fmt_big(reward)} | Balance: {fmt_big(self.balance)}", "SUCCESS")
             return True
         else:
             error = result.get('error') if result else 'No response'
@@ -354,16 +522,13 @@ class BabyDogeBot:
             return False
 
         self.log("🎰 Spin...", "INFO")
-        payload = {
-            "bot": self.bot_name,
-            "initData": self.init_data
-        }
+        payload = {"bot": self.bot_name, "initData": self.init_data}
         result = self._request("/v1/game/spin", data=payload)
         if result and result.get("ok"):
             reward = result.get("reward", 0)
             self._update_player(result)
             self.total_earned += reward
-            self.log(f"✅ Spin OK | Reward: {reward} | Balance: {self.balance}", "SUCCESS")
+            self.log(f"✅ Spin OK | +{fmt_big(reward)} | Balance: {fmt_big(self.balance)}", "SUCCESS")
             return True
         else:
             error = result.get('error') if result else 'No response'
@@ -378,10 +543,7 @@ class BabyDogeBot:
             return []
 
         self.log("📋 Ambil tasks...", "INFO")
-        payload = {
-            "bot": self.bot_name,
-            "initData": self.init_data
-        }
+        payload = {"bot": self.bot_name, "initData": self.init_data}
         result = self._request("/v1/game/tasks", data=payload)
         if result and result.get("ok"):
             tasks = result.get("tasks", [])
@@ -393,7 +555,7 @@ class BabyDogeBot:
         if not self.ensure_token():
             return False
 
-        self.log(f"▶️ Start task {task_id[:8]}...", "INFO")
+        self.log(f"▶️ Start task {str(task_id)[:8]}...", "INFO")
         payload = {
             "bot": self.bot_name,
             "initData": self.init_data,
@@ -401,7 +563,7 @@ class BabyDogeBot:
         }
         result = self._request("/v1/game/task/start", data=payload)
         if result and result.get("ok"):
-            self.log(f"✅ Task {task_id[:8]} started", "SUCCESS")
+            self.log(f"✅ Task {str(task_id)[:8]} started", "SUCCESS")
             return True
         else:
             error = result.get('error') if result else 'No response'
@@ -413,7 +575,7 @@ class BabyDogeBot:
             return False
 
         for attempt in range(max_retries):
-            self.log(f"📤 Submit task {task_id[:8]} (attempt {attempt+1}/{max_retries})...", "INFO")
+            self.log(f"📤 Submit task {str(task_id)[:8]} (attempt {attempt+1}/{max_retries})...", "INFO")
             data = {
                 "bot": self.bot_name,
                 "initData": self.init_data,
@@ -426,7 +588,7 @@ class BabyDogeBot:
                 self._update_player(result)
                 self.total_earned += reward
                 self.completed_tasks.append(task_id)
-                self.log(f"✅ Task {task_id[:8]} submitted! Reward: {reward}", "SUCCESS")
+                self.log(f"✅ Task {str(task_id)[:8]} submitted! +{fmt_big(reward)}", "SUCCESS")
                 return True
             else:
                 error = result.get('error') if result else 'No response'
@@ -442,7 +604,7 @@ class BabyDogeBot:
                     self.log(f"❌ Submit task failed: {error}", "ERROR")
                     return False
 
-        self.log(f"❌ Gagal submit task {task_id[:8]} setelah {max_retries} percobaan", "ERROR")
+        self.log(f"❌ Gagal submit task {str(task_id)[:8]} setelah {max_retries} percobaan", "ERROR")
         return False
 
     def claim_tasks(self):
@@ -468,8 +630,9 @@ class BabyDogeBot:
                 else:
                     self.log(f"⚠️ Gagal start task {title}, skip", "WARNING")
             else:
-                self.log(f"⏭️ Skip {title} (status: {status})", "DIM")
+                self.log(f"⏭️ Skip {title} (status: {status})", "DEBUG")
 
+    # ==================== WITHDRAW ====================
     def set_withdraw_address(self, address: str) -> bool:
         if not self.ensure_token():
             return False
@@ -503,7 +666,12 @@ class BabyDogeBot:
             self.log(f"⚠️ Belum ada withdraw address!", "WARNING")
             return False
 
-        self.log(f"💸 Withdraw {amount}...", "INFO")
+        min_w = self.cfg.get("minWithdraw", 0)
+        if min_w and amount < min_w:
+            self.log(f"⚠️ Minimum withdraw: {fmt_big(min_w)}", "WARNING")
+            return False
+
+        self.log(f"💸 Withdraw {fmt_big(amount)}...", "INFO")
         payload = {
             "bot": self.bot_name,
             "initData": self.init_data,
@@ -512,7 +680,7 @@ class BabyDogeBot:
         result = self._request("/v1/game/withdraw", data=payload)
         if result and result.get("ok"):
             self._update_player(result)
-            self.log(f"✅ Withdraw {amount} successful! Sisa balance: {self.balance}", "SUCCESS")
+            self.log(f"✅ Withdraw {fmt_big(amount)} successful! Sisa balance: {fmt_big(self.balance)}", "SUCCESS")
             return True
         else:
             error = result.get('error') if result else 'No response'
@@ -526,7 +694,11 @@ class BabyDogeBot:
             self.log("❌ Init failed", "ERROR")
             return
 
-        print(f"\n{CYAN}📊 Current Balance: {GREEN}{self.balance}{RESET}")
+        min_w = self.cfg.get("minWithdraw", 0)
+        coin = self.cfg.get("coin", "BSC.BABYDOGE")
+        print(f"\n{CYAN}📊 Current Balance: {GREEN}{fmt_big(self.balance)}{RESET} {coin}")
+        if min_w:
+            print(f"{DIM}   Minimum withdraw: {fmt_big(min_w)}{RESET}")
 
         if not self.withdraw_address_set:
             self.log(f"⚠️ Belum ada withdraw address!", "WARNING")
@@ -542,8 +714,7 @@ class BabyDogeBot:
             else:
                 return
 
-        print(f"\n{CYAN}💰 Balance saat ini: {GREEN}{self.balance}{RESET}")
-        nominal_input = input(f"{YELLOW}📝 Masukkan nominal withdraw (atau ketik 'all' untuk semua): {RESET}").strip()
+        nominal_input = input(f"{YELLOW}📝 Masukkan nominal withdraw (atau 'all'): {RESET}").strip()
 
         if nominal_input.lower() == 'all':
             amount = self.balance
@@ -559,12 +730,12 @@ class BabyDogeBot:
             return
 
         if amount > self.balance:
-            self.log(f"❌ Nominal melebihi balance! Balance: {self.balance}", "ERROR")
+            self.log(f"❌ Nominal melebihi balance! Balance: {fmt_big(self.balance)}", "ERROR")
             return
 
         print(f"\n{YELLOW}⚠️ Konfirmasi withdraw:{RESET}")
         print(f"  Address: {self.withdraw_address_set}")
-        print(f"  Amount : {amount}")
+        print(f"  Amount : {fmt_big(amount)}")
         confirm = input(f"{PINK}Lanjutkan? (y/n): {RESET}").strip().lower()
 
         if confirm == 'y':
@@ -582,28 +753,35 @@ class BabyDogeBot:
         return True
 
     def show_status(self):
-        addr_preview = self.withdraw_address_set[:12] + "..." if self.withdraw_address_set else "(not set)"
+        addr_preview = self.withdraw_address_set[:16] + "..." if self.withdraw_address_set else "(not set)"
+        coin = self.cfg.get("coin", "BSC.BABYDOGE")
+        max_e = self.cfg.get("maxEnergy", "?")
+
         print(f"""
 {GREEN}╔══════════════════════════════════════════════════════════╗
-║  🐶 BABYDOGE STATUS                                     ║
+║  🐶 BABYDOGE RUSH STATUS                                ║
 ╠══════════════════════════════════════════════════════════╣
-║  {WHITE}Balance {GREEN}: {self.balance}
-║  {WHITE}Energy  {GREEN}: {self.energy}
-║  {WHITE}Taps   {GREEN}: {self.tap_count}
-║  {WHITE}Streak {GREEN}: {self.streak_count}
-║  {WHITE}Earned {GREEN}: {self.total_earned}
-║  {WHITE}Tasks  {GREEN}: {len(self.completed_tasks)}
-║  {WHITE}Address{GREEN}: {addr_preview}
+║  {WHITE}Coin    {GREEN}: {coin}
+║  {WHITE}Balance {GREEN}: {fmt_big(self.balance)}
+║  {WHITE}Energy  {GREEN}: {self.energy}/{max_e}
+║  {WHITE}Taps    {GREEN}: {self.tap_count}
+║  {WHITE}Streak  {GREEN}: {self.streak_count}
+║  {WHITE}Earned  {GREEN}: {fmt_big(self.total_earned)}
+║  {WHITE}Tasks   {GREEN}: {len(self.completed_tasks)}
+║  {WHITE}Address {GREEN}: {addr_preview}
 ╚══════════════════════════════════════════════════════════╝{RESET}
 """)
 
+    # ==================== AUTO TAP ====================
     def auto_tap_unlimited(self):
         tap_limit = self.tap_limit
         if tap_limit > 0:
-            self.log(f"👆 AUTO TAP BATCH MODE START (limit: {tap_limit} taps, batch: {self.batch_size})", "SUCCESS")
+            self.log(f"👆 AUTO TAP BATCH MODE (limit: {tap_limit}, batch: {self.batch_size}, 20/req)", "SUCCESS")
         else:
-            self.log(f"👆 AUTO TAP BATCH MODE START (unlimited, batch: {self.batch_size})", "SUCCESS")
+            self.log(f"👆 AUTO TAP BATCH MODE (unlimited, batch: {self.batch_size}, 20/req)", "SUCCESS")
         self.log("⏹️  Tekan Ctrl+C untuk berhenti", "WARNING")
+
+        loading_bar("Warming up tap engine", 1.2)
 
         if not self.init():
             self.log("❌ Init failed, returning to menu.", "ERROR")
@@ -620,7 +798,7 @@ class BabyDogeBot:
                     self.log(f"⏳ Energy habis ({self.energy}), tunggu 60 detik...", "WARNING")
                     time.sleep(60)
                     if not self.init():
-                        self.log("❌ Init failed during energy wait, returning to menu.", "ERROR")
+                        self.log("❌ Init failed during energy wait.", "ERROR")
                         return False
                     continue
 
@@ -635,7 +813,8 @@ class BabyDogeBot:
                     break
 
                 delay = random.uniform(self.batch_delay_min, self.batch_delay_max)
-                self.log(f"⏳ Jeda batch {delay:.1f} detik... ({total_taps_done}/{tap_limit if tap_limit > 0 else '∞'})", "DIM")
+                limit_disp = tap_limit if tap_limit > 0 else "∞"
+                self.log(f"⏳ Jeda batch {delay:.1f} detik... ({total_taps_done}/{limit_disp})", "DEBUG")
                 time.sleep(delay)
 
         except KeyboardInterrupt:
@@ -646,6 +825,8 @@ class BabyDogeBot:
 
     def auto_claim(self):
         self.log("🎯 AUTO CLAIM START", "SUCCESS")
+        loading_bar("Fetching claim data", 1.0)
+        scan_animation("Claiming streak + spin + tasks")
 
         if not self.init():
             self.log("❌ Init failed, returning to menu.", "ERROR")
@@ -669,6 +850,10 @@ def menu():
     config = Config()
     config.load()
 
+    hacking_boot()
+    loading_bar("Loading BabyDoge Rush modules", 1.5)
+    matrix_rain(width=60, height=6, duration=1.2)
+
     while True:
         print(BANNER)
         print(f"""
@@ -677,7 +862,7 @@ def menu():
 ╠════════════════════════════════════════════════════════════╣
 ║  {GREEN}[1]{RESET} 👆 Auto Tap (Batch Mode, 20 taps/req)           ║
 ║  {YELLOW}[2]{RESET} 🎯 Auto Claim (Streak + Spin + Tasks)       ║
-║  {CYAN}[3]{RESET} 📝 Set InitData                               ║
+║  {CYAN}[3]{RESET} 📝 Set InitData (auto-refresh after 3 fails)  ║
 ║  {BLUE}[4]{RESET} 📊 Check Balance                              ║
 ║  {LIME}[5]{RESET} 📊 Set Tap Limit                              ║
 ║  {GOLD}[6]{RESET} 💸 Withdraw (Set Address + Nominal)           ║
@@ -702,10 +887,12 @@ def menu():
             print(f"{RED}💳 Address: Not set{RESET}")
 
         print(f"{PINK}⚙️ Batch: {config.tap_batch_size} taps, Jeda {config.tap_batch_delay_min}-{config.tap_batch_delay_max}s{RESET}")
+        print(f"{PINK}🔄 Auto-refresh initData setelah 3x gagal: ENABLED{RESET}")
 
         choice = input(f"\n{PINK}❯ Pilih: {RESET}").strip()
 
         if choice == '0':
+            glitch_text("SHUTTING DOWN...", 0.8)
             print(f"{YELLOW}👋 Bye!{RESET}")
             sys.exit(0)
 
@@ -717,6 +904,8 @@ def menu():
             bot = BabyDogeBot(config.init_data, config.tap_limit, config.withdraw_address,
                              config.tap_batch_size, config.tap_batch_delay_min, config.tap_batch_delay_max)
             bot.auto_tap_unlimited()
+            # Reload config (kalau init_data baru di-refresh)
+            config.load()
             input("Tekan Enter untuk kembali ke menu...")
 
         elif choice == '2':
@@ -727,6 +916,7 @@ def menu():
             bot = BabyDogeBot(config.init_data, config.tap_limit, config.withdraw_address,
                              config.tap_batch_size, config.tap_batch_delay_min, config.tap_batch_delay_max)
             bot.auto_claim()
+            config.load()
             input("Tekan Enter untuk kembali ke menu...")
 
         elif choice == '3':
@@ -736,7 +926,16 @@ def menu():
             if qid:
                 config.init_data = qid
                 config.save()
+                loading_bar("Saving initData", 0.8)
                 print(f"{GREEN}✅ InitData disimpan!{RESET}")
+
+                # AUTO TEST INIT DATA BARU
+                print(f"{CYAN}🔍 Test koneksi dengan init_data baru...{RESET}")
+                bot = BabyDogeBot(qid)
+                if bot.init():
+                    print(f"{GREEN}✅ InitData VALID! Balance: {fmt_big(bot.balance)} | Coin: {bot.cfg.get('coin', '?')}{RESET}")
+                else:
+                    print(f"{RED}❌ InitData TIDAK VALID! Cek kembali copy-an kamu.{RESET}")
             else:
                 print(f"{RED}❌ InitData tidak boleh kosong!{RESET}")
             input("Tekan Enter untuk kembali...")
@@ -747,6 +946,7 @@ def menu():
             else:
                 bot = BabyDogeBot(config.init_data, config.tap_limit, config.withdraw_address,
                                  config.tap_batch_size, config.tap_batch_delay_min, config.tap_batch_delay_max)
+                loading_bar("Connecting to server", 1.0)
                 if not bot.init():
                     print(f"{RED}❌ InitData tidak valid, silakan perbarui.{RESET}")
                 else:
