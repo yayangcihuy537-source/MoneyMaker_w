@@ -29,7 +29,7 @@
           "runner": "php"
         },
         "6": {
-          "label": "DogeMiner 🟢",
+          "label": "DogeMiner 🔴",
           "file": "Doge.py",
           "runner": "python3"
         },
@@ -74,7 +74,7 @@
           "runner": "php"
         },
         "5": {
-          "label": "Makeyoutask 🟢",
+          "label": "Makeyoutask 🔴",
           "file": "myt.php",
           "runner": "php"
         },
@@ -84,7 +84,7 @@
           "runner": "python3"
         },
         "7": {
-          "label": "litecoinpick 🟢",
+          "label": "litecoinpick 🟡",
           "file": "pick.py",
           "runner": "python3"
         },
@@ -109,7 +109,7 @@
       "name": "Telegram",
       "items": {
         "1": {
-          "label": "MINESLPYBOT 🟢",
+          "label": "MINESLPYBOT 🟡",
           "file": "fruit.py",
           "runner": "python3"
         },
@@ -124,12 +124,12 @@
           "runner": "python3"
         },
         "4": {
-          "label": "PitCoinMiner 🟢",
+          "label": "PitCoinMiner 🔴",
           "file": "Pit.py",
           "runner": "python3"
         },
         "5": {
-          "label": "SpeedKick 🟢",
+          "label": "SpeedKick 🔴",
           "file": "speedkick.py",
           "runner": "python3"
         },
@@ -144,7 +144,7 @@
           "runner": "python3"
         },
         "8": {
-          "label": "Helix 🟢",
+          "label": "Helix 🟡",
           "file": "helix.py",
           "runner": "python3"
         },
@@ -154,7 +154,7 @@
           "runner": "python3"
         },
         "10": {
-          "label": "RedTube 🟢",
+          "label": "RedTube 🔴",
           "file": "Red.py",
           "runner": "python3"
         },
@@ -194,7 +194,7 @@
           "runner": "python3"
         },
         "18": {
-          "label": "PepeTapXbot 🟢",
+          "label": "PepeTapXbot 🟡",
           "file": "PepeTap.py",
           "runner": "python3"
         },
@@ -219,7 +219,7 @@
           "runner": "python3"
         },
         "23": {
-          "label": "FarmingMatesBot 🟢",
+          "label": "FarmingMatesBot 🔴",
           "file": "FarmingMatesBot.py",
           "runner": "python3"
         },
