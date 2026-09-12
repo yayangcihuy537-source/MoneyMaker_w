@@ -214,8 +214,8 @@
           "runner": "python3"
         },
         "23": {
-          "label": "Coming Soon",
-          "file": "",
+          "label": "LiteBitsFaucet 🟢",
+          "file": "Litebits.py",
           "runner": "python3"
         },
         "24": {
