@@ -224,8 +224,8 @@
           "runner": "python3"
         },
         "25": {
-          "label": "Coming Soon",
-          "file": "",
+          "label": "PitCoinMiner 🟢",
+          "file": "pit.py",
           "runner": "python3"
         },
         "26": {
