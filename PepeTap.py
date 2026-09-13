@@ -1,834 +1,843 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 ╔═══════════════════════════════════════════════════════════════════╗
-║  🐸 PEPE TAP BOT v1.1 — Auto Retry + Rate Limit Handler         ║
-║  🔐 Login via InitData                                         ║
-║  👆 Auto Tap (batch mode, 20 taps per request)                ║
-║  🎯 Auto Claim (Streak + Spin + Tasks)                       ║
-║  🔄 Auto re-init jika token expired                          ║
-║  🔑 Auto update tapToken setiap tap                          ║
-║  📊 Set Tap Limit & Batch Size                              ║
-║  💸 Withdraw dengan input nominal & set address            ║
-║  👑 Owner: @MoneyMaker_w                                      ║
+║     🐸 PEPE TAP MINER • AUTO FARMER v1.0 💀                     ║
+║                                                                   ║
+║   🎯 Auto tap 20x per request                                    ║
+║   ⚡ Auto activate turbo boost (5x multiplier)                   ║
+║   🔋 Auto refill energy kalau habis                              ║
+║   🎁 Auto claim task reward                                      ║
+║   👑 ScriptMaker: MoneyMaker_w                                    ║
 ╚═══════════════════════════════════════════════════════════════════╝
 """
 
-import requests
-import json
 import os
 import sys
 import time
+import json
 import random
-import re
+import requests
+import hashlib
 import uuid
-from datetime import datetime
+import urllib.parse
+from datetime import datetime, timezone
+from collections import deque
 
-# ==================== WARNA ====================
-RED = "\033[38;5;196m"
-GOLD = "\033[38;5;220m"
-YELLOW = "\033[1;93m"
-GREEN = "\033[1;92m"
-CYAN = "\033[1;96m"
-BLUE = "\033[38;5;39m"
-PURPLE = "\033[38;5;141m"
-PINK = "\033[38;5;206m"
-LIME = "\033[38;5;154m"
-DIM = "\033[90m"
-WHITE = "\033[1;97m"
-RESET = "\033[0m"
 
-# ==================== BANNER ====================
-BANNER = rf"""{CYAN}
-╔═══════════════════════════════════════════════════════════════════╗
-║                                                                   ║
-║  {WHITE}██████╗ ███████╗██████╗ ███████╗████████╗ █████╗ ██████╗ {CYAN}║
-║  {WHITE}██╔══██╗██╔════╝██╔══██╗██╔════╝╚══██╔══╝██╔══██╗██╔══██╗{CYAN}║
-║  {WHITE}██████╔╝█████╗  ██████╔╝█████╗     ██║   ███████║██████╔╝{CYAN}║
-║  {WHITE}██╔═══╝ ██╔══╝  ██╔═══╝ ██╔══╝     ██║   ██╔══██║██╔═══╝ {CYAN}║
-║  {WHITE}██║     ███████╗██║     ███████╗   ██║   ██║  ██║██║     {CYAN}║
-║  {WHITE}╚═╝     ╚══════╝╚═╝     ╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝     {CYAN}║
-║                                                                   ║
-║            {GREEN}🐸 PEPE TAP AUTO BOT v1.1 🐸{CYAN}                    ║
-║                                                                   ║
-║  {YELLOW}⚡ 20 Taps per Request  •  Batch Mode  •  Auto Retry{RESET}{CYAN}    ║
-║  {PINK}👑 Owner: @MoneyMaker_w  •  📢 TG: @MoneyMaker_w{RESET}{CYAN}         ║
-║                                                                   ║
-╚═══════════════════════════════════════════════════════════════════╝{RESET}
-"""
+# ═══════════════════════════════════════════════════════════════
+#  WARNA & ANIMASI
+# ═══════════════════════════════════════════════════════════════
+class C:
+    RED      = "\033[91m"
+    GREEN    = "\033[92m"
+    YELLOW   = "\033[93m"
+    BLUE     = "\033[94m"
+    MAGENTA  = "\033[95m"
+    CYAN     = "\033[96m"
+    WHITE    = "\033[97m"
+    BOLD     = "\033[1m"
+    DIM      = "\033[2m"
+    RESET    = "\033[0m"
+    PURPLE   = "\033[38;5;135m"
+    PURPLE_B = "\033[38;5;141m"
+    PURPLE_L = "\033[38;5;177m"
+    PURPLE_D = "\033[38;5;93m"
+    LAVENDER = "\033[38;5;183m"
+    SUCCESS  = "\033[38;5;118m"
+    ERROR    = "\033[38;5;196m"
+    WARN     = "\033[38;5;220m"
+    INFO     = "\033[38;5;51m"
+    GOLD     = "\033[38;5;220m"
+    GREEN_M  = "\033[38;5;46m"
 
-# ==================== KONFIGURASI ====================
-CONFIG_FILE = "pepe_config.json"
-BASE_URL = "https://panel-api.bleon.net"
-BOT_NAME = "PepeTapXbot"
 
-class Config:
-    def __init__(self):
-        self.init_data = None
-        self.tap_limit = 0
-        self.withdraw_address = ""
-        self.tap_batch_size = 50
-        self.tap_batch_delay_min = 3
-        self.tap_batch_delay_max = 7
+def cprint(msg="", color=None, bold=False):
+    c = color or ""
+    b = C.BOLD if bold else ""
+    print(f"{b}{c}{msg}{C.RESET}", flush=True)
 
-    def load(self):
-        if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, 'r') as f:
-                data = json.load(f)
-                self.init_data = data.get('init_data')
-                self.tap_limit = data.get('tap_limit', 0)
-                self.withdraw_address = data.get('withdraw_address', "")
-                self.tap_batch_size = data.get('tap_batch_size', 50)
-                self.tap_batch_delay_min = data.get('tap_batch_delay_min', 3)
-                self.tap_batch_delay_max = data.get('tap_batch_delay_max', 7)
-                return True
-        return False
 
-    def save(self):
-        with open(CONFIG_FILE, 'w') as f:
-            json.dump({
-                'init_data': self.init_data,
-                'tap_limit': self.tap_limit,
-                'withdraw_address': self.withdraw_address,
-                'tap_batch_size': self.tap_batch_size,
-                'tap_batch_delay_min': self.tap_batch_delay_min,
-                'tap_batch_delay_max': self.tap_batch_delay_max
-            }, f, indent=2)
+def print_logo():
+    print()
+    cprint("     ██████╗ ███████╗██████╗ ███████╗", C.GREEN_M)
+    cprint("     ██╔══██╗██╔════╝██╔══██╗██╔════╝", C.GREEN_M)
+    cprint("     ██████╔╝█████╗  ██████╔╝█████╗  ", C.GREEN_M)
+    cprint("     ██╔═══╝ ██╔══╝  ██╔═══╝ ██╔══╝  ", C.SUCCESS)
+    cprint("     ██║     ███████╗██║     ███████╗", C.SUCCESS)
+    cprint("     ╚═╝     ╚══════╝╚═╝     ╚══════╝", C.SUCCESS)
+    print()
+    cprint("           🐸 PEPE TAP MINER — AUTO FARMER 🐸", C.BOLD + C.GREEN_M)
+    cprint("              👑 ScriptMaker: MoneyMaker_w", C.PURPLE_L)
+    print()
+    cprint("  " + "═" * 60, C.GREEN_M)
 
-# ==================== UTILITY ====================
-def uuid4():
-    return str(uuid.uuid4())
 
-def random_delay(min_sec=1, max_sec=15):
-    return random.uniform(min_sec, max_sec)
+def line_eq(width=60, color=None):
+    cprint("=" * width, color or C.GREEN_M)
 
-def extract_wait_seconds(error_msg):
-    match = re.search(r'(\d+)\s*seconds?\s*to\s*go', error_msg, re.IGNORECASE)
-    if match:
-        return int(match.group(1))
-    return None
 
-def countdown_timer(seconds, message="⏳ Waiting"):
-    frames = ['⣾', '⣽', '⣻', '⢿', '⡿', '⣟', '⣯', '⣷']
-    frame_idx = 0
-    while seconds > 0:
-        mins = seconds // 60
-        secs = seconds % 60
-        sys.stdout.write(f"\r{YELLOW}{message}: {mins:02d}:{secs:02d}  {frames[frame_idx]}{RESET}")
+def line_dash(width=60, color=None):
+    cprint("─" * width, color or C.SUCCESS)
+
+
+def loading_bar(label="INITIALIZING", duration=1.5):
+    frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+    start = time.time()
+    i = 0
+    while time.time() - start < duration:
+        progress = (time.time() - start) / duration
+        bar_len = 28
+        filled = int(bar_len * progress)
+        bar = "█" * filled + "░" * (bar_len - filled)
+        frame = frames[i % len(frames)]
+        hex_noise = "".join(random.choices("0123456789ABCDEF", k=6))
+        line = (f"\r{C.GREEN_M}┃{C.RESET} {C.SUCCESS}{frame}{C.RESET} "
+                f"{C.GREEN_M}{label:<22}{C.RESET} {C.SUCCESS}[{bar}]{C.RESET} "
+                f"{C.GREEN_M}{int(progress*100):>3}%{C.RESET} {C.DIM}0x{hex_noise}{C.RESET}")
+        sys.stdout.write(line)
         sys.stdout.flush()
-        time.sleep(1)
-        seconds -= 1
-        frame_idx = (frame_idx + 1) % len(frames)
-    print(f"\r{YELLOW}{message}: 00:00 ✅{RESET}")
+        time.sleep(0.05)
+        i += 1
+    sys.stdout.write("\r" + " " * 100 + "\r")
+    sys.stdout.flush()
 
-# ==================== PEPE BOT ====================
+
+# ═══════════════════════════════════════════════════════════════
+#  TSS SERIALIZATION (TanStack Start)
+#  Format: binary JSON khusus Lovable app
+# ═══════════════════════════════════════════════════════════════
+def tss_encode(obj, counter=None):
+    """Encode Python object ke format TSS."""
+    if counter is None:
+        counter = [0]
+
+    def _enc(val):
+        if val is None:
+            return {"t": 2, "s": 0}
+        if val is True:
+            return {"t": 2, "s": 1}
+        if val is False:
+            return {"t": 2, "s": 2}
+        if isinstance(val, (int, float)):
+            return {"t": 0, "s": val}
+        if isinstance(val, str):
+            return {"t": 1, "s": val}
+        if isinstance(val, list):
+            return {
+                "t": 9, "i": counter[0],
+                "a": [_enc(x) for x in val], "o": 0
+            }
+        if isinstance(val, dict):
+            counter[0] += 1
+            keys = list(val.keys())
+            vals = [_enc(val[k]) for k in keys]
+            return {
+                "t": 10, "i": counter[0] - 1,
+                "p": {"k": keys, "v": vals}, "o": 0
+            }
+        return {"t": 1, "s": str(val)}
+
+    return _enc(obj)
+
+
+def build_server_fn_payload(data_dict):
+    """Build payload TSS untuk /_serverFn/ call."""
+    inner = tss_encode(data_dict, counter=[0])
+    return {
+        "t": {
+            "t": 10, "i": 0,
+            "p": {"k": ["data"], "v": [inner]}, "o": 0
+        },
+        "f": 63,
+        "m": []
+    }
+
+
+def tss_decode(node, cache=None):
+    """Decode TSS response ke Python object."""
+    if cache is None:
+        cache = {}
+
+    if not isinstance(node, dict):
+        return node
+
+    t = node.get("t")
+
+    # primitive
+    if t == 0:
+        return node.get("s")
+    if t == 1:
+        return node.get("s")
+    if t == 2:
+        s = node.get("s")
+        # 0=null, 1=true, 2=false
+        return {0: None, 1: True, 2: False}.get(s, None)
+
+    # array
+    if t == 9:
+        idx = node.get("i", -1)
+        arr = [tss_decode(x, cache) for x in node.get("a", [])]
+        if idx >= 0:
+            cache[idx] = arr
+        return arr
+
+    # object
+    if t == 10:
+        idx = node.get("i", -1)
+        p = node.get("p", {})
+        keys = p.get("k", [])
+        vals = p.get("v", [])
+        obj = {keys[i]: tss_decode(vals[i], cache) for i in range(min(len(keys), len(vals)))}
+        if idx >= 0:
+            cache[idx] = obj
+        return obj
+
+    # reference
+    if t == 11:
+        idx = node.get("i", -1)
+        return cache.get(idx)
+
+    return node
+
+
+def parse_response(resp_text):
+    """Parse response text (bisa NDJSON atau JSON biasa)."""
+    text = resp_text.strip()
+    if not text:
+        return None
+
+    # Coba JSON biasa
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # Coba NDJSON (baris per baris)
+    results = []
+    for line in text.split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            results.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+
+    return results if results else None
+
+
+# ═══════════════════════════════════════════════════════════════
+#  KONFIG
+# ═══════════════════════════════════════════════════════════════
+BASE_URL = "https://pepeminertap.lovable.app"
+
+# Server function hashes (dari dump request)
+FN_TAP     = "d6c34d4220c777cceb07dfc1cb576fc88f72e9825c48d9e89550cff0249a618e"
+FN_STATE   = "61b5ecda5620dcf6c89aa3f75cbd73a5b50d96e6f83c5f81c6701e35244e9cf1"
+FN_BOOST   = "e7511189ffe36241e50aa0fbb623585efa31d4fa1acba26871f611c182e2b32f"
+FN_TASK    = ""   # belum diketahui, isi manual kalau ada
+FN_REFILL  = ""   # belum diketahui, isi manual kalau ada
+
+UA = ("Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 "
+      "(KHTML, like Gecko) Chrome/152.0.7977.87 Mobile Safari/537.36 "
+      "Telegram-Android/12.9.2 (Samsung SM-A556E; Android 16; SDK 36; HIGH)")
+
+CONFIG_FILE = "pepe_tap_config.json"
+
+
+# ═══════════════════════════════════════════════════════════════
+#  CONFIG
+# ═══════════════════════════════════════════════════════════════
+def load_config():
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE) as f:
+                return json.load(f)
+        except:
+            pass
+    return {"init_data": "", "session_id": "", "refill_endpoint": "", "task_endpoint": ""}
+
+
+def save_config(cfg):
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(cfg, f, indent=2)
+
+
+# ═══════════════════════════════════════════════════════════════
+#  BOT
+# ═══════════════════════════════════════════════════════════════
 class PepeTapBot:
-    def __init__(self, init_data, tap_limit=0, withdraw_address="", batch_size=50, batch_delay_min=3, batch_delay_max=7):
+    def __init__(self, init_data, session_id="", refill_endpoint="", task_endpoint=""):
         self.init_data = init_data
-        self.tap_limit = tap_limit
-        self.withdraw_address = withdraw_address
-        self.batch_size = batch_size
-        self.batch_delay_min = batch_delay_min
-        self.batch_delay_max = batch_delay_max
         self.session = requests.Session()
-        self.base_url = BASE_URL
-        self.bot_name = BOT_NAME
-        self.headers = {
-            "User-Agent": "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.124 Mobile Safari/537.36 Telegram-Android/12.6.4 (Samsung SM-A556E; Android 16; SDK 36; HIGH)",
-            "Accept": "*/*",
-            "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Content-Type": "application/json",
-            "Origin": "https://tapgame.bleon.net",
-            "Referer": "https://tapgame.bleon.net/",
-            "X-Requested-With": "org.telegram.messenger.web",
-            "Sec-Fetch-Site": "same-site",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Dest": "empty",
-            "Connection": "keep-alive",
-        }
-        self.token = ""
-        self.tap_token = ""
+        self.session.headers.update({
+            "Host": "pepeminertap.lovable.app",
+            "sec-ch-ua-platform": '"Android"',
+            "user-agent": UA,
+            "accept": "application/x-tss-framed, application/x-ndjson, application/json",
+            "sec-ch-ua": '"Chromium";v="152", "Not?A_Brand";v="24", "Android WebView";v="152"',
+            "content-type": "application/json",
+            "sec-ch-ua-mobile": "?1",
+            "x-tsr-serverfn": "true",
+            "origin": BASE_URL,
+            "x-requested-with": "org.telegram.messenger.web",
+            "sec-fetch-site": "same-origin",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-dest": "empty",
+            "referer": f"{BASE_URL}/app",
+            "accept-encoding": "gzip, deflate, br",
+            "accept-language": "id,id-ID;q=0.9,en-US;q=0.8,en;q=0.7",
+        })
+
+        # Set session cookie (kalau ada)
+        if session_id:
+            self.session.cookies.set("session-id", session_id, domain="pepeminertap.lovable.app")
+        else:
+            # Generate random session ID
+            session_id = str(uuid.uuid4())
+            self.session.cookies.set("session-id", session_id, domain="pepeminertap.lovable.app")
+            self.session_id = session_id
+
+        self.session_id = session_id
+        self.refill_endpoint = refill_endpoint
+        self.task_endpoint = task_endpoint
+
+        # State
         self.balance = 0
         self.energy = 0
-        self.tap_count = 0
-        self.streak_count = 0
+        self.energy_max = 1000
+        self.tap_reward = 500
+        self.energy_per_tap = 5
+        self.ad_break_taps = 30
+        self.taps_since_ad = 0
+        self.boost_active = False
+        self.boost_until = None
+        self.boost_multiplier = 1
+        self.wallet = ""
+
+        # Stats
+        self.total_taps = 0
         self.total_earned = 0
-        self.completed_tasks = []
-        self.withdraw_address_set = withdraw_address
-        self.init_retry_count = 0
+        self.claims = 0
+        self.start_time = datetime.now()
 
-    def log(self, msg: str, level: str = "INFO"):
-        t = datetime.now().strftime("%H:%M:%S")
-        prefix = {"INFO": CYAN, "SUCCESS": GREEN, "WARNING": YELLOW, "ERROR": RED}.get(level, WHITE)
-        print(f"{prefix}[{t}] {msg}{RESET}")
-
-    def _request(self, endpoint: str, data: dict = None, multipart: bool = False) -> dict:
-        url = f"{self.base_url}{endpoint}"
-        headers = self.headers.copy()
-
+    # ---------- HTTP helper ----------
+    def _call_fn(self, fn_hash, data):
+        """Call server function dengan TSS encoding."""
+        url = f"{BASE_URL}/_serverFn/{fn_hash}"
+        payload = build_server_fn_payload(data)
         try:
-            if multipart:
-                headers.pop("Content-Type", None)
-                files = {}
-                if data:
-                    for key, value in data.items():
-                        files[key] = (None, str(value))
-                resp = self.session.post(url, files=files, headers=headers, timeout=30)
-            else:
-                resp = self.session.post(url, json=data, headers=headers, timeout=30)
-
-            if resp.status_code == 200:
-                try:
-                    return resp.json()
-                except:
-                    return {"ok": False, "error": "Invalid JSON"}
-            else:
-                try:
-                    err = resp.json()
-                    return {"ok": False, "error": err.get('message', f"HTTP {resp.status_code}")}
-                except:
-                    return {"ok": False, "error": f"HTTP {resp.status_code}"}
+            r = self.session.post(url, json=payload, timeout=30)
+            return r
         except Exception as e:
-            return {"ok": False, "error": str(e)}
+            return None
 
-    def _update_player(self, data: dict):
-        player = data.get("player", {})
-        if player:
-            self.balance = player.get("balance", self.balance)
-            self.energy = player.get("energy", self.energy)
-            self.tap_count = player.get("tapsTotal", self.tap_count)
-            self.streak_count = player.get("streakDay", self.streak_count)
-            withdraw_to = player.get("withdrawTo", "")
-            if withdraw_to:
-                self.withdraw_address_set = withdraw_to
-        else:
-            self.balance = data.get("balance", self.balance)
-            self.energy = data.get("energy", self.energy)
-
-    def init(self) -> bool:
-        self.log("🔐 Init game...", "INFO")
-        payload = {
-            "bot": self.bot_name,
-            "initData": self.init_data,
-            "open": True
-        }
-        result = self._request("/v1/game/init", data=payload)
-        if result and result.get("ok"):
-            self.token = result.get("token") or result.get("tapToken") or ""
-            self.tap_token = result.get("tapToken") or result.get("token") or ""
-            self._update_player(result)
-            self.init_retry_count = 0
-            token_preview = self.token[:20] if self.token else "(empty)"
-            tap_preview = self.tap_token[:20] if self.tap_token else "(empty)"
-            self.log(f"✅ Init OK | Balance: {self.balance} | Energy: {self.energy} | Token: {token_preview}... | TapToken: {tap_preview}...", "SUCCESS")
-            return True
-        else:
-            error = result.get('error') if result else 'No response'
-            self.log(f"❌ Init failed: {error}", "ERROR")
-            self.init_retry_count += 1
-            if self.init_retry_count >= 3:
-                self.log("⛔ Too many init failures. Returning to menu.", "ERROR")
-            return False
-
-    def ensure_token(self) -> bool:
-        if not self.token or not self.tap_token:
-            self.log("⚠️ Token missing, attempting init...", "WARNING")
-            if not self.init():
-                return False
-        return True
-
-    def refresh_tap_token(self):
-        self.log("🔄 Refresh tapToken...", "INFO")
-        return self.init()
-
-    # ==================== TAP - FIXED 20 TAPS ====================
-    def tap(self, taps: int = 20) -> bool:
-        if not self.ensure_token():
-            return False
-
-        tap_token_to_use = self.tap_token if self.tap_token else self.token
-
-        payload = {
-            "bot": self.bot_name,
+    def _call_tap(self, taps):
+        return self._call_fn(FN_TAP, {
             "initData": self.init_data,
             "taps": taps,
-            "token": tap_token_to_use
-        }
-        result = self._request("/v1/game/tap", data=payload)
+        })
 
-        if result and result.get("ok"):
-            self._update_player(result)
-            earned = result.get("gained", 0) or result.get("earned", 0)
-            self.total_earned += earned
-            self.tap_count += taps
+    def _call_state(self):
+        return self._call_fn(FN_STATE, {
+            "initData": self.init_data,
+        })
 
-            new_tap_token = result.get("tapToken")
-            if new_tap_token:
-                self.tap_token = new_tap_token
-                self.log(f"✅ Tap {taps}x | Earned: {earned} | Balance: {self.balance} | Energy: {self.energy} | TapToken updated", "SUCCESS")
-            else:
-                self.log(f"✅ Tap {taps}x | Earned: {earned} | Balance: {self.balance} | Energy: {self.energy}", "SUCCESS")
-            return True
-        else:
-            error = result.get('error') if result else 'No response'
-            if 'throttle' in str(error).lower() or 'too many' in str(error).lower():
-                wait = random.randint(30, 60)
-                self.log(f"⏳ Rate limited! Tunggu {wait} detik...", "WARNING")
-                countdown_timer(wait, "⏳ Cooldown")
-                # Biarkan caller yang menangani retry
-                return False
-            elif 'cooldown' in str(error).lower():
-                self.log(f"⏳ Tap cooldown", "WARNING")
-                time.sleep(random_delay(10, 20))
-                return False
-            elif 'stale' in str(error).lower() or 'tapToken' in str(error).lower():
-                self.log(f"⚠️ Stale tap session, refresh tapToken...", "WARNING")
-                self.refresh_tap_token()
-                return self.tap(taps)
-            elif 'token' in str(error).lower() or 'invalid' in str(error).lower():
-                self.log(f"⚠️ Token error, re-init...", "WARNING")
-                self.token = ""
-                self.tap_token = ""
-                if not self.init():
-                    return False
-                return self.tap(taps)
-            else:
-                self.log(f"❌ Tap failed: {error}", "ERROR")
-                return False
+    def _call_boost(self, kind="turbo"):
+        return self._call_fn(FN_BOOST, {
+            "initData": self.init_data,
+            "kind": kind,
+        })
 
-    # ==================== TAP BATCH - 20 PER REQUEST + AUTO RETRY ====================
-    def tap_batch(self):
-        batch_size = self.batch_size
-        if batch_size <= 0:
-            batch_size = 50
+    # ---------- Parse response ----------
+    def _extract_result(self, resp):
+        """Extract result dari response TSS."""
+        if resp is None:
+            return None
+        if resp.status_code != 200:
+            return {"__http_error__": resp.status_code, "__text__": resp.text[:200]}
 
-        taps_done_in_batch = 0
-        retry_count = 0
-        max_retries = 10
-        while taps_done_in_batch < batch_size:
-            if self.energy <= 0:
-                self.log(f"⏳ Energy habis ({self.energy}), tunggu 60 detik...", "WARNING")
-                time.sleep(60)
-                if not self.init():
-                    return False
-                continue
+        parsed = parse_response(resp.text)
+        if not parsed:
+            return None
 
-            t = min(20, batch_size - taps_done_in_batch)
-            if t <= 0:
-                break
+        # Kalau list (NDJSON), ambil yang ada "result"
+        if isinstance(parsed, list):
+            for item in parsed:
+                if isinstance(item, dict) and "result" in str(item)[:200]:
+                    decoded = tss_decode(item)
+                    if isinstance(decoded, dict) and "result" in decoded:
+                        return decoded["result"]
+            # Fallback: coba decode tiap item
+            for item in parsed:
+                decoded = tss_decode(item)
+                if isinstance(decoded, dict) and "result" in decoded:
+                    return decoded["result"]
+            return parsed[0] if parsed else None
 
-            result = self.tap(t)
-            if not result:
-                # Tap gagal, coba retry jika energy masih ada
-                if self.energy <= 0:
-                    continue  # akan dihandle di atas
-                retry_count += 1
-                if retry_count > max_retries:
-                    self.log("❌ Terlalu banyak retry, hentikan batch.", "ERROR")
-                    return False
-                self.log(f"🔄 Retry {retry_count}/{max_retries} setelah gagal...", "WARNING")
-                time.sleep(5)
-                continue
+        # Kalau dict, decode langsung
+        decoded = tss_decode(parsed)
+        if isinstance(decoded, dict) and "result" in decoded:
+            return decoded["result"]
+        return decoded
 
-            # Reset retry count jika berhasil
-            retry_count = 0
-            taps_done_in_batch += t
-            if taps_done_in_batch < batch_size:
-                jeda = random.uniform(1.5, 3.5)
-                time.sleep(jeda)
+    # ---------- Actions ----------
+    def get_state(self):
+        """Fetch account state."""
+        resp = self._call_state()
+        result = self._extract_result(resp)
+        if not result or not isinstance(result, dict):
+            return False
 
-        self.log(f"✅ Batch {batch_size} taps selesai (total request: { (batch_size + 19)//20 } kali)", "SUCCESS")
+        player = result.get("player", {})
+        settings = result.get("settings", {})
+
+        if player:
+            self.balance = player.get("balance", 0) or 0
+            self.energy = player.get("energy", 0) or 0
+            self.energy_max = player.get("energyMax", 1000) or 1000
+            self.taps_since_ad = player.get("tapsSinceAd", 0) or 0
+            self.wallet = player.get("wallet", "") or ""
+            self.boost_active = bool(player.get("boostActive", False))
+            self.boost_multiplier = player.get("boostMultiplier", 1) or 1
+            self.boost_until = player.get("boostUntil")
+
+        if settings:
+            self.tap_reward = settings.get("tapReward", 500) or 500
+            self.energy_per_tap = settings.get("energyPerTap", 5) or 5
+            self.ad_break_taps = settings.get("adBreakTaps", 30) or 30
+
         return True
 
-    # ==================== CLAIM STREAK ====================
-    def claim_streak(self) -> bool:
-        if not self.ensure_token():
-            return False
+    def do_tap(self, taps=20):
+        """Send tap request (batch 20x)."""
+        resp = self._call_tap(taps)
+        if resp is None:
+            return False, "no response"
 
-        self.log("🔥 Claim streak...", "INFO")
-        payload = {
-            "bot": self.bot_name,
-            "initData": self.init_data
-        }
-        result = self._request("/v1/game/streak", data=payload)
-        if result and result.get("ok"):
-            reward = result.get("reward", 0)
-            self._update_player(result)
-            self.streak_count += 1
-            self.total_earned += reward
-            self.log(f"✅ Streak claimed! Reward: {reward} | Balance: {self.balance}", "SUCCESS")
-            return True
+        if resp.status_code != 200:
+            return False, f"HTTP {resp.status_code}"
+
+        parsed = parse_response(resp.text)
+        if not parsed:
+            return False, "invalid JSON"
+
+        # Cari result dalam list
+        result = None
+        if isinstance(parsed, list):
+            for item in parsed:
+                dec = tss_decode(item)
+                if isinstance(dec, dict) and "result" in dec:
+                    result = dec["result"]
+                    break
         else:
-            error = result.get('error') if result else 'No response'
-            if 'cooldown' in str(error).lower() or 'already' in str(error).lower():
-                self.log(f"⏳ Streak: {error}", "WARNING")
-            else:
-                self.log(f"❌ Streak failed: {error}", "ERROR")
-            return False
+            dec = tss_decode(parsed)
+            if isinstance(dec, dict) and "result" in dec:
+                result = dec["result"]
 
-    # ==================== SPIN ====================
-    def spin(self) -> bool:
-        if not self.ensure_token():
-            return False
+        if not result or not isinstance(result, dict):
+            return False, "no result"
 
-        self.log("🎰 Spin...", "INFO")
-        payload = {
-            "bot": self.bot_name,
-            "initData": self.init_data
-        }
-        result = self._request("/v1/game/spin", data=payload)
-        if result and result.get("ok"):
-            reward = result.get("reward", 0)
-            self._update_player(result)
-            self.total_earned += reward
-            self.log(f"✅ Spin OK | Reward: {reward} | Balance: {self.balance}", "SUCCESS")
-            return True
+        if "error" in result and result["error"]:
+            return False, str(result["error"])[:80]
+
+        self.balance = result.get("balance", self.balance)
+        self.energy = result.get("energy", self.energy)
+        self.taps_since_ad = result.get("tapsSinceAd", self.taps_since_ad)
+
+        return True, result
+
+    def activate_boost(self, kind="turbo"):
+        """Activate turbo/full energy boost."""
+        resp = self._call_boost(kind)
+        if resp is None:
+            return False, "no response"
+
+        if resp.status_code != 200:
+            return False, f"HTTP {resp.status_code}"
+
+        parsed = parse_response(resp.text)
+        result = None
+        if isinstance(parsed, list):
+            for item in parsed:
+                dec = tss_decode(item)
+                if isinstance(dec, dict) and "result" in dec:
+                    result = dec["result"]
+                    break
         else:
-            error = result.get('error') if result else 'No response'
-            if 'cooldown' in str(error).lower():
-                self.log(f"⏳ Spin cooldown", "WARNING")
-            else:
-                self.log(f"❌ Spin failed: {error}", "ERROR")
-            return False
+            dec = tss_decode(parsed)
+            if isinstance(dec, dict) and "result" in dec:
+                result = dec["result"]
 
-    # ==================== TASKS ====================
-    def get_tasks(self) -> list:
-        if not self.ensure_token():
-            return []
+        if not result or not isinstance(result, dict):
+            return False, "no result"
 
-        self.log("📋 Ambil tasks...", "INFO")
-        payload = {
-            "bot": self.bot_name,
-            "initData": self.init_data
-        }
-        result = self._request("/v1/game/tasks", data=payload)
-        if result and result.get("ok"):
-            tasks = result.get("tasks", [])
-            self.log(f"📋 {len(tasks)} tasks available", "INFO")
-            return tasks
-        return []
+        if "error" in result and result["error"]:
+            return False, str(result["error"])[:80]
 
-    def start_task(self, task_id: str) -> bool:
-        if not self.ensure_token():
-            return False
+        self.energy = result.get("energy", self.energy)
+        self.boost_until = result.get("boostUntil", self.boost_until)
+        self.boost_multiplier = result.get("boostMultiplier", self.boost_multiplier)
+        return True, result
 
-        self.log(f"▶️ Start task {task_id[:8]}...", "INFO")
-        payload = {
-            "bot": self.bot_name,
-            "initData": self.init_data,
-            "task_id": task_id
-        }
-        result = self._request("/v1/game/task/start", data=payload)
-        if result and result.get("ok"):
-            self.log(f"✅ Task {task_id[:8]} started", "SUCCESS")
-            return True
-        else:
-            error = result.get('error') if result else 'No response'
-            self.log(f"❌ Start task failed: {error}", "ERROR")
-            return False
+    def refill_energy(self):
+        """Refill energy via custom endpoint."""
+        if not self.refill_endpoint:
+            return False, "no endpoint"
 
-    def submit_task(self, task_id: str, max_retries: int = 5) -> bool:
-        if not self.ensure_token():
-            return False
-
-        for attempt in range(max_retries):
-            self.log(f"📤 Submit task {task_id[:8]} (attempt {attempt+1}/{max_retries})...", "INFO")
-            data = {
-                "bot": self.bot_name,
-                "initData": self.init_data,
-                "task_id": task_id
-            }
-            result = self._request("/v1/game/task/submit", data=data, multipart=True)
-
-            if result and result.get("ok"):
-                reward = result.get("reward", 0)
-                self._update_player(result)
-                self.total_earned += reward
-                self.completed_tasks.append(task_id)
-                self.log(f"✅ Task {task_id[:8]} submitted! Reward: {reward}", "SUCCESS")
-                return True
-            else:
-                error = result.get('error') if result else 'No response'
-                wait_sec = extract_wait_seconds(str(error))
-                if wait_sec:
-                    self.log(f"⏳ Server minta tunggu {wait_sec} detik...", "WARNING")
-                    countdown_timer(wait_sec, "⏳ Waiting before retry")
-                    continue
-                elif 'already' in str(error).lower():
-                    self.log(f"⏳ Task already submitted", "WARNING")
-                    return True
-                else:
-                    self.log(f"❌ Submit task failed: {error}", "ERROR")
-                    return False
-
-        self.log(f"❌ Gagal submit task {task_id[:8]} setelah {max_retries} percobaan", "ERROR")
-        return False
-
-    def claim_tasks(self):
-        self.log("📋 Claim tasks...", "INFO")
-        tasks = self.get_tasks()
-        if not tasks:
-            self.log("✅ Tidak ada task", "SUCCESS")
-            return
-
-        for task in tasks:
-            task_id = task.get("id")
-            status = task.get("state", "available")
-            title = task.get("title", "Unknown")[:25]
-
-            if status == "available":
-                self.log(f"📌 Task: {title}", "INFO")
-                if self.start_task(task_id):
-                    delay = random_delay(2, 5)
-                    time.sleep(delay)
-                    self.submit_task(task_id)
-                    delay = random_delay(1, 3)
-                    time.sleep(delay)
-                else:
-                    self.log(f"⚠️ Gagal start task {title}, skip", "WARNING")
-            else:
-                self.log(f"⏭️ Skip {title} (status: {status})", "DIM")
-
-    # ==================== WITHDRAW ====================
-    def set_withdraw_address(self, address: str) -> bool:
-        if not self.ensure_token():
-            return False
-
-        self.log(f"💳 Set withdraw address: {address[:10]}...", "INFO")
-        payload = {
-            "bot": self.bot_name,
-            "initData": self.init_data,
-            "address": address
-        }
-        result = self._request("/v1/game/withdraw-address", data=payload)
-        if result and result.get("ok"):
-            self.withdraw_address_set = address
-            self._update_player(result)
-            self.log(f"✅ Withdraw address set!", "SUCCESS")
-            return True
-        else:
-            error = result.get('error') if result else 'No response'
-            self.log(f"❌ Set address failed: {error}", "ERROR")
-            return False
-
-    def withdraw(self, amount: int) -> bool:
-        if not self.ensure_token():
-            return False
-
-        if amount <= 0:
-            self.log(f"⚠️ Nominal harus > 0", "WARNING")
-            return False
-
-        if not self.withdraw_address_set:
-            self.log(f"⚠️ Belum ada withdraw address!", "WARNING")
-            return False
-
-        self.log(f"💸 Withdraw {amount}...", "INFO")
-        payload = {
-            "bot": self.bot_name,
-            "initData": self.init_data,
-            "amount": amount
-        }
-        result = self._request("/v1/game/withdraw", data=payload)
-        if result and result.get("ok"):
-            self._update_player(result)
-            self.log(f"✅ Withdraw {amount} successful! Sisa balance: {self.balance}", "SUCCESS")
-            return True
-        else:
-            error = result.get('error') if result else 'No response'
-            self.log(f"❌ Withdraw failed: {error}", "ERROR")
-            return False
-
-    def withdraw_menu(self):
-        self.log("💸 WITHDRAW MENU", "INFO")
-
-        if not self.init():
-            self.log("❌ Init failed", "ERROR")
-            return
-
-        print(f"\n{CYAN}📊 Current Balance: {GREEN}{self.balance}{RESET}")
-
-        if not self.withdraw_address_set:
-            self.log(f"⚠️ Belum ada withdraw address!", "WARNING")
-            addr = input(f"{YELLOW}📝 Masukkan alamat wallet (BEP-20): {RESET}").strip()
-            if not addr:
-                self.log(f"❌ Address kosong, withdraw dibatalkan", "ERROR")
-                return
-            if self.set_withdraw_address(addr):
-                config = Config()
-                config.load()
-                config.withdraw_address = addr
-                config.save()
-            else:
-                return
-
-        print(f"\n{CYAN}💰 Balance saat ini: {GREEN}{self.balance}{RESET}")
-        nominal_input = input(f"{YELLOW}📝 Masukkan nominal withdraw (atau ketik 'all' untuk semua): {RESET}").strip()
-
-        if nominal_input.lower() == 'all':
-            amount = self.balance
-        else:
-            try:
-                amount = int(nominal_input)
-            except:
-                self.log(f"❌ Nominal harus angka atau 'all'", "ERROR")
-                return
-
-        if amount <= 0:
-            self.log(f"❌ Nominal harus > 0", "ERROR")
-            return
-
-        if amount > self.balance:
-            self.log(f"❌ Nominal melebihi balance! Balance: {self.balance}", "ERROR")
-            return
-
-        print(f"\n{YELLOW}⚠️ Konfirmasi withdraw:{RESET}")
-        print(f"  Address: {self.withdraw_address_set}")
-        print(f"  Amount : {amount}")
-        confirm = input(f"{PINK}Lanjutkan? (y/n): {RESET}").strip().lower()
-
-        if confirm == 'y':
-            self.withdraw(amount)
-        else:
-            self.log("❌ Withdraw dibatalkan", "WARNING")
-
-        self.show_status()
-
-    # ==================== STATUS ====================
-    def check_balance(self) -> bool:
-        self.log("📊 Check balance...", "INFO")
-        if not self.init():
-            return False
-        self.show_status()
-        return True
-
-    def show_status(self):
-        addr_preview = self.withdraw_address_set[:12] + "..." if self.withdraw_address_set else "(not set)"
-        print(f"""
-{GREEN}╔══════════════════════════════════════════════════════════╗
-║  🐸 PEPE TAP STATUS                                     ║
-╠══════════════════════════════════════════════════════════╣
-║  {WHITE}Balance {GREEN}: {self.balance}
-║  {WHITE}Energy  {GREEN}: {self.energy}
-║  {WHITE}Taps   {GREEN}: {self.tap_count}
-║  {WHITE}Streak {GREEN}: {self.streak_count}
-║  {WHITE}Earned {GREEN}: {self.total_earned}
-║  {WHITE}Tasks  {GREEN}: {len(self.completed_tasks)}
-║  {WHITE}Address{GREEN}: {addr_preview}
-╚══════════════════════════════════════════════════════════╝{RESET}
-""")
-
-    # ==================== AUTO TAP ====================
-    def auto_tap_unlimited(self):
-        tap_limit = self.tap_limit
-        if tap_limit > 0:
-            self.log(f"👆 AUTO TAP BATCH MODE START (limit: {tap_limit} taps, batch: {self.batch_size})", "SUCCESS")
-        else:
-            self.log(f"👆 AUTO TAP BATCH MODE START (unlimited, batch: {self.batch_size})", "SUCCESS")
-        self.log("⏹️  Tekan Ctrl+C untuk berhenti", "WARNING")
-
-        if not self.init():
-            self.log("❌ Init failed, returning to menu.", "ERROR")
-            return False
-
-        total_taps_done = 0
+        url = f"{BASE_URL}/_serverFn/{self.refill_endpoint}"
+        payload = build_server_fn_payload({"initData": self.init_data})
         try:
-            while True:
-                if tap_limit > 0 and total_taps_done >= tap_limit:
-                    self.log(f"✅ Tap limit ({tap_limit}) tercapai! Selesai.", "SUCCESS")
-                    break
+            r = self.session.post(url, json=payload, timeout=30)
+            if r.status_code != 200:
+                return False, f"HTTP {r.status_code}"
+            parsed = parse_response(r.text)
+            dec = tss_decode(parsed[0] if isinstance(parsed, list) else parsed)
+            result = dec.get("result") if isinstance(dec, dict) else None
+            if result and isinstance(result, dict):
+                self.energy = result.get("energy", self.energy)
+                return True, result
+            return False, "no result"
+        except Exception as e:
+            return False, str(e)
 
-                if self.energy <= 0:
-                    self.log(f"⏳ Energy habis ({self.energy}), tunggu 60 detik...", "WARNING")
+    # ---------- Display ----------
+    def show_status(self):
+        boost_str = "OFF"
+        boost_color = C.DIM
+        if self.boost_active:
+            boost_str = f"ACTIVE x{self.boost_multiplier}"
+            boost_color = C.SUCCESS
+
+        wallet_display = (self.wallet[:14] + "...") if self.wallet else "(not set)"
+        runtime = datetime.now() - self.start_time
+        h, r = divmod(int(runtime.total_seconds()), 3600)
+        m, s = divmod(r, 60)
+
+        print()
+        line_eq()
+        cprint(f"  🐸 {C.BOLD}{C.GREEN_M}PEPE TAP MINER — STATUS{C.RESET}", C.GREEN_M)
+        line_eq()
+        cprint(f"  {C.SUCCESS}Balance  {C.RESET}: {C.BOLD}{C.GOLD}{self.balance:,}{C.RESET} PEPE")
+        cprint(f"  {C.SUCCESS}Energy   {C.RESET}: {C.LAVENDER}{self.energy}/{self.energy_max}{C.RESET}")
+        cprint(f"  {C.SUCCESS}Total Tap{C.RESET}: {C.LAVENDER}{self.total_taps}{C.RESET}")
+        cprint(f"  {C.SUCCESS}Earned   {C.RESET}: {C.GOLD}{self.total_earned:,}{C.RESET} PEPE")
+        cprint(f"  {C.SUCCESS}Claims   {C.RESET}: {C.LAVENDER}{self.claims}{C.RESET}")
+        cprint(f"  {C.SUCCESS}Boost    {C.RESET}: {boost_color}{boost_str}{C.RESET}")
+        cprint(f"  {C.SUCCESS}Wallet   {C.RESET}: {C.DIM}{wallet_display}{C.RESET}")
+        cprint(f"  {C.SUCCESS}Taps/Ad  {C.RESET}: {C.LAVENDER}{self.taps_since_ad}/{self.ad_break_taps}{C.RESET}")
+        cprint(f"  {C.SUCCESS}Runtime  {C.RESET}: {C.LAVENDER}{h:02d}:{m:02d}:{s:02d}{C.RESET}")
+        line_eq()
+
+    # ---------- Auto farm ----------
+    def auto_farm(self, tap_batch=20, max_energy_refill=5):
+        print()
+        line_eq()
+        cprint(f"  🚀 {C.BOLD}{C.GREEN_M}AUTO FARM STARTED{C.RESET}", C.GREEN_M)
+        line_eq()
+        cprint(f"  {C.SUCCESS}Tap batch{C.RESET}: {tap_batch}x per request")
+        cprint(f"  {C.SUCCESS}Max refill{C.RESET}: {max_energy_refill}x")
+        print()
+        cprint(f"  {C.WARN}⏹️  Tekan Ctrl+C untuk stop{C.RESET}")
+        print()
+        time.sleep(1)
+
+        # Fetch state awal
+        if not self.get_state():
+            cprint(f"  {C.ERROR}✗ Gagal fetch state!{C.RESET}")
+            return
+        cprint(f"  {C.SUCCESS}✓ State OK{C.RESET} | Balance: {C.GOLD}{self.balance:,}{C.RESET} | Energy: {C.LAVENDER}{self.energy}/{self.energy_max}{C.RESET}")
+        time.sleep(0.5)
+
+        refill_count = 0
+        cycle = 0
+
+        while True:
+            cycle += 1
+
+            # 1. Cek energy
+            if self.energy < self.energy_per_tap * tap_batch:
+                cprint(f"\n  {C.WARN}⚠ Energy rendah ({self.energy}){C.RESET}")
+
+                # Coba refill dulu
+                if refill_count < max_energy_refill:
+                    if self.refill_endpoint:
+                        cprint(f"  {C.INFO}🔋 Refill energy...{C.RESET}")
+                        ok, msg = self.refill_energy()
+                        if ok:
+                            refill_count += 1
+                            cprint(f"  {C.SUCCESS}✓ Energy refilled: {self.energy}/{self.energy_max} ({refill_count}/{max_energy_refill}){C.RESET}")
+                            continue
+                        else:
+                            cprint(f"  {C.ERROR}✗ Refill gagal: {msg}{C.RESET}")
+                    else:
+                        cprint(f"  {C.WARN}⚠ Refill endpoint belum di-set (menu 4){C.RESET}")
+
+                # Kalau gak bisa refill, tunggu regen atau stop
+                if self.energy < self.energy_per_tap:
+                    cprint(f"  {C.ERROR}✗ Energy habis. Tunggu 60s...{C.RESET}")
                     time.sleep(60)
-                    if not self.init():
-                        self.log("❌ Init failed during energy wait, returning to menu.", "ERROR")
-                        return False
+                    self.get_state()
                     continue
+                else:
+                    # Bisa tap sedikit
+                    taps = self.energy // self.energy_per_tap
+                    taps = min(taps, tap_batch)
 
-                # Jalankan batch, dengan retry otomatis di dalamnya
-                batch_success = self.tap_batch()
-                if not batch_success:
-                    self.log("❌ Tap batch gagal, mencoba ulang setelah jeda...", "WARNING")
-                    time.sleep(10)
-                    continue  # coba lagi
+            else:
+                taps = tap_batch
 
-                total_taps_done += self.batch_size
+            # 2. Cek ad break
+            if self.taps_since_ad + taps >= self.ad_break_taps:
+                cprint(f"  {C.WARN}⚠ Ad break triggered ({self.taps_since_ad + taps}/{self.ad_break_taps}){C.RESET}")
+                # Coba tap sampai ad break
+                remaining = self.ad_break_taps - self.taps_since_ad
+                if remaining > 0:
+                    taps = remaining
 
-                if tap_limit > 0 and total_taps_done >= tap_limit:
-                    self.log(f"✅ Tap limit ({tap_limit}) tercapai! Selesai.", "SUCCESS")
-                    break
+            # 3. Execute tap
+            cprint(f"\n  {C.INFO}▶ Cycle #{cycle:02d}{C.RESET} — Tap {C.BOLD}{taps}x{C.RESET}...")
+            ok, data = self.do_tap(taps)
 
-                delay = random.uniform(self.batch_delay_min, self.batch_delay_max)
-                self.log(f"⏳ Jeda batch {delay:.1f} detik... ({total_taps_done}/{tap_limit if tap_limit > 0 else '∞'})", "DIM")
-                time.sleep(delay)
+            if not ok:
+                cprint(f"  {C.ERROR}✗ Tap gagal: {data}{C.RESET}")
+                time.sleep(random.uniform(3, 6))
+                continue
 
-        except KeyboardInterrupt:
-            self.log("🛑 Auto Tap dihentikan", "WARNING")
-        finally:
-            self.show_status()
-        return True
+            earned = taps * self.tap_reward
+            self.total_taps += taps
+            self.total_earned += earned
+            self.claims += 1
 
-    # ==================== AUTO CLAIM ====================
-    def auto_claim(self):
-        self.log("🎯 AUTO CLAIM START", "SUCCESS")
+            cprint(f"  {C.SUCCESS}✓ +{earned:,} PEPE{C.RESET} | "
+                   f"Bal: {C.GOLD}{self.balance:,}{C.RESET} | "
+                   f"Energy: {C.LAVENDER}{self.energy}/{self.energy_max}{C.RESET} | "
+                   f"Ad: {self.taps_since_ad}/{self.ad_break_taps}")
 
-        if not self.init():
-            self.log("❌ Init failed, returning to menu.", "ERROR")
-            return False
+            # 4. Auto boost (turbo) kalau energy mau habis tapi boost belum aktif
+            if not self.boost_active and self.energy < self.energy_max * 0.3:
+                cprint(f"  {C.INFO}⚡ Trying to activate turbo boost...{C.RESET}")
+                ok, bdata = self.activate_boost("turbo")
+                if ok:
+                    self.boost_active = True
+                    cprint(f"  {C.SUCCESS}✓ Turbo boost activated! x{self.boost_multiplier}{C.RESET}")
+                else:
+                    cprint(f"  {C.DIM}  Boost tidak tersedia: {bdata}{C.RESET}")
 
-        self.claim_streak()
-        time.sleep(random_delay(1, 3))
+            # 5. Kalau ad break triggered, pause
+            if self.taps_since_ad >= self.ad_break_taps:
+                cprint(f"  {C.WARN}🎬 Ad break required! Tunggu 30s untuk reset...{C.RESET}")
+                time.sleep(30)
+                # Refresh state
+                self.get_state()
 
-        self.spin()
-        time.sleep(random_delay(1, 3))
+            # 6. Delay antar batch
+            delay = random.uniform(1.5, 3.5)
+            time.sleep(delay)
 
-        self.claim_tasks()
-        time.sleep(random_delay(1, 3))
+    def claim_task(self):
+        """Claim task reward."""
+        if not self.task_endpoint:
+            return False, "no endpoint"
 
-        self.show_status()
-        self.log("✅ AUTO CLAIM DONE", "SUCCESS")
-        return True
+        url = f"{BASE_URL}/_serverFn/{self.task_endpoint}"
+        payload = build_server_fn_payload({"initData": self.init_data})
+        try:
+            r = self.session.post(url, json=payload, timeout=30)
+            if r.status_code != 200:
+                return False, f"HTTP {r.status_code}"
+            parsed = parse_response(r.text)
+            dec = tss_decode(parsed[0] if isinstance(parsed, list) else parsed)
+            result = dec.get("result") if isinstance(dec, dict) else None
+            if result and isinstance(result, dict):
+                return True, result
+            return False, "no result"
+        except Exception as e:
+            return False, str(e)
 
-# ==================== MENU ====================
-def menu():
-    config = Config()
-    config.load()
+
+# ═══════════════════════════════════════════════════════════════
+#  MENU
+# ═══════════════════════════════════════════════════════════════
+def setup_config(cfg):
+    os.system("cls" if os.name == "nt" else "clear")
+    print_logo()
+    line_eq()
+    cprint(f"  ⚙️ {C.BOLD}{C.GREEN_M}SETUP CONFIGURATION{C.RESET}", C.GREEN_M)
+    line_eq()
+    print()
+
+    # Init Data
+    cprint(f"  {C.SUCCESS}[1]{C.RESET} {C.BOLD}Init Data (Telegram WebApp){C.RESET}")
+    cprint(f"     {C.DIM}Cara ambil: Buka https://pepeminertap.lovable.app/app via Telegram Desktop{C.RESET}")
+    cprint(f"     {C.DIM}Cek URL hash: #tgWebAppData=query_id%3D...{C.RESET}")
+    cprint(f"     {C.DIM}Copy nilai setelah 'tgWebAppData=' (url-decoded){C.RESET}")
+    print()
+    cprint(f"     {C.DIM}Atau copy dari request POST body:{C.RESET}")
+    cprint(f"     {C.DIM}'initData': 'query_id=AAGuk-oa...' (sampai sebelum '&hash' TAPI sertakan hash){C.RESET}")
+    print()
+    current = cfg.get("init_data", "")
+    if current:
+        cprint(f"     {C.LAVENDER}Current: {current[:60]}...{C.RESET}")
+    new = input(f"  {C.GREEN_M}▸ Paste init data (kosong untuk skip): {C.RESET}").strip()
+    if new:
+        if "query_id=" not in new:
+            cprint(f"  {C.ERROR}[!] Harus mengandung 'query_id='.{C.RESET}")
+        else:
+            # Strip prefix kalau ada
+            if "tma " in new.lower():
+                new = new.split("tma ", 1)[1]
+            cfg["init_data"] = new
+            cprint(f"  {C.SUCCESS}✓ Init data disimpan ({len(new)} chars){C.RESET}")
+
+    print()
+    line_dash()
+    print()
+
+    # Refill Endpoint (opsional)
+    cprint(f"  {C.SUCCESS}[2]{C.RESET} {C.BOLD}Refill Endpoint (opsional){C.RESET}")
+    cprint(f"     {C.DIM}Server function hash untuk refill energy.{C.RESET}")
+    cprint(f"     {C.DIM}Cek di network tab saat klik 'Refill Energy'.{C.RESET}")
+    print()
+    current = cfg.get("refill_endpoint", "")
+    if current:
+        cprint(f"     {C.LAVENDER}Current: {current[:40]}...{C.RESET}")
+    new = input(f"  {C.GREEN_M}▸ Refill hash (kosong untuk skip): {C.RESET}").strip()
+    if new:
+        cfg["refill_endpoint"] = new
+        cprint(f"  {C.SUCCESS}✓ Refill endpoint disimpan{C.RESET}")
+
+    print()
+    line_dash()
+    print()
+
+    # Task Endpoint (opsional)
+    cprint(f"  {C.SUCCESS}[3]{C.RESET} {C.BOLD}Task Claim Endpoint (opsional){C.RESET}")
+    cprint(f"     {C.DIM}Server function hash untuk claim task.{C.RESET}")
+    print()
+    current = cfg.get("task_endpoint", "")
+    if current:
+        cprint(f"     {C.LAVENDER}Current: {current[:40]}...{C.RESET}")
+    new = input(f"  {C.GREEN_M}▸ Task hash (kosong untuk skip): {C.RESET}").strip()
+    if new:
+        cfg["task_endpoint"] = new
+        cprint(f"  {C.SUCCESS}✓ Task endpoint disimpan{C.RESET}")
+
+    save_config(cfg)
+    print()
+    cprint(f"  {C.SUCCESS}✓ Config saved to {CONFIG_FILE}{C.RESET}")
+    input(f"\n  {C.GREEN_M}Tekan ENTER untuk kembali...{C.RESET}")
+
+
+def main():
+    os.system("cls" if os.name == "nt" else "clear")
+    print_logo()
+
+    cfg = load_config()
 
     while True:
-        print(BANNER)
-        print(f"""
-{CYAN}╔════════════════════════════════════════════════════════════╗
-║                      MAIN MENU                               ║
-╠════════════════════════════════════════════════════════════╣
-║  {GREEN}[1]{RESET} 👆 Auto Tap (Batch Mode, 20 taps/req)           ║
-║  {YELLOW}[2]{RESET} 🎯 Auto Claim (Streak + Spin + Tasks)       ║
-║  {CYAN}[3]{RESET} 📝 Set InitData                               ║
-║  {BLUE}[4]{RESET} 📊 Check Balance                              ║
-║  {LIME}[5]{RESET} 📊 Set Tap Limit                              ║
-║  {GOLD}[6]{RESET} 💸 Withdraw (Set Address + Nominal)           ║
-║  {PINK}[7]{RESET} ⚙️ Set Tap Batch (Size + Jeda)                ║
-║  {RED}[0]{RESET} ❌ Exit                                        ║
-╚════════════════════════════════════════════════════════════╝{RESET}
-""")
+        print()
+        line_eq()
+        cprint(f"  🎮 {C.BOLD}{C.GREEN_M}MAIN MENU{C.RESET}", C.GREEN_M)
+        line_eq()
+        cprint(f"  {C.SUCCESS}[1]{C.RESET} 🚀  Auto Farm (Tap + Boost + Refill)")
+        cprint(f"  {C.SUCCESS}[2]{C.RESET} 📊  Check State / Status")
+        cprint(f"  {C.SUCCESS}[3]{C.RESET} ⚡  Activate Turbo Boost")
+        cprint(f"  {C.SUCCESS}[4]{C.RESET} 🔋  Refill Energy")
+        cprint(f"  {C.SUCCESS}[5]{C.RESET} ⚙️   Setup Config")
+        cprint(f"  {C.ERROR}[0]{C.RESET} ❌  Exit")
+        line_eq()
+        print()
 
-        if config.init_data:
-            print(f"{GREEN}✅ InitData tersimpan (panjang: {len(config.init_data)}){RESET}")
-        else:
-            print(f"{RED}❌ InitData belum diset!{RESET}")
+        # Show current config status
+        init_ok = "✓" if cfg.get("init_data") else "✗"
+        refill_ok = "✓" if cfg.get("refill_endpoint") else "○"
+        cprint(f"  {C.DIM}Status: init={init_ok} refill={refill_ok}{C.RESET}")
+        print()
 
-        if config.tap_limit > 0:
-            print(f"{LIME}📊 Tap Limit: {config.tap_limit}{RESET}")
-        else:
-            print(f"{DIM}📊 Tap Limit: Unlimited{RESET}")
+        choice = input(f"  {C.GREEN_M}▸ Pilih: {C.RESET}").strip()
 
-        if config.withdraw_address:
-            print(f"{GOLD}💳 Address: {config.withdraw_address[:12]}...{RESET}")
-        else:
-            print(f"{RED}💳 Address: Not set{RESET}")
-
-        print(f"{PINK}⚙️ Batch: {config.tap_batch_size} taps, Jeda {config.tap_batch_delay_min}-{config.tap_batch_delay_max}s{RESET}")
-
-        choice = input(f"\n{PINK}❯ Pilih: {RESET}").strip()
-
-        if choice == '0':
-            print(f"{YELLOW}👋 Bye!{RESET}")
+        if choice == "0":
+            cprint(f"\n  {C.GREEN_M}👋 Bye!{C.RESET}")
             sys.exit(0)
 
-        elif choice == '1':
-            if not config.init_data:
-                print(f"{RED}❌ InitData belum diset. Set dulu (menu 3).{RESET}")
-                input("Tekan Enter untuk kembali...")
+        elif choice == "1":
+            if not cfg.get("init_data"):
+                cprint(f"\n  {C.ERROR}✗ Init data belum di-set! Pilih [5]{C.RESET}")
+                input("  Tekan ENTER...")
                 continue
-            bot = PepeTapBot(config.init_data, config.tap_limit, config.withdraw_address,
-                             config.tap_batch_size, config.tap_batch_delay_min, config.tap_batch_delay_max)
-            bot.auto_tap_unlimited()
-            input("Tekan Enter untuk kembali ke menu...")
+            bot = PepeTapBot(
+                init_data=cfg["init_data"],
+                refill_endpoint=cfg.get("refill_endpoint", ""),
+                task_endpoint=cfg.get("task_endpoint", ""),
+            )
+            try:
+                bot.auto_farm(tap_batch=20, max_energy_refill=5)
+            except KeyboardInterrupt:
+                print()
+                cprint(f"\n  {C.WARN}⏹️  Auto farm dihentikan.{C.RESET}")
+                bot.show_status()
+                input("  Tekan ENTER...")
 
-        elif choice == '2':
-            if not config.init_data:
-                print(f"{RED}❌ InitData belum diset. Set dulu (menu 3).{RESET}")
-                input("Tekan Enter untuk kembali...")
+        elif choice == "2":
+            if not cfg.get("init_data"):
+                cprint(f"\n  {C.ERROR}✗ Init data belum di-set!{C.RESET}")
+                input("  Tekan ENTER...")
                 continue
-            bot = PepeTapBot(config.init_data, config.tap_limit, config.withdraw_address,
-                             config.tap_batch_size, config.tap_batch_delay_min, config.tap_batch_delay_max)
-            bot.auto_claim()
-            input("Tekan Enter untuk kembali ke menu...")
-
-        elif choice == '3':
-            print(f"{YELLOW}📝 Masukkan InitData dari Reqable:{RESET}")
-            print(f"{DIM}Copy dari body request POST /v1/game/init{RESET}")
-            qid = input("InitData: ").strip()
-            if qid:
-                config.init_data = qid
-                config.save()
-                print(f"{GREEN}✅ InitData disimpan!{RESET}")
+            bot = PepeTapBot(cfg["init_data"])
+            loading_bar("Fetching state", 1.0)
+            if bot.get_state():
+                bot.show_status()
             else:
-                print(f"{RED}❌ InitData tidak boleh kosong!{RESET}")
-            input("Tekan Enter untuk kembali...")
+                cprint(f"  {C.ERROR}✗ Gagal fetch state!{C.RESET}")
+            input("\n  Tekan ENTER...")
 
-        elif choice == '4':
-            if not config.init_data:
-                print(f"{RED}❌ InitData belum diset.{RESET}")
+        elif choice == "3":
+            if not cfg.get("init_data"):
+                cprint(f"\n  {C.ERROR}✗ Init data belum di-set!{C.RESET}")
+                input("  Tekan ENTER...")
+                continue
+            bot = PepeTapBot(cfg["init_data"])
+            loading_bar("Activating turbo", 1.0)
+            ok, data = bot.activate_boost("turbo")
+            if ok:
+                cprint(f"  {C.SUCCESS}✓ Turbo boost activated!{C.RESET}")
+                cprint(f"  {C.LAVENDER}  Energy   : {data.get('energy')}{C.RESET}")
+                cprint(f"  {C.LAVENDER}  Until    : {data.get('boostUntil')}{C.RESET}")
+                cprint(f"  {C.LAVENDER}  Multi    : x{data.get('boostMultiplier')}{C.RESET}")
             else:
-                bot = PepeTapBot(config.init_data, config.tap_limit, config.withdraw_address,
-                                 config.tap_batch_size, config.tap_batch_delay_min, config.tap_batch_delay_max)
-                if not bot.init():
-                    print(f"{RED}❌ InitData tidak valid, silakan perbarui.{RESET}")
-                else:
-                    bot.show_status()
-            input("Tekan Enter untuk kembali...")
+                cprint(f"  {C.ERROR}✗ Gagal: {data}{C.RESET}")
+            input("\n  Tekan ENTER...")
 
-        elif choice == '5':
-            print(f"{LIME}📊 Set Tap Limit:{RESET}")
-            print(f"{DIM}0 = Unlimited, 50 = 50 taps per sesi, dst{RESET}")
-            limit = input(f"Masukkan limit: ").strip()
-            if limit.isdigit():
-                config.tap_limit = int(limit)
-                config.save()
-                print(f"{GREEN}✅ Tap Limit set ke: {config.tap_limit}{RESET}")
+        elif choice == "4":
+            if not cfg.get("refill_endpoint"):
+                cprint(f"\n  {C.ERROR}✗ Refill endpoint belum di-set! Pilih [5]{C.RESET}")
+                input("  Tekan ENTER...")
+                continue
+            bot = PepeTapBot(cfg["init_data"], refill_endpoint=cfg["refill_endpoint"])
+            loading_bar("Refilling energy", 1.0)
+            ok, data = bot.refill_energy()
+            if ok:
+                cprint(f"  {C.SUCCESS}✓ Energy refilled!{C.RESET}")
+                cprint(f"  {C.LAVENDER}  Energy: {data.get('energy')}{C.RESET}")
             else:
-                print(f"{RED}❌ Masukkan angka!{RESET}")
-            input("Tekan Enter untuk kembali...")
+                cprint(f"  {C.ERROR}✗ Gagal: {data}{C.RESET}")
+            input("\n  Tekan ENTER...")
 
-        elif choice == '6':
-            if not config.init_data:
-                print(f"{RED}❌ InitData belum diset.{RESET}")
-            else:
-                bot = PepeTapBot(config.init_data, config.tap_limit, config.withdraw_address,
-                                 config.tap_batch_size, config.tap_batch_delay_min, config.tap_batch_delay_max)
-                bot.withdraw_menu()
-            input("Tekan Enter untuk kembali...")
-
-        elif choice == '7':
-            print(f"{PINK}⚙️ Set Tap Batch:{RESET}")
-            print(f"{DIM}Contoh: batch 50, jeda 3-7 detik{RESET}")
-
-            batch = input(f"Jumlah tap per batch (default 50): ").strip()
-            if batch.isdigit():
-                config.tap_batch_size = int(batch)
-
-            delay_min = input(f"Jeda minimal antar batch (detik, default 3): ").strip()
-            if delay_min.replace('.', '').isdigit():
-                config.tap_batch_delay_min = float(delay_min)
-
-            delay_max = input(f"Jeda maksimal antar batch (detik, default 7): ").strip()
-            if delay_max.replace('.', '').isdigit():
-                config.tap_batch_delay_max = float(delay_max)
-
-            if config.tap_batch_delay_min > config.tap_batch_delay_max:
-                config.tap_batch_delay_min, config.tap_batch_delay_max = config.tap_batch_delay_max, config.tap_batch_delay_min
-
-            config.save()
-            print(f"{GREEN}✅ Batch set: {config.tap_batch_size} taps, Jeda {config.tap_batch_delay_min}-{config.tap_batch_delay_max}s{RESET}")
-            input("Tekan Enter untuk kembali...")
+        elif choice == "5":
+            setup_config(cfg)
+            cfg = load_config()
 
         else:
-            print(f"{RED}❌ Pilihan salah!{RESET}")
+            cprint(f"  {C.ERROR}Pilihan tidak valid.{C.RESET}")
             time.sleep(1)
+
 
 if __name__ == "__main__":
     try:
-        menu()
+        main()
     except KeyboardInterrupt:
-        print(f"\n{YELLOW}👋 Bye!{RESET}")
+        print()
+        cprint(f"\n  {C.WARN}👋 Keluar.{C.RESET}")
         sys.exit(0)
