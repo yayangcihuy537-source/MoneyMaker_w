@@ -189,7 +189,7 @@
           "runner": "python3"
         },
         "18": {
-          "label": "PepeTapXbot 🟡",
+          "label": "PepeMiner 🟢",
           "file": "PepeTap.py",
           "runner": "python3"
         },
