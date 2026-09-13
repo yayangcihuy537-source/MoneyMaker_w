@@ -84,9 +84,9 @@
           "runner": "python3"
         },
         "8": {
-          "label": "",
-          "file": "",
-          "runner": "python3"
+          "label": "99Faucet 🟢",
+          "file": "99faucet.php",
+          "runner": "php"
         },
         "9": {
           "label": "Coming Soon",
