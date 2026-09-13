@@ -89,8 +89,8 @@
           "runner": "php"
         },
         "9": {
-          "label": "Coming Soon",
-          "file": "",
+          "label": "FreeLTCfun 🟢",
+          "file": "fun.php",
           "runner": "php"
         },
         "10": {
