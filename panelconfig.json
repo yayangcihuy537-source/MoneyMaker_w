@@ -219,9 +219,9 @@
           "runner": "python3"
         },
         "24": {
-          "label": "Coming Soon",
-          "file": "",
-          "runner": "php"
+          "label": "PMT (Gram) 🟢",
+          "file": "pmt.py",
+          "runner": "python3"
         },
         "25": {
           "label": "Coming Soon",
