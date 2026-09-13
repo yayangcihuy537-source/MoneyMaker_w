@@ -1,7 +1,7 @@
 {
   "categories": {
     "1": {
-      "name": "NonApikey",
+      "name": "NonApikey 🟢",
       "items": {
         "1": {
           "label": "TronBlow 🟢",
@@ -29,7 +29,7 @@
           "runner": "php"
         },
         "6": {
-          "label": "DogeMiner 🔴",
+          "label": "DogeMiner 🟢",
           "file": "Doge.py",
           "runner": "python3"
         },
@@ -46,7 +46,7 @@
       }
     },
     "2": {
-      "name": "Apikey",
+      "name": "Apikey 🟢",
       "items": {
         "1": {
           "label": "LightQuest [ Only level 10 ] 🟢",
@@ -101,7 +101,7 @@
       }
     },
     "3": {
-      "name": "Telegram / MiniApp",
+      "name": "Telegram / MiniApp 🟡",
       "items": {
         "1": {
           "label": "Watch Ad Gamerle Vipfaucet MiniappFaucet&Crypto 🟢",
@@ -236,7 +236,7 @@
       }
     },
     "4": {
-      "name": "Tools / GetInidata",
+      "name": "Tools / GetInidata 🟢",
       "items": {
         "1": {
           "label": "Get PHPSESSID 🟢",
