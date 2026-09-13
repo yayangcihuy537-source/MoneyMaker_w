@@ -101,7 +101,7 @@
       }
     },
     "3": {
-      "name": "Telegram",
+      "name": "Telegram/MiniApp",
       "items": {
         "1": {
           "label": "Watch Ad Gamerle Vipfaucet MiniappFaucet&Crypto 🟢",
@@ -236,7 +236,7 @@
       }
     },
     "4": {
-      "name": "Tools",
+      "name": "Tools/GetInidata",
       "items": {
         "1": {
           "label": "Get PHPSESSID 🟢",
