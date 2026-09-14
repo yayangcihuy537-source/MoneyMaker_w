@@ -94,8 +94,8 @@
           "runner": "php"
         },
         "10": {
-          "label": "Coming Soon",
-          "file": "",
+          "label": "LightMiner 🟢",
+          "file": "miner.php",
           "runner": "php"
         }
       }
