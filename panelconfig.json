@@ -51,7 +51,7 @@
         "1": {
           "label": "LightQuest [ Only level 10 ] 🟢",
           "file": "light.py",
-          "runner": "php"
+          "runner": "python3"
         },
         "2": {
           "label": "LightQuest [ only level 1-9 ] 🟢",
