@@ -209,7 +209,7 @@
           "runner": "python3"
         },
         "22": {
-          "label": "FarmingMatesBot 🔴",
+          "label": "FarmingMatesBot 🟢",
           "file": "FarmingMatesBot.py",
           "runner": "python3"
         },
