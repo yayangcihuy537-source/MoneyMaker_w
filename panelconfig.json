@@ -111,7 +111,7 @@
         "2": {
           "label": "CoinFree X FaucetMini X Coinplay X FaucetFi 🟢",
           "file": "4in1.php",
-          "runner": "python3"
+          "runner": "php"
         },
         "3": {
           "label": "Pepeflow X CloakAds X CoinsZon 🟢",
