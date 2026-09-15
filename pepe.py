@@ -3,10 +3,11 @@
 ╔═══════════════════════════════════════════════════════════════╗
 ║  🚀 PEPEFLOW X CLOCKADS X COINSZON                           ║
 ║  AUTO CLAIM • AUTO GAMES • AUTO DOUBLE • AUTO SKIP LIMIT      ║
-║  🔐 AUTH via init_data (NO PHPSESSID)                         ║
+║  🔐 AUTH via init_data (NO PHPSESSID manual)                  ║
 ║  🎲 FINGERPRINT RANDOM setiap reauth                          ║
 ║  🎁 AUTO CLAIM PENDING WIN (WITH AD PROOF)                    ║
 ║  📅 AUTO CLAIM DAILY BONUS                                    ║
+║  🎡 CoinBot: LUCKY WHEEL SPINS EDITION                        ║
 ╚═══════════════════════════════════════════════════════════════╝
 """
 
@@ -30,6 +31,7 @@ CLOCK_URL = "https://clockads.in"
 COIN_URL  = "https://coinszon.com"
 
 UA = "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.47 Mobile Safari/537.36 Telegram-Android/12.6.4"
+COIN_UA = "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.7977.87 Mobile Safari/537.36 Telegram-Android/12.9.2 (Samsung SM-A556E; Android 16; SDK 36; HIGH)"
 
 # ---------- Game config per site ----------
 PEPE_GAMES = ["lucky_wheel"]
@@ -38,11 +40,8 @@ PEPE_GAME_MAP = {"lucky_wheel": {"display": "SPIN", "icon": "🎡"}}
 CLOCK_GAMES = ["lucky_wheel"]
 CLOCK_GAME_MAP = {"lucky_wheel": {"display": "SPIN", "icon": "🎡"}}
 
-COIN_GAMES = ["lucky_wheel", "slots"]
-COIN_GAME_MAP = {
-    "lucky_wheel": {"display": "SPIN",  "icon": "🎡"},
-    "slots":       {"display": "SLOTS", "icon": "🎰"},
-}
+COIN_GAMES = ["lucky_wheel"]
+COIN_GAME_MAP = {"lucky_wheel": {"display": "SPIN", "icon": "🎡"}}
 
 # ========== CONFIG ==========
 class BaseConfig:
@@ -480,29 +479,6 @@ class BaseBot:
             return self.play_game(game, doubled=False)
         elif game == "slots":
             return self.play_game("slots", doubled=False)
-        elif game == "scratch":
-            return self.play_game("scratch", doubled=False)
-        elif game == "treasure_dig":
-            token = self.start_treasure_dig()
-            if token:
-                pick = random.randint(0, 8)
-                return self.play_game("treasure_dig", pick=pick, quiz_token=token, answer_index=pick)
-            else:
-                self.log(f"{R}❌ Gagal ambil token treasure_dig{RESET}")
-                self.cooldowns["treasure_dig"] = 30
-                return None
-        elif game == "coin_catch":
-            score = random.randint(0, 5)
-            bombed = False
-            if random.random() < 0.2:
-                bombed = True
-                score = 0
-            diamonds = random.randint(0, 1) if not bombed else 0
-            return self.play_game(game, score=score, bombed=bombed, diamonds=diamonds)
-        elif game == "flappy_coin":
-            score = random.randint(0, 20)
-            survived = random.choice([True, False])
-            return self.play_game(game, score=score, survived=survived)
         return None
 
     # ---------- Claim Daily ----------
@@ -696,18 +672,468 @@ class ClockBot(BaseBot):
     def __init__(self, cfg):
         super().__init__(CLOCK_URL, cfg, CLOCK_GAMES, CLOCK_GAME_MAP, "ClockAds", "TRX")
 
-class CoinBot(BaseBot):
+
+# ============================================================
+# 🎡 COINSZON — SPINS EDITION
+# Endpoint: /actions/tg_auth.php, /actions/get_balance.php,
+#           /actions/mini_games.php, /pages/load_wheel.php
+# ============================================================
+class CoinBot:
     def __init__(self, cfg):
-        super().__init__(COIN_URL, cfg, COIN_GAMES, COIN_GAME_MAP, "Coinszon", "COIN")
+        self.cfg = cfg
+        self.name = "Coinszon"
+        self.currency = "LTC"
+        self.url = COIN_URL
+        self.session = requests.Session()
+        self.session.headers.update({
+            "User-Agent": COIN_UA,
+            "Accept": "*/*",
+            "Origin": COIN_URL,
+            "Referer": f"{COIN_URL}/miniapp.php",
+            "X-Requested-With": "org.telegram.messenger.web",
+            "Sec-Fetch-Site": "same-origin",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Dest": "empty",
+            "Connection": "keep-alive",
+            "sec-ch-ua": '"Chromium";v="152", "Not?A_Brand";v="24", "Android WebView";v="152"',
+            "sec-ch-ua-mobile": "?1",
+            "sec-ch-ua-platform": '"Android"',
+            "Accept-Language": "id,id-ID;q=0.9,en-US;q=0.8,en;q=0.7",
+        })
+
+        # State
+        self.running = True
+        self.balance = 0.0          # coin_balance (LTC)
+        self.usd_balance = 0.0      # USD equivalent
+        self.display_balance = "0"
+        self.wheel_spins = 0
+        self.last_wheel_spins = 0
+        self.play_counts = 0
+        self.rewards = 0.0
+        self.last_reward = 0.0
+        self.logs = deque(maxlen=8)
+        self.start_time = datetime.now()
+        self.daily_claimed = False
+        self.boost_until = 0
+        self.boost_remaining = 0
+        self.jackpot_hits = 0
+        self.consecutive_errors = 0
+        self.max_consecutive_errors = 8
+        self.cooldown_until = 0     # local cooldown if server says so
+        self.game_index = 0         # not used but keep interface
+        self.doubled_available = {"lucky_wheel": False}
+        self.retry_doubled = {"lucky_wheel": True}
+        self.cooldowns = {"lucky_wheel": 0}
+        self.status = {"lucky_wheel": "Ready"}
+        self.limited_games = set()
+        self.unavailable_games = set()
+
+        self._initial_auth()
+
+    # ---------- HELPERS ----------
+    def log(self, msg):
+        self.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+
+    def _request(self, method, endpoint, **kwargs):
+        if not self.running:
+            return None
+        url = f"{self.url}{endpoint}"
+        try:
+            kwargs.setdefault('timeout', 30)
+            resp = self.session.request(method, url, **kwargs)
+
+            if resp.status_code == 429:
+                self.consecutive_errors += 1
+                self.log(f"{R}🚫 429 ({self.consecutive_errors}/{self.max_consecutive_errors}){RESET}")
+                if self.consecutive_errors >= self.max_consecutive_errors:
+                    self.log(f"{R}🛑 {self.name} terlalu banyak 429! Stop{RESET}")
+                    self.running = False
+                return None
+            else:
+                self.consecutive_errors = 0
+
+            if resp.status_code in [401, 403]:
+                self.log(f"{Y}⚠️ Session expired, reauth...{RESET}")
+                if self.reauth():
+                    resp = self.session.request(method, url, **kwargs)
+                    if resp.status_code in [401, 403]:
+                        self.log(f"{R}❌ Session masih invalid{RESET}")
+                        return None
+                else:
+                    return None
+
+            return resp
+        except Exception as e:
+            self.log(f"{R}❌ Request error: {e}{RESET}")
+            self.consecutive_errors += 1
+            if self.consecutive_errors >= self.max_consecutive_errors:
+                self.log(f"{R}🛑 {self.name} terlalu banyak error! Stop{RESET}")
+                self.running = False
+            return None
+
+    def get(self, endpoint):
+        return self._request('GET', endpoint)
+
+    def post(self, endpoint, files=None, data=None):
+        return self._request('POST', endpoint, files=files, data=data)
+
+    # ---------- AUTH ----------
+    def _initial_auth(self):
+        if not self.cfg.init_data:
+            self.log(f"{R}❌ init_data kosong! Bot tidak bisa jalan{RESET}")
+            self.running = False
+            return False
+        return self.reauth()
+
+    def reauth(self):
+        if not self.cfg.init_data:
+            self.log(f"{R}❌ init_data tidak ada{RESET}")
+            return False
+
+        parsed = urllib.parse.parse_qs(self.cfg.init_data)
+        user_str = parsed.get('user', [None])[0]
+        tid, tuname = "0", ""
+        if user_str:
+            try:
+                u = json.loads(urllib.parse.unquote(user_str))
+                tid = str(u.get('id', '0'))
+                tuname = u.get('username', '')
+            except: pass
+
+        self.cfg.telegram_id = tid
+        self.cfg.telegram_username = tuname
+        self.cfg.save()
+
+        fingerprint = os.urandom(16).hex()
+
+        files = {
+            "init_data": (None, self.cfg.init_data),
+            "telegram_id": (None, tid),
+            "telegram_username": (None, tuname),
+            "auto_login": (None, "1"),
+            "fingerprint": (None, fingerprint),
+        }
+        try:
+            resp = self.session.post(f"{self.url}/actions/tg_auth.php", files=files, timeout=30)
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get('status') == 'success':
+                    self.log(f"{G}✅ {self.name} auth OK (fp: {fingerprint[:8]}...){RESET}")
+                    return True
+                elif data.get('status') == 'banned':
+                    self.log(f"{R}❌ {self.name} BANNED: {data.get('message','')}{RESET}")
+                    self.running = False
+                    return False
+                else:
+                    self.log(f"{R}❌ Auth gagal: {data.get('message', 'unknown')}{RESET}")
+                    return False
+            else:
+                self.log(f"{R}❌ Auth gagal, status {resp.status_code}{RESET}")
+                return False
+        except Exception as e:
+            self.log(f"{R}❌ Auth error: {e}{RESET}")
+            return False
+
+    # ---------- BALANCE / DASHBOARD ----------
+    def get_dashboard(self):
+        resp = self.get("/actions/get_balance.php")
+        if resp and resp.status_code == 200:
+            try:
+                data = resp.json()
+            except:
+                return None
+            if data.get('status') == 'success' or data.get('success') is True:
+                self.usd_balance = safe_float(data.get('balance', 0))
+                self.balance = safe_float(data.get('coin_balance', 0))
+                self.display_balance = str(data.get('display_balance', self.balance))
+                if data.get('currency_label'):
+                    self.currency = str(data.get('currency_label')).upper()
+                return data
+        return None
+
+    # ---------- WHEEL STATUS ----------
+    def get_wheel_status(self):
+        """Parse /pages/load_wheel.php buat ambil wheel_spins."""
+        resp = self.get("/pages/load_wheel.php")
+        if not (resp and resp.status_code == 200):
+            return None
+        html = resp.text
+
+        # Spin count — id="hdr-wheel-spins" atau var wheelSpins
+        m = re.search(r'id=["\']hdr-wheel-spins["\'][^>]*>\s*(\d+)\s*<', html)
+        if m:
+            self.wheel_spins = safe_int(m.group(1))
+        else:
+            m = re.search(r'var\s+wheelSpins\s*=\s*(\d+)\s*;', html)
+            if m:
+                self.wheel_spins = safe_int(m.group(1))
+
+        # Daily Free Spins badge number
+        m2 = re.search(r'Daily Free Spins.*?<span[^>]*>\s*(\d+)\s*<', html, re.DOTALL)
+        if m2 and self.wheel_spins == 0:
+            self.wheel_spins = safe_int(m2.group(1))
+
+        if self.wheel_spins > 0:
+            self.status["lucky_wheel"] = "Ready"
+            self.limited_games.discard("lucky_wheel")
+        else:
+            self.status["lucky_wheel"] = "No Spins"
+            self.limited_games.add("lucky_wheel")
+
+        return {"wheel_spins": self.wheel_spins}
+
+    def has_ready_games(self):
+        # Kalau baru play dan masih ada spin tersisa, cepet
+        if self.wheel_spins > 0 and "lucky_wheel" not in self.unavailable_games:
+            return True
+        self.get_wheel_status()
+        return self.wheel_spins > 0 and "lucky_wheel" not in self.unavailable_games
+
+    def get_ready_games(self):
+        if self.has_ready_games():
+            return ["lucky_wheel"]
+        return []
+
+    def is_all_limited(self):
+        return self.wheel_spins <= 0 or "lucky_wheel" in self.unavailable_games
+
+    # ---------- CLAIM DAILY ----------
+    def claim_daily(self):
+        if self.daily_claimed:
+            return True
+
+        self.log(f"📅 Claim daily {self.name}...")
+
+        # Cek status dulu via dashboard — kalau daily bonus gate ada = available
+        dash = self.get("/pages/load_dashboard.php")
+        daily_available = False
+        if dash and dash.status_code == 200:
+            daily_available = ('id="daily-bonus-gate"' in dash.text) or ('Daily Bonus' in dash.text and 'Claim' in dash.text)
+
+        if not daily_available:
+            self.daily_claimed = True
+            self.log(f"{Y}⏭️ Daily bonus tidak tersedia{RESET}")
+            return True
+
+        # Flow: ad_start → ad_complete → check_ad_status → claim_daily (server-side)
+        # Kita coba tanpa ad proof langsung (server bakal reject kalau butuh)
+        try:
+            # 1. ad_start
+            s = self.post("/actions/daily_bonus_ajax.php", data={"action": "ad_start"})
+            token = ""
+            if s and s.status_code == 200:
+                try:
+                    sd = s.json()
+                    if sd.get('success'):
+                        token = str(sd.get('token', ''))
+                except: pass
+
+            if token:
+                # 2. Play ad simulation (server butuh waktu)
+                ad_progress(10, "📺 Watch daily bonus ad")
+                # 3. ad_complete (client report)
+                self.post("/actions/daily_bonus_ajax.php", data={"action": "ad_complete", "token": token})
+                # 4. Poll verify — tunggu S2S postback
+                verified = False
+                for attempt in range(10):
+                    time.sleep(3)
+                    c = self.post("/actions/daily_bonus_ajax.php", data={"action": "check_ad_status", "token": token})
+                    if c and c.status_code == 200:
+                        try:
+                            cd = c.json()
+                            if cd.get('verified'):
+                                verified = True
+                                break
+                        except: pass
+                if not verified:
+                    self.log(f"{Y}⚠️ Daily ad belum ter-verify, skip{RESET}")
+                    self.daily_claimed = True
+                    return False
+
+            # 5. claim
+            r = self.post("/actions/daily_bonus_ajax.php", data={"action": "claim_daily", "db_ad_token": token})
+            if r and r.status_code == 200:
+                try:
+                    rd = r.json()
+                    if rd.get('status') == 'success' or rd.get('success') is True:
+                        if rd.get('display_balance') or rd.get('new_balance'):
+                            self.display_balance = str(rd.get('display_balance', rd.get('new_balance')))
+                            self.balance = safe_float(rd.get('new_balance', self.balance))
+                        self.daily_claimed = True
+                        self.log(f"{G}✅ Daily bonus OK: {rd.get('message', '')}{RESET}")
+                        return True
+                    msg = rd.get('message', '')
+                    if 'already' in msg.lower():
+                        self.daily_claimed = True
+                        return True
+                    self.log(f"{R}❌ Daily gagal: {msg}{RESET}")
+                except: pass
+        except Exception as e:
+            self.log(f"{R}❌ Daily exception: {e}{RESET}")
+
+        self.daily_claimed = True
+        return False
+
+    # ---------- PLAY WHEEL ----------
+    def play_game(self, game="lucky_wheel", doubled=False):
+        files = {
+            "action": (None, "play"),
+            "game": (None, game),
+            "doubled": (None, "1" if doubled else "0"),
+        }
+        resp = self.post("/actions/mini_games.php", files=files)
+        if resp and resp.status_code == 200:
+            try: return resp.json()
+            except: pass
+        return None
+
+    def play_single(self, game="lucky_wheel"):
+        if game in self.limited_games:
+            return None
+        # Ad required before spin? — detect via wheel page var
+        if self.wheel_spins <= 0:
+            self.get_wheel_status()
+            if self.wheel_spins <= 0:
+                return None
+        # Simulate watch ad (server butuh waktu, biasanya ~5-10s)
+        ad_progress(6, "📺 Watch spin ad")
+        return self.play_game(game, doubled=False)
+
+    # ---------- PROCESS ONE GAME ----------
+    def process_one_game(self):
+        try:
+            if not self.has_ready_games():
+                if self.is_all_limited():
+                    # Kalau gak ada spin, coba cek lagi nanti
+                    self.log(f"{Y}⏳ {self.name} tidak ada spin, tunggu...{RESET}")
+                return False
+
+            self.get_dashboard()
+
+            print(f"{C}🎡 {self.name} SPIN...{RESET}")
+            result = self.play_single("lucky_wheel")
+
+            if not result:
+                self.consecutive_errors += 1
+                self.log(f"{R}✖ No response{RESET}")
+                time.sleep(3)
+                return False
+
+            status = result.get('status', '')
+            if status != 'success':
+                # Error handling
+                msg = result.get('message', 'unknown')
+                low = msg.lower()
+
+                if 'banned' in low or 'game banned' in low or 'suspend' in low:
+                    self.log(f"{R}❌ {self.name} GAME BANNED: {msg}{RESET}")
+                    self.running = False
+                    return False
+                if 'no spin' in low or 'not enough spin' in low or 'spin habis' in low:
+                    self.wheel_spins = 0
+                    self.limited_games.add("lucky_wheel")
+                    self.log(f"{Y}⏭️ No spins left{RESET}")
+                    return False
+                if 'limit' in low or 'exhaust' in low:
+                    self.limited_games.add("lucky_wheel")
+                    self.log(f"{Y}⏭️ Limit reached{RESET}")
+                    return False
+                if 'unavailable' in low:
+                    self.unavailable_games.add("lucky_wheel")
+                    self.log(f"{Y}⏭️ Unavailable{RESET}")
+                    return False
+
+                self.log(f"{R}✖ SPIN fail: {msg}{RESET}")
+                time.sleep(5)
+                return False
+
+            # Parse success
+            won        = bool(result.get('won', False))
+            reward     = safe_float(result.get('reward', 0))
+            base_rwd   = safe_float(result.get('base_reward', reward))
+            new_bal    = result.get('new_balance')
+            rd         = result.get('result_data', {}) or {}
+            prize_t    = result.get('prize_type', rd.get('prize_type', 'coin'))
+            bonus_sp   = safe_int(result.get('bonus_spins', rd.get('bonus_spins', 0)))
+            wheel_sp   = result.get('wheel_spins', rd.get('wheel_spins', None))
+            is_jack    = bool(result.get('is_jackpot', rd.get('is_jackpot', False)))
+            boost_rem  = safe_int(result.get('boost_remaining', rd.get('boost_remaining', 0)))
+
+            self.play_counts += 1
+
+            if new_bal is not None:
+                self.balance = safe_float(new_bal)
+            self.rewards = reward
+
+            if wheel_sp is not None:
+                self.wheel_spins = safe_int(wheel_sp)
+                if self.wheel_spins > 0:
+                    self.limited_games.discard("lucky_wheel")
+                else:
+                    self.limited_games.add("lucky_wheel")
+
+            if boost_rem > 0:
+                self.boost_remaining = boost_rem
+
+            # Log per prize type
+            if is_jack:
+                self.jackpot_hits += 1
+                self.log(f"{G}🎉 JACKPOT! +{reward:.8f} {self.currency} (spin left: {self.wheel_spins}){RESET}")
+            elif prize_t == 'spins' and bonus_sp > 0:
+                self.log(f"{G}✔ +{bonus_sp} BONUS SPINS (total: {self.wheel_spins}){RESET}")
+            elif prize_t == 'boost':
+                self.log(f"{G}✔ 1.5x BOOST +{boost_rem}s{RESET}")
+            elif won and reward > 0:
+                self.log(f"{G}✔ +{reward:.8f} {self.currency} (Bal: {self.balance:.8f}, spin left: {self.wheel_spins}){RESET}")
+            else:
+                self.log(f"{Y}✖ No prize (spin left: {self.wheel_spins}){RESET}")
+
+            # Delay antar spin (spins-based, no strict cooldown but server may rate-limit)
+            time.sleep(random.uniform(2, 4))
+            return True
+
+        except Exception as e:
+            self.log(f"{R}✖ Process error: {e}{RESET}")
+            return False
+
+    # ---------- DISPLAY ----------
+    def display_dashboard(self):
+        try:
+            elapsed = datetime.now() - self.start_time
+            h, r = divmod(int(elapsed.total_seconds()), 3600)
+            m, s = divmod(r, 60)
+            runtime = f"{h:02d}:{m:02d}:{s:02d}"
+
+            boost_str = f"{self.boost_remaining}s" if self.boost_remaining > 0 else "OFF"
+            boost_c = G if self.boost_remaining > 0 else R
+
+            lines = []
+            lines.append(f"{GOLD}╔══════════════════════════════════════════════════════════╗")
+            lines.append(f"{GOLD}║{RESET}  {C}{self.name.upper()}{RESET}  ({self.currency})")
+            lines.append(f"{GOLD}╠══════════════════════════════════════════════════════════╣")
+            lines.append(f"{GOLD}║{RESET}  💰 Balance : {G}{self.balance:.8f} {self.currency}{RESET}")
+            lines.append(f"{GOLD}║{RESET}  💵 USD     : {B}${self.usd_balance:.8f}{RESET}")
+            lines.append(f"{GOLD}║{RESET}  🎡 Spins   : {G}{self.wheel_spins}{RESET}")
+            lines.append(f"{GOLD}║{RESET}  🚀 Boost   : {boost_c}{boost_str}{RESET}")
+            lines.append(f"{GOLD}║{RESET}  🎉 Jackpot : {G}{self.jackpot_hits}{RESET}")
+            lines.append(f"{GOLD}║{RESET}  ⏱️  Runtime : {C}{runtime}{RESET}")
+            lines.append(f"{GOLD}║{RESET}  🔄 Plays   : {W}{self.play_counts}{RESET}  |  💎 Reward: {G}{self.rewards:.8f}{RESET}")
+            lines.append(f"{GOLD}╠══════════════════════════════════════════════════════════╣")
+            for log in list(self.logs)[-6:]:
+                log_clean = log[:48] if len(log) > 48 else log
+                lines.append(f"{GOLD}║{RESET}  {log_clean}{' ' * (50 - len(log_clean))} {GOLD}║")
+            lines.append(f"{GOLD}╚══════════════════════════════════════════════════════════╝")
+            return "\n".join(lines)
+        except Exception as e:
+            return f"{R}❌ Error display: {e}{RESET}"
 
 # ========== PARALLEL RUNNER ==========
 def parallel_run(bots):
     for bot in bots:
-        if hasattr(bot, 'claim_daily'):
-            try:
-                bot.claim_daily()
-            except:
-                pass
+        try:
+            bot.claim_daily()
+        except:
+            pass
 
     while any(b.running for b in bots):
         any_played = False
@@ -725,12 +1151,16 @@ def parallel_run(bots):
                     any_played = True
                     time.sleep(0.3)
             except Exception as e:
-                bot.log(f"{R}✖ {e}{RESET}")
+                try: bot.log(f"{R}✖ {e}{RESET}")
+                except: pass
 
         if not any_played:
+            # Kumpulkan cooldown dari semua bot
             all_cds = []
             for bot in bots:
-                if bot.running:
+                if not bot.running: continue
+                # CoinBot tidak pakai self.cooldowns biasanya; fallback 5s
+                if hasattr(bot, 'cooldowns'):
                     all_cds.extend([cd for cd in bot.cooldowns.values() if cd > 0])
             if all_cds:
                 min_cd = min(all_cds)
@@ -742,7 +1172,8 @@ def parallel_run(bots):
                 print(f"{Y}⏳ Semua bot cooldown. Menunggu {min_cd} detik...{RESET}")
                 live_timer(min_cd, f"⏳ Cooldown {min_cd}s")
             else:
-                time.sleep(1)
+                # Tidak ada cooldown → tunggu sebentar aja (kasus spin habis)
+                time.sleep(3)
 
 # ========== BOT FACTORY ==========
 BOT_MAP = {
@@ -752,7 +1183,6 @@ BOT_MAP = {
 }
 
 def build_bots(keys):
-    """Bikin list bot berdasarkan keys. Return (bots, missing_names)"""
     bots = []
     missing = []
     for k in keys:
@@ -807,7 +1237,6 @@ def check_config(name, config_file):
 
 # ========== RUNNER WRAPPER ==========
 def run_selection(keys, label):
-    """Jalanin subset bot."""
     bots, missing = build_bots(keys)
     if missing:
         print(f"\n{R}❌ Setup dulu:{RESET}")
@@ -837,12 +1266,12 @@ def main():
 {PURPLE}╔══════════════════════════════════════════════════════════╗
 ║   {GOLD}🚀 PEPEFLOW X CLOCKADS X COINSZON                {PURPLE}║
 ╠══════════════════════════════════════════════════════════╣
-║   {PINK}🔐 AUTH via init_data (NO PHPSESSID)              {PURPLE}║
+║   {PINK}🔐 AUTH via init_data (NO PHPSESSID manual)      {PURPLE}║
 ║   {PINK}🎲 FINGERPRINT RANDOM setiap reauth               {PURPLE}║
 ║   {PINK}🚫 AUTO SKIP LIMIT (daily + global)               {PURPLE}║
 ║   {PINK}🎁 AUTO CLAIM PENDING WIN (WITH AD PROOF)         {PURPLE}║
 ║   {PINK}📅 AUTO CLAIM DAILY BONUS                         {PURPLE}║
-║   {PINK}⛔ AUTO SKIP UNAVAILABLE GAMES                    {PURPLE}║
+║   {PINK}🎡 CoinBot: SPINS EDITION                          {PURPLE}║
 ╠══════════════════════════════════════════════════════════╣
 ║   {G}▶️  RUN MODE{RESET}
 ║   {G}[1]{RESET}  🚀 Start ALL (PepeFlow + ClockAds + Coinszon)  ║
