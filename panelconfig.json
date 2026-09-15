@@ -104,14 +104,14 @@
           "runner": "php"
         },
         "11": {
-          "label": "Coming Soon",
-          "file": "",
-          "runner": "python3"
+          "label": "ClaimCoin 🟢",
+          "file": "Claimcoin.php",
+          "runner": "php"
         },
         "12": {
-          "label": "Coming Soon",
-          "file": "",
-          "runner": "python3"
+          "label": "Ourcoincash 🟢",
+          "file": "Our.php",
+          "runner": "php"
         }
       }
     },
