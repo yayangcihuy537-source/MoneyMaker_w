@@ -99,6 +99,7 @@ function displayBanner($username = '') {
     echo "\n";
     echo B_CYAN . "  [+] Website : " . B_WHITE . "⚡️lightningquest.net ⚡️" . RESET . "\n";
     echo B_CYAN . "  [+] ScriptMaker : " . B_YELLOW . "@SouuXso 🔥" . RESET . "\n";
+    echo B_CYAN . "  [+] Captcha Solver : " . B_GREEN . "skipcha.online ⚡" . RESET . "\n";
     echo B_CYAN . "  [+] Bot : " . B_GREEN . "ONLINE 🟢" . RESET . "\n";
     echo B_CYAN . str_repeat('═', 56) . RESET . "\n";
     echo "\n";
@@ -224,43 +225,109 @@ function getCSRF() {
 }
 
 // ============================================================
-//  BYPASS CAPTCHA
+//  CEK SALDO SKIPCHA.ONLINE
+// ============================================================
+function checkBalance() {
+    $apiKey = trim(file_get_contents('bypass_api_key.txt'));
+    if (!$apiKey) return false;
+
+    $url = "https://skipcha.online/res.php?" . http_build_query([
+        'key'    => $apiKey,
+        'action' => 'getbalance',
+        'json'   => 1
+    ]);
+
+    $response = curl_request($url);
+    if ($response === false) return false;
+
+    $data = json_decode($response, true);
+    return $data['balance'] ?? false;
+}
+
+// ============================================================
+//  BYPASS CAPTCHA (SKIPCHA.ONLINE)
 // ============================================================
 function bypassCaptcha($sitekey, $method, $pageurl) {
     $apiKey = trim(file_get_contents('bypass_api_key.txt'));
     if (!$apiKey) {
-        echo B_RED . "  [!] API Key bypass tidak ditemukan!\n" . RESET;
+        echo B_RED . "  [!] API Key skipcha.online tidak ditemukan!\n" . RESET;
         return false;
     }
-    $url = "https://bypassallshortlinks.space/in.php?key=" . urlencode($apiKey) . "&method=" . urlencode($method) . "&sitekey=" . urlencode($sitekey) . "&pageurl=" . urlencode($pageurl);
-    $response = curl_request($url);
-    if ($response === false || strpos($response, 'ERROR') !== false) {
-        echo B_RED . "  [!] Bypass submit error\n" . RESET;
+
+    // Map method ke format skipcha.online
+    $methodMap = [
+        'hcaptcha'     => 'hcaptcha',
+        'turnstile'    => 'turnstile',
+        'recaptcha'    => 'recaptcha',
+        'recaptcha_v2' => 'recaptcha',
+    ];
+    $solverMethod = $methodMap[strtolower($method)] ?? 'hcaptcha';
+
+    // --- STEP 1: SUBMIT KE /in.php ---
+    $submitUrl = "https://skipcha.online/in.php?" . http_build_query([
+        'key'     => $apiKey,
+        'method'  => $solverMethod,
+        'sitekey' => $sitekey,
+        'pageurl' => $pageurl,
+        'json'    => 1
+    ]);
+
+    echo B_YELLOW . "  [BYPASS] Submitting to skipcha.online ({$solverMethod})...\n" . RESET;
+    $response = curl_request($submitUrl);
+
+    if ($response === false) {
+        echo B_RED . "  [!] Gagal koneksi ke skipcha.online\n" . RESET;
         return false;
     }
-    $parts = explode('|', $response);
-    if (count($parts) < 2) {
-        echo B_RED . "  [!] Invalid response\n" . RESET;
+
+    $data = json_decode($response, true);
+    if (!isset($data['status']) || $data['status'] != 1 || empty($data['request'])) {
+        $errMsg = $data['request'] ?? $response;
+        echo B_RED . "  [!] Submit error: " . $errMsg . "\n" . RESET;
         return false;
     }
-    $taskId = trim($parts[1]);
+
+    $taskId = $data['request'];
     echo B_YELLOW . "  [BYPASS] Task ID: " . $taskId . "\n" . RESET;
-    for ($i = 0; $i < 30; $i++) {
+
+    // --- STEP 2: POLLING KE /res.php ---
+    for ($i = 0; $i < 60; $i++) {
         sleep(3);
-        $resUrl = "https://bypassallshortlinks.space/res.php?key=" . urlencode($apiKey) . "&id=" . urlencode($taskId);
-        $result = curl_request($resUrl);
+
+        $pollUrl = "https://skipcha.online/res.php?" . http_build_query([
+            'key'    => $apiKey,
+            'action' => 'get',
+            'id'     => $taskId,
+            'json'   => 1
+        ]);
+
+        $result = curl_request($pollUrl);
         if ($result === false) continue;
-        if (strpos($result, 'OK|') === 0) {
-            $token = substr($result, 3);
-            echo B_GREEN . "  [BYPASS] Token obtained\n" . RESET;
+
+        $pollData = json_decode($result, true);
+        if (!isset($pollData['status'])) continue;
+
+        // Sukses
+        if ($pollData['status'] == 1 && !empty($pollData['request'])) {
+            $token = $pollData['request'];
+            echo "\r" . B_GREEN . "  [BYPASS] ✓ Token obtained (" . strlen($token) . " chars)          \n" . RESET;
             return $token;
         }
-        if (strpos($result, 'ERROR') !== false) {
-            echo B_RED . "  [BYPASS] Error: " . $result . "\n" . RESET;
+
+        // Masih diproses
+        if ($pollData['request'] === 'CAPCHA_NOT_READY') {
+            echo "\r" . B_CYAN . "  [BYPASS] Polling... (" . ($i + 1) . "/60)   " . RESET;
+            continue;
+        }
+
+        // Error
+        if (strpos($pollData['request'], 'ERROR') !== false) {
+            echo "\n" . B_RED . "  [BYPASS] Error: " . $pollData['request'] . "\n" . RESET;
             return false;
         }
     }
-    echo B_RED . "  [BYPASS] Timeout\n" . RESET;
+
+    echo "\n" . B_RED . "  [BYPASS] ✗ Timeout menunggu token\n" . RESET;
     return false;
 }
 
@@ -268,7 +335,6 @@ function bypassCaptcha($sitekey, $method, $pageurl) {
 //  LOGIN
 // ============================================================
 function doLogin($email, $pass, $api) {
-    // Hapus cookie & token lama
     @unlink('cookie.txt');
     @unlink('access_token.txt');
     @unlink('csrf_cache.txt');
@@ -456,13 +522,12 @@ function doDaily($api, $access_token) {
 }
 
 // ============================================================
-//  FAUCET (FIXED - PAYLOAD CAPTCHA)
+//  FAUCET
 // ============================================================
 function doFaucet($api, $access_token, &$reward_info) {
     echo B_CYAN . "  [💧] Faucet\n" . RESET;
     echo "      Status      : " . B_YELLOW . "Checking...\n" . RESET;
 
-    // Cek cooldown dulu
     $headers = [
         'x-requested-with: XMLHttpRequest',
         'User-Agent: '.$api,
@@ -489,7 +554,6 @@ function doFaucet($api, $access_token, &$reward_info) {
     $captchaRequired = $data0['faucet']['captchaRequired'] ?? false;
     $captchaProvider = $data0['faucet']['captchaProvider'] ?? 'hcaptcha';
     
-    // Ambil CSRF
     $csrf = getCSRF();
     if (!$csrf || strlen($csrf) < 3) {
         echo "      Status      : " . B_RED . "❌ CSRF token tidak ditemukan\n" . RESET;
@@ -561,7 +625,6 @@ function doFaucet($api, $access_token, &$reward_info) {
             return false;
         }
         
-        // FORMAT PAYLOAD YANG BENAR - SERVER MINTA captchaToken BUKAN captcha_token
         $payload = json_encode([
             'csrf_token' => $csrf,
             'claimToken' => $claimToken,
@@ -622,7 +685,6 @@ function doFaucet($api, $access_token, &$reward_info) {
 //  FARMING MAIN LOOP
 // ============================================================
 function startFarming($email, $pass, $api) {
-    // Login
     $username = doLogin($email, $pass, $api);
     if (!$username) {
         echo B_RED . "  [!] Login Gagal! Cek email/password.\n" . RESET;
@@ -631,6 +693,12 @@ function startFarming($email, $pass, $api) {
     
     $access_token = trim(file_get_contents('access_token.txt'));
     displayBanner($username);
+
+    // Cek saldo skipcha
+    $balance = checkBalance();
+    if ($balance !== false) {
+        echo B_CYAN . "  💰 Skipcha Balance : " . B_WHITE . $balance . " Tokens\n" . RESET;
+    }
     echo B_YELLOW . "  🔄 Starting auto loop...\n\n" . RESET;
     
     $fail_count = 0;
@@ -659,7 +727,7 @@ function startFarming($email, $pass, $api) {
         
         // 2. DAILY BONUS
         echo B_CYAN . "  [🎁] Daily\n" . RESET;
-        $daily_result = doDaily($api, $access_token);
+        doDaily($api, $access_token);
         echo "\n";
         
         // 3. FAUCET
@@ -687,10 +755,6 @@ function startFarming($email, $pass, $api) {
             echo B_WHITE . "      [+] Multiplier : " . B_CYAN . "x" . $reward_info['multiplier'] . "🥇\n" . RESET;
             echo B_WHITE . "      [+] Next Claim : " . B_YELLOW . $reward_info['next_min'] . "m " . sprintf("%02d", $reward_info['next_sec']) . "s\n" . RESET;
             echo B_CYAN . "\n  ================================================\n" . RESET;
-        }
-        
-        if ($faucet_result === 'cooldown') {
-            // Timer already handled
         }
         
         if ($faucet_result === false) {
@@ -724,7 +788,8 @@ function printMenu() {
     echo B_CYAN . "================================================\n";
     echo B_CYAN . "  [1] " . B_GREEN . "Start Farming\n";
     echo B_CYAN . "  [2] " . B_YELLOW . "Config Email & Password\n";
-    echo B_CYAN . "  [3] " . B_YELLOW . "Config Bypass API Key\n";
+    echo B_CYAN . "  [3] " . B_YELLOW . "Config Bypass API Key (skipcha.online)\n";
+    echo B_CYAN . "  [4] " . B_YELLOW . "Check Skipcha Balance\n";
     echo B_CYAN . "  [0] " . B_RED . "Exit\n";
     echo B_CYAN . "================================================\n";
     echo B_WHITE . "  Pilih menu: " . RESET;
@@ -758,16 +823,50 @@ function configEmailPassword() {
 function configApikey() {
     clearScreen();
     echo B_CYAN . "================================================\n";
-    echo B_CYAN . "  " . B_WHITE . "Konfigurasi API Key Bypass\n";
+    echo B_CYAN . "  " . B_WHITE . "Konfigurasi API Key (SKIPCHA.ONLINE)\n";
     echo B_CYAN . "================================================\n\n";
-    echo B_YELLOW . "  Dapatkan API Key dari https://bypassallshortlinks.space\n\n" . RESET;
+    echo B_YELLOW . "  Dapatkan API Key dari https://skipcha.online\n";
+    echo B_YELLOW . "  Harga: 1 USDT = 10,000 Tokens\n";
+    echo B_YELLOW . "  Biaya hCaptcha: 1.0 Token / solve\n\n" . RESET;
     echo B_WHITE . "API Key: " . RESET;
     $key = trim(fgets(STDIN));
     if (!empty($key)) {
         file_put_contents('bypass_api_key.txt', $key);
         echo B_GREEN . "\n✅ API Key disimpan!\n" . RESET;
+
+        // Cek saldo otomatis
+        $balance = checkBalance();
+        if ($balance !== false) {
+            echo B_GREEN . "💰 Saldo tersedia: " . B_WHITE . $balance . " Tokens\n" . RESET;
+        } else {
+            echo B_YELLOW . "⚠️ Gagal cek saldo, pastikan API Key benar.\n" . RESET;
+        }
     } else {
         echo B_RED . "\n❌ API Key kosong, tidak disimpan.\n" . RESET;
+    }
+    echo B_WHITE . "\nTekan Enter untuk kembali...\n" . RESET;
+    fgets(STDIN);
+}
+
+function menuCheckBalance() {
+    clearScreen();
+    echo B_CYAN . "================================================\n";
+    echo B_CYAN . "  " . B_WHITE . "Check Skipcha Balance\n";
+    echo B_CYAN . "================================================\n\n";
+
+    if (!file_exists('bypass_api_key.txt')) {
+        echo B_RED . "❌ API Key belum diatur! Atur di menu [3] terlebih dahulu.\n" . RESET;
+    } else {
+        $apiKey = trim(file_get_contents('bypass_api_key.txt'));
+        echo B_WHITE . "API Key: " . B_YELLOW . substr($apiKey, 0, 8) . "..." . substr($apiKey, -4) . "\n\n" . RESET;
+
+        $balance = checkBalance();
+        if ($balance !== false) {
+            echo B_GREEN . "💰 Saldo : " . B_WHITE . $balance . " Tokens\n" . RESET;
+            echo B_GRAY . "   ≈ " . floor($balance / 1.0) . " hCaptcha solves remaining\n" . RESET;
+        } else {
+            echo B_RED . "❌ Gagal cek saldo, API Key mungkin tidak valid.\n" . RESET;
+        }
     }
     echo B_WHITE . "\nTekan Enter untuk kembali...\n" . RESET;
     fgets(STDIN);
@@ -782,7 +881,6 @@ while (true) {
     
     switch ($choice) {
         case '1':
-            // Start Farming
             clearScreen();
             if (!file_exists('Email') || !file_exists('Password') || !file_exists('user-agent')) {
                 echo B_RED . "  [!] Konfigurasi belum lengkap! Silakan atur Email & Password terlebih dahulu (Menu 2).\n" . RESET;
@@ -807,6 +905,10 @@ while (true) {
             
         case '3':
             configApikey();
+            break;
+            
+        case '4':
+            menuCheckBalance();
             break;
             
         case '0':
