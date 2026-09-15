@@ -2,8 +2,8 @@
 
 error_reporting(0);
 date_default_timezone_set('Asia/Jakarta');
-$configFile = "make1.json";
-$waryono = "make1.txt";
+$configFile = "makeyou1.json";
+$waryono = "makeyou1.txt";
 
 const hitam  = "\033[0;30m";
 const merah  = "\033[0;31m";
@@ -28,7 +28,7 @@ const host        = "https://makeyoutask.com";
 const in      = "https://api.waryono.my.id/in.php";
 
 function device_token_init() {
-    $file = "device_token.txt";
+    $file = "device_token1.txt";
     if (file_exists($file)) {
         $tok = trim(file_get_contents($file));
         if ($tok !== '') {
@@ -36,7 +36,7 @@ function device_token_init() {
         }
     }
     $screen_data = '1080x1920x24';
-    $nav_data = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36' . 'id-ID' . '1';
+    $nav_data = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36' . 'id-ID' . '1';
     $raw = $screen_data . $nav_data . time() . mt_rand();
     $hash = 0;
     for ($i = 0, $l = strlen($raw); $i < $l; $i++) {
@@ -70,11 +70,11 @@ function ensure_device_cookie($host) {
 function smm_claim_headers($claim_url, $referer) {
     $origin = preg_replace('~^(https?://[^/]+).*$~', '$1', $claim_url);
     $headers = [
-        'sec-ch-ua: "Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"',
+        'sec-ch-ua: "Not;A=Brand";v="8", "Chromium";v="127", "Google Chrome";v="127"',
         'sec-ch-ua-platform: "Android"',
         'x-requested-with: XMLHttpRequest',
-        'user-agent: Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36',
-        'accept: application/json, text/javascript, */*; q=0.01',
+        'user-agent: Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36',
+        'accept: application/json, text/javascript, q=0.01',
         'content-type: application/x-www-form-urlencoded; charset=UTF-8',
         'sec-ch-ua-mobile: ?1',
         'origin: '.$origin,
@@ -89,7 +89,33 @@ function smm_claim_headers($claim_url, $referer) {
     return $headers;
 }
 
-function skibidixxx($url, $method = 'GET', $data = [], $headers = []) {
+function blog_headers($referer, $is_post = false) {
+    $origin = preg_replace('~^(https?://[^/]+).*$~', '$1', $referer);
+    $headers = [
+        'sec-ch-ua: "Chromium";v="127", "Not)A;Brand";v="99", "Microsoft Edge Simulate";v="127", "Lemur";v="127"',
+        'sec-ch-ua-mobile: ?1',
+        'sec-ch-ua-platform: "Android"',
+        'upgrade-insecure-requests: 1',
+        'user-agent: Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36',
+        'accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'sec-fetch-site: same-origin',
+        'sec-fetch-mode: navigate',
+        'sec-fetch-user: ?1',
+        'sec-fetch-dest: document',
+        'accept-language: id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7'
+    ];
+    if ($is_post) {
+        array_unshift($headers, 'cache-control: max-age=0');
+        array_unshift($headers, 'content-type: application/x-www-form-urlencoded');
+        array_unshift($headers, 'origin: '.$origin);
+    }
+    if ($referer) {
+        $headers[] = 'referer: '.$referer;
+    }
+    return $headers;
+}
+
+function skibidixxx($url, $method = 'GET', $data = [], $headers = [], $nofollow = false) {
     while (true) {
         $ch = curl_init();
         $final_headers = [];
@@ -100,7 +126,6 @@ function skibidixxx($url, $method = 'GET', $data = [], $headers = []) {
             CURLOPT_URL            => $url,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_HEADER         => true,
-            CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_SSL_VERIFYHOST => 1,
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_HTTPHEADER     => $final_headers,
@@ -109,6 +134,9 @@ function skibidixxx($url, $method = 'GET', $data = [], $headers = []) {
             CURLOPT_COOKIEFILE => 'cookies.txt',
             CURLOPT_COOKIEJAR => 'cookies.txt'
         ];
+        if (!$nofollow) {
+            $options[CURLOPT_FOLLOWLOCATION] = true;
+        }
         if (strtoupper($method) === 'POST') {
             $options[CURLOPT_POST] = true;
             $options[CURLOPT_POSTFIELDS] = $data;
@@ -183,12 +211,12 @@ function getConfig($configFile) {
     return json_decode(file_get_contents($configFile), true);
 }
 
-function cloud($apikey, $sitekey, $cdata = '') {
+function cloud($apikey, $sitekey, $cdata = '', $domain = host) {
     $headers = ["Content-Type: application/json"];
     $body = json_encode([
         "apikey"  => $apikey,
         "methods" => "turnstile",
-        "domain"  => host,
+        "domain"  => $domain,
         "sitekey" => $sitekey,
         "action"  => "submit",
         "cdata"   => $cdata,
@@ -260,7 +288,7 @@ function allsuki(&$a,&$b,&$c,&$d){
 		'sec-ch-ua-platform: "Android"',
 		'save-data: on',
 		'upgrade-insecure-requests: 1',
-		'user-agent: Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36',
+		'user-agent: Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36',
 		'accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,q=0.8,application/signed-exchange;v=b3;q=0.7',
 		'sec-fetch-site: none',
 		'sec-fetch-mode: navigate',
@@ -276,7 +304,7 @@ function allsuki(&$a,&$b,&$c,&$d){
 		'origin: '.host,
 		'content-type: application/x-www-form-urlencoded',
 		'upgrade-insecure-requests: 1',
-		'user-agent: Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36',
+		'user-agent: Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36',
 		'accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,q=0.8,application/signed-exchange;v=b3;q=0.7',
 		'sec-fetch-site: same-origin',
 		'sec-fetch-mode: navigate',
@@ -289,7 +317,7 @@ function allsuki(&$a,&$b,&$c,&$d){
 		'host: makeyoutask.com',
 		'sec-ch-ua: "Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"',
 		'sec-ch-ua-platform: "Android"',
-		'user-agent: Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36',
+		'user-agent: Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36',
 		'origin: '.host,
 		'sec-fetch-site: same-origin',
 		'sec-fetch-mode: cors',
@@ -303,7 +331,7 @@ function allsuki(&$a,&$b,&$c,&$d){
 		'sec-ch-ua-platform: "Android"',
 		'sec-ch-ua-mobile: ?1',
 		'upgrade-insecure-requests: 1',
-		'user-agent: Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36',
+		'user-agent: Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36',
 		'accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
 		'sec-fetch-site: same-origin',
 		'sec-fetch-mode: navigate',
@@ -348,6 +376,40 @@ if (strpos($dash, "Dashboard | MakeYouTask.Com") !== false){
 	smm_get:
 	$url = host."/SmmNew/watch";
 	$watch = skibidixxx($url, "GET", [], $d);
+	$blog_page = $GLOBALS['last_url'];
+	$blog_origin = preg_replace('~^(https?://[^/]+).*$~', '$1', $blog_page);
+
+	gate_loop:
+	if (strpos($watch, "solve_gate_captcha") !== false) {
+	    preg_match('/name="csrf_token_name" value="([^"]+)"/', $watch, $gcs);
+	    preg_match('/data-sitekey="([^"]+)"/', $watch, $gsite);
+	    $gate_csrf = $gcs[1] ?? '';
+	    $sitekey   = $gsite[1] ?? '';
+	    if (!$gate_csrf || !$sitekey) {
+	        echo putih."[ERROR] ".merah."Gagal parse security gate, retry...\n";
+	        sleep(5);
+	        goto smm_get;
+	    }
+	    echo putih."[GATE] ".kuning."Menyelesaikan security verification (turnstile)...\n";
+	    $bypass = cloud($apikey, $sitekey, '', $blog_origin);
+	    if (is_array($bypass)) {
+	        $data = http_build_query([
+	            "csrf_token_name" => $gate_csrf,
+	            "cf-turnstile-response" => $bypass["turnstile"],
+	            "solve_gate_captcha" => "1"
+	        ]);
+	        skibidixxx($blog_page, "POST", $data, blog_headers($blog_page, true), true);
+	        $watch = skibidixxx($blog_page, "GET", [], blog_headers($blog_page));
+	        $blog_page = $GLOBALS['last_url'];
+	        goto gate_loop;
+	    } elseif (in_array($bypass, ["WRONG_CAPTCHA_ID", "ERROR_CAPTCHA_UNSOLVABLE", "ERROR_TOO_MANY_REQUESTS", "ERROR_SOLVE_PENDING", "INTENAL_SERVER_ERROR"])) {
+	        goto gate_loop;
+	    } else {
+	        echo putih."Error: ".merah." Tidak di ketahui!! coba lagi...\n";
+	        goto gate_loop;
+	    }
+	}
+
 	if (!preg_match('/let\s+videoCode/', $watch)) {
 	    if (strpos($watch, "There are no videos available for you right now") !== false) {
 	        echo putih."[INFO] ".kuning."No video available right now, lanjut ke misi berikutnya...\n";
@@ -389,7 +451,9 @@ if (strpos($dash, "Dashboard | MakeYouTask.Com") !== false){
 	$target    = intval($td[1] ?? 0);
 	$vid       = $vc[1] ?? '?';
 	$claim_url = $cw[1] ?? '';
-	$blog_page = $GLOBALS['last_url'];
+	if ($claim_url && strpos($claim_url, 'http') !== 0) {
+	    $claim_url = $blog_origin . $claim_url;
+	}
 	if (!$csrf_hash || !$claim_url) {
 	    echo putih."[ERROR] ".merah."Data stream tidak lengkap!\n";
 	    sleep(5);
