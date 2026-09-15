@@ -1,17 +1,13 @@
 <?php
 /**
- * ClaimCrypto.in Auto-Claimer v5
+ * ClaimCrypto.in Auto-Claimer v7
  * PHP CLI — by Kyriel
  *
- * Fitur:
- *   - Cookie-only flow (paste cookie authenticated)
- *   - Auto-scrape email dari /dashboard (decode Cloudflare email protection)
- *   - Auto-generate device token
- *   - Human delay 12-15s + jitter
- *   - Deteksi Daily Limit Reached → stop bersih
- *   - Full refresh + rejoin saat fail
- *   - Balance scrape + total akumulasi
- *   - ANSI color UI
+ * EMAIL-ONLY login:
+ *   - Input cuma email
+ *   - Device token auto-generate
+ *   - csrf & ci_session auto-capture dari login flow
+ *   - cf_clearance opsional (kalau CF challenge, paste via arg)
  */
 
 declare(strict_types=1);
@@ -19,7 +15,8 @@ declare(strict_types=1);
 // ==================== CONFIG ====================
 $config = [
     'base_url'        => 'https://claimcrypto.in',
-    'cookie_file'     => __DIR__ . '/cookiescrypto.txt',
+    'cookie_file'     => __DIR__ . '/cookiesClaimCrypto.txt',
+    'config_file'     => __DIR__ . '/config.local.php',   // opsional: {'email':..., 'cf':...}
     'max_fails'       => 5,
     'backoff_rounds'  => 3,
     'backoff_seconds' => 120,
@@ -29,6 +26,12 @@ $config = [
     'retry'           => 2,
     'user_agent'      => 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36',
 ];
+
+// Load local override kalau ada
+if (file_exists($config['config_file'])) {
+    $local = require $config['config_file'];
+    if (is_array($local)) $config = array_merge($config, $local);
+}
 
 // ==================== ANSI ====================
 const C_RESET="\033[0m", C_BOLD="\033[1m", C_DIM="\033[2m";
@@ -52,7 +55,7 @@ function banner(): void {
     echo PHP_EOL;
     hr2();
     echo C_BOLD.C_GREEN.str_pad('  ⚡  CLAIMCRYPTO AUTO-CLAIMER  ⚡', 60, ' ', STR_PAD_BOTH).C_RESET.PHP_EOL;
-    echo C_BOLD.C_GREEN.str_pad('  COOKIE-ONLY  •  v5  •  DAILY LIMIT AWARE', 60, ' ', STR_PAD_BOTH).C_RESET.PHP_EOL;
+    echo C_BOLD.C_GREEN.str_pad('  EMAIL-ONLY LOGIN  •  v7', 60, ' ', STR_PAD_BOTH).C_RESET.PHP_EOL;
     hr2();
     echo PHP_EOL;
 }
@@ -68,46 +71,14 @@ function argValue(string $name): ?string {
     return null;
 }
 
-function prompt(string $label, bool $secret=false): string {
+function prompt(string $label): string {
     echo C_BOLD.C_YELLOW.$label.' > '.C_RESET;
-    if ($secret && stripos(PHP_OS,'WIN')===false) {
-        @shell_exec('stty -echo'); $line = fgets(STDIN); @shell_exec('stty echo');
-        echo PHP_EOL;
-    } else {
-        $line = fgets(STDIN);
-    }
+    $line = fgets(STDIN);
     if ($line === false) { fwrite(STDERR, "Input gagal.\n"); exit(1); }
     return trim($line);
 }
 
-function resolve(string $key, string $label, bool $secret=false, bool $optional=false): string {
-    global $config;
-    $v = argValue($key);
-    if ($v !== null && $v !== '') return $v;
-    $v = getenv('CC_'.strtoupper($key));
-    if ($v !== false && $v !== '') return $v;
-    if (!empty($config[$key])) return (string) $config[$key];
-    if ($optional) {
-        echo C_DIM.'(opsional, enter buat skip)'.C_RESET.PHP_EOL;
-    }
-    return prompt($label, $secret);
-}
-
-// ==================== COOKIE ====================
-
-function parseCookieRaw(string $raw): array {
-    $raw = str_replace(["\r","\n"], ';', $raw);
-    $out = [];
-    foreach (explode(';', $raw) as $part) {
-        $part = trim($part); if ($part === '') continue;
-        $part = preg_replace('/^Cookie:\s*/i', '', $part);
-        $pos = strpos($part, '='); if ($pos === false) continue;
-        $name = trim(substr($part,0,$pos)); $value = trim(substr($part,$pos+1));
-        if ($name === '') continue;
-        $out[$name] = $value;
-    }
-    return $out;
-}
+// ==================== COOKIE JAR ====================
 
 function writeCookieJar(string $path, array $cookies, string $domain='claimcrypto.in'): void {
     $lines = ["# Netscape HTTP Cookie File", "# auto-generated", ""];
@@ -218,7 +189,6 @@ function http(string $method, string $url, array $opts=[]): array {
 
     $body = curl_exec($ch); $errno = curl_errno($ch); $err = curl_error($ch);
     $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    // no curl_close() — deprecated PHP 8.5+
 
     if ($errno !== 0) {
         if ($attempts < $max) { usleep(400000); goto start; }
@@ -250,11 +220,18 @@ function buildSmartToken(int $moves=0): string {
     ], JSON_UNESCAPED_SLASHES));
 }
 
-// ==================== FLOW ====================
+// ==================== LOGIN (EMAIL-ONLY) ====================
 
+/**
+ * Fresh login: buang jar lama, GET / buat dapet csrf_cookie_name,
+ * POST /auth/login, capture ci_session.
+ */
 function doLogin(array $config, string $email, string $device, bool $quiet=false): bool {
-    if (!$quiet) net('GET / (prime session)');
+    if (!$quiet) net('GET / (fresh session)');
     else        refresh('GET / (rejoin)');
+
+    // Reset jar biar bener-bener fresh
+    if (file_exists($config['cookie_file'])) @unlink($config['cookie_file']);
 
     $ts = time();
     humanDelay();
@@ -265,10 +242,13 @@ function doLogin(array $config, string $email, string $device, bool $quiet=false
 
     $jar = readJar();
     $csrf = $jar['csrf_cookie_name'] ?? null;
-    if (!$csrf) { err('CSRF cookie kosong'); return false; }
-    if (!$quiet) info('CSRF : '.C_DIM.$csrf.C_RESET);
+    if (!$csrf) {
+        err('CSRF cookie gak dapet dari GET /');
+        return false;
+    }
+    if (!$quiet) info('CSRF : '.C_DIM.substr($csrf, 0, 16).'...'.C_RESET);
 
-    humanDelay(1200, 2500);
+    humanDelay(1500, 3000);
     if (!$quiet) rocket('POST /auth/login');
     else        refresh('POST /auth/login (rejoin)');
 
@@ -287,18 +267,35 @@ function doLogin(array $config, string $email, string $device, bool $quiet=false
     ]);
 
     $html = $r['body'];
+
+    if (stripos($html, 'Just a moment') !== false) {
+        err('Cloudflare challenge. Butuh cf_clearance.');
+        return false;
+    }
+
     if (stripos($html, 'Login Success') !== false || stripos($html, 'Welcome back') !== false) {
-        if (!$quiet) ok('Login sukses'); else refresh('Rejoin sukses');
+        if (!$quiet) ok('Login sukses');
+        else        refresh('Rejoin sukses');
         return true;
     }
-    if (stripos($html, 'Invalid') !== false) { err('Login ditolak (Invalid)'); return false; }
-    if (stripos($html, 'Just a moment') !== false) {
-        err('Cloudflare challenge. Butuh cf_clearance.'); return false;
+
+    if (stripos($html, 'Invalid') !== false && stripos($html, 'dashboard') === false) {
+        err('Login ditolak (Invalid)');
+        return false;
     }
-    if (stripos($html, 'dashboard') !== false || $r['status'] === 200) {
+
+    // Fallback: cek cookie ci_session muncul, berarti login berhasil walau HTML ambigu
+    $jar2 = readJar();
+    if (!empty($jar2['ci_session'])) {
+        if (!$quiet) ok('Login sukses (via cookie)');
+        return true;
+    }
+
+    if (stripos($html, 'dashboard') !== false) {
         if (!$quiet) warn('Login ambiguous, assume OK');
         return true;
     }
+
     err('Login gagal status '.$r['status']);
     return false;
 }
@@ -335,11 +332,8 @@ function fetchClaimForm(array $config, bool $quiet=false): ?array {
     ]);
     $html = $r['body'];
 
-    // ═══ DAILY LIMIT juga bisa ke-detect di sini ═══
     foreach (['Daily Limit Reached','completed all claims','check back tomorrow'] as $h) {
-        if (stripos($html, $h) !== false) {
-            return ['_daily_limit' => true];
-        }
+        if (stripos($html, $h) !== false) return ['_daily_limit' => true];
     }
 
     if (preg_match('/let wait = (\d+)/', $html, $m)) {
@@ -356,7 +350,7 @@ function fetchClaimForm(array $config, bool $quiet=false): ?array {
     }
 
     if (stripos($html, 'id="fauform"') === false) {
-        if (stripos($html, 'Please login') !== false || stripos($html, 'auth/login') !== false) {
+        if (stripos($html, 'Please login') !== false || stripos($html, '/auth/login') !== false) {
             err('Form butuh login');
             return ['_need_login' => true];
         }
@@ -414,27 +408,20 @@ function claim(array $config, array $form, string $wallet): array {
     $html = $r['body'];
     $newBal = scrapeBalance($html);
 
-    // ═══ SUCCESS ═══
     if (preg_match('/Success!\s*([\d,\.]+)\s*Coins has been added/i', $html, $m)) {
         return ['ok'=>true, 'reward'=>$m[1], 'balance'=>$newBal, 'hint'=>null, 'stop'=>false];
     }
 
-    // ═══ DAILY LIMIT REACHED ═══
     foreach (['Daily Limit Reached','completed all claims','check back tomorrow','daily limit'] as $h) {
         if (stripos($html, $h) !== false) {
-            return [
-                'ok'=>false, 'reward'=>null, 'balance'=>$newBal,
-                'hint'=>'daily_limit', 'stop'=>true,
-            ];
+            return ['ok'=>false, 'reward'=>null, 'balance'=>$newBal, 'hint'=>'daily_limit', 'stop'=>true];
         }
     }
 
-    // ═══ SESSION MATI ═══
     if (stripos($html, '/auth/login') !== false && stripos($html, 'name="wallet"') !== false) {
         return ['ok'=>false, 'reward'=>null, 'balance'=>$newBal, 'hint'=>'session_dead', 'stop'=>false];
     }
 
-    // ═══ HINTS LAINNYA ═══
     foreach (['Please Wait','Invalid','Error','expired','captcha','too fast','cooldown'] as $hint) {
         if (stripos($html, $hint) !== false) {
             $isCd = stripos($hint,'wait')!==false || stripos($hint,'cooldown')!==false;
@@ -452,7 +439,7 @@ function fullRefresh(array $config, string $email, string $device): bool {
     if (!doLogin($config, $email, $device, true)) {
         err('Re-login gagal saat refresh'); return false;
     }
-    humanDelay(500, 1200);
+    humanDelay(800, 1500);
 
     $d = fetchDashboard($config, true);
     if (!$d) { err('Dashboard gagal saat refresh'); return false; }
@@ -469,41 +456,59 @@ function main(): void {
 
     // ---- Input ----
     hr();
-    $cookieRaw = resolve('cookie', '🍪 Paste cookie (minimal ci_session + cf_clearance + csrf_cookie_name)', true);
 
-    $existing = readJar();
-    $parsed = parseCookieRaw($cookieRaw);
-    if (!$parsed) { err('Cookie gak kebaca.'); exit(1); }
+    // Email
+    $email = argValue('email') ?: (getenv('CC_EMAIL') ?: ($config['email'] ?? null));
+    if (!$email) {
+        $email = prompt('📧 Email / wallet address');
+    }
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        err('Email gak valid: '.$email); exit(1);
+    }
 
-    // Fresh start — buang session lama biar gak ada cookie stale
-    if (file_exists($config['cookie_file'])) @unlink($config['cookie_file']);
-    $merged = array_merge($existing, $parsed);
-    writeCookieJar($config['cookie_file'], $merged);
-    ok('Loaded '.count($merged).' cookies');
-    info('Keys: '.C_DIM.implode(', ', array_keys($merged)).C_RESET);
+    // cf_clearance opsional
+    $cf = argValue('cf') ?: (getenv('CC_CF') ?: ($config['cf'] ?? null));
+    if (!$cf) {
+        echo C_DIM.'🛡️  cf_clearance (opsional, enter buat skip — cuma perlu kalau kena CF challenge)'.C_RESET.PHP_EOL;
+        $cf = prompt('cf_clearance');
+    }
 
-    $hasCf = isset($merged['cf_clearance']) && $merged['cf_clearance'] !== '';
-    $hasSession = isset($merged['ci_session']) && $merged['ci_session'] !== '';
-    if (!$hasCf) warn('cf_clearance kosong — Cloudflare challenge mungkin muncul');
-    if (!$hasSession) warn('ci_session kosong — kemungkinan belum login');
+    info('Panjang email    : '.strlen($email));
+    if ($cf) info('cf_clearance     : '.C_DIM.substr($cf, 0, 20).'...'.C_RESET);
+
+    // Preload jar dengan cf_clearance kalau ada
+    if ($cf) {
+        writeCookieJar($config['cookie_file'], ['cf_clearance' => $cf]);
+        info('cf_clearance di-preload ke jar');
+    }
 
     hr();
-    PHP_EOL;
 
-    // ---- Verify session + scrape email ----
-    $dash = fetchDashboard($config);
-    if (!$dash) { err('Session gak valid. Update cookie.'); exit(1); }
-
-    $email = $dash['email'] ?? null;
-    if (!$email) { err('Gak bisa scrape email dari dashboard.'); exit(1); }
-
+    // ---- Login ----
     $device = generateDeviceToken();
-    hr();
     info('Email    : '.C_BOLD.$email.C_RESET);
     info('Device   : '.C_BOLD.$device.C_RESET);
     info('Delay    : '.C_BOLD.$config['claim_delay_min'].'-'.$config['claim_delay_max'].'s'.C_RESET);
-    info('Mode     : '.C_BOLD.'Daily-limit-aware + Refresh/Rejoin'.C_RESET);
+    info('Mode     : '.C_BOLD.'Email-only login'.C_RESET);
     hr();
+    PHP_EOL;
+
+    $loginFail = 0;
+    while (!doLogin($config, $email, $device)) {
+        $loginFail++;
+        if ($loginFail >= 3) {
+            err('Login gagal 3x. Stop.'); exit(1);
+        }
+        warn("Retry login ($loginFail/3)...");
+        sleep(3);
+    }
+
+    $dash = fetchDashboard($config);
+    if (!$dash) {
+        err('Verifikasi awal gagal. Kemungkinan butuh cf_clearance.');
+        exit(1);
+    }
+    $scrapedEmail = $dash['email'] ?? $email;
     PHP_EOL;
 
     // ---- Claim loop ----
@@ -533,7 +538,7 @@ function main(): void {
 
         $form = fetchClaimForm($config);
 
-        // ═══ DAILY LIMIT via form ═══
+        // ═══ DAILY LIMIT ═══
         if (is_array($form) && !empty($form['_daily_limit'])) {
             echo PHP_EOL;
             hr2();
@@ -544,7 +549,7 @@ function main(): void {
             info('Total sukses sesi ini: '.C_BOLD.C_GREEN.$total.' klaim'.C_RESET.
                  ' ('.$totalCoins.' Coins)'.C_RESET);
             echo PHP_EOL;
-            info(C_BOLD.C_MAGENTA.'📢 Pesan titipan: "Wulan suka Prabowo" — share di grup ScriptyXSouu 😂'.C_RESET);
+            info('Saran: jalanin lagi besok pagi (reset server ~07:00 WIB).');
             hr2();
             break;
         }
@@ -581,7 +586,7 @@ function main(): void {
             continue;
         }
 
-        $res = claim($config, $form, $email);
+        $res = claim($config, $form, $scrapedEmail);
 
         // ═══ DAILY LIMIT via claim ═══
         if (!empty($res['stop']) && $res['hint'] === 'daily_limit') {
