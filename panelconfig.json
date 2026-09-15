@@ -69,7 +69,7 @@
           "runner": "python3"
         },
         "5": {
-          "label": "Makeyoutask 🔴",
+          "label": "Makeyoutask 🟢",
           "file": "myt.php",
           "runner": "php"
         },
@@ -139,7 +139,7 @@
           "runner": "python3"
         },
         "8": {
-          "label": "RedTube 🟢",
+          "label": "RedTube 🔴",
           "file": "Red.py",
           "runner": "python3"
         },
@@ -219,13 +219,13 @@
           "runner": "python3"
         },
         "24": {
-          "label": "PMT (Gram) 🟢",
-          "file": "pmt.py",
+          "label": "Coming Soon",
+          "file": ".py",
           "runner": "python3"
         },
         "25": {
-          "label": "PitCoinMiner 🟢",
-          "file": "pit.py",
+          "label": "Coming Soon",
+          "file": ".py",
           "runner": "python3"
         },
         "26": {
