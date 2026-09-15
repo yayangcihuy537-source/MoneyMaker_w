@@ -39,8 +39,8 @@
           "runner": "php"
         },
         "8": {
-          "label": "Coming Soon",
-          "file": "",
+          "label": "ClaimCrypto 🟢",
+          "file": "ClaimCrypto.php",
           "runner": "php"
         }
       }
