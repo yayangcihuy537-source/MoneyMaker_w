@@ -16,8 +16,8 @@
 error_reporting(E_ALL & ~E_WARNING & ~E_NOTICE & ~E_DEPRECATED);
 date_default_timezone_set('Asia/Jakarta');
 
-$configFile = __DIR__ . "/config.json";
-$cookieFile = __DIR__ . "/cookies.txt";
+$configFile = __DIR__ . "/configcoinclaim.json";
+$cookieFile = __DIR__ . "/cookiescoinclaim.txt";
 
 // ═══════════════════════════════════════════
 //  COLOR
@@ -68,7 +68,7 @@ function printLogo() {
   ╚██████╗███████╗██║  ██║██║██║ ╚═╝ ██║╚██████╗╚██████╔╝██║██║ ╚████║
    ╚═════╝╚══════╝╚═╝  ╚═╝╚═╝╚═╝     ╚═╝ ╚═════╝ ╚═════╝ ╚═╝╚═╝  ╚═══╝
 " . reset;
-    echo cyan . "       auto claimer • v" . version . " • by kyriel\n" . reset;
+    echo cyan . "       auto claimer • v" . version . " • by souuxso\n" . reset;
     echo orchid . "       ScriptMaker: " . gold . scriptmaker . reset . "\n";
     echo putih . "  ─────────────────────────────────────────────────────────────────\n\n" . reset;
 }
