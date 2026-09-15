@@ -1,23 +1,23 @@
 <?php
 /**
- * ClaimCoin.in Auto-Claimer v2.3
+ * ClaimCoin.in Auto-Claimer v2.5
  * ────────────────────────────────
  *   ScriptMaker : MoneyMaker_w
  *   Engine      : Smart Captcha Solver (Waryono)
  *
- * v2.3 fixes:
- *   - isCooldownPage() gak lagi cek "Good job" (itu indikator sukses!)
- *   - Cooldown detection murni berdasarkan timer (var wait / countdown)
- *   - Unknown page → coba extract timer dulu sebelum fallback
- *   - $lastBalance di-update tiap claim sukses
- *   - Akumulasi $totalCoins tetap jalan
+ * v2.5 fixes:
+ *   - Network error (cURL #35 dll) → retry, BUKAN fail
+ *   - Auto rejoin/re-login setelah N network error berturut
+ *   - Balance parse presisi (Available Balance card, bukan reward preview)
+ *   - Stop bersih saat daily limit
+ *   - Consecutive redirect guard
  */
 
 error_reporting(E_ALL & ~E_WARNING & ~E_NOTICE & ~E_DEPRECATED);
 date_default_timezone_set('Asia/Jakarta');
 
-$configFile = __DIR__ . "/configcoinclaim.json";
-$cookieFile = __DIR__ . "/cookiescoinclaim.txt";
+$configFile = __DIR__ . "/config.json";
+$cookieFile = __DIR__ . "/cookies.txt";
 
 // ═══════════════════════════════════════════
 //  COLOR
@@ -46,11 +46,13 @@ const neon   = "\033[38;5;46m";
 const host        = "https://claimcoin.in";
 const waryono_in  = "https://api.waryono.my.id/in.php";
 const waryono_res = "https://api.waryono.my.id/res.php";
-const version     = "2.3";
+const version     = "2.5";
 const scriptmaker = "MoneyMaker_w";
 const MAX_FAILS   = 5;
 const DELAY_MIN   = 12;
 const DELAY_MAX   = 16;
+const NET_RETRY_WAIT = 5;   // detik nunggu sebelum retry setelah network error
+const NET_RELOGIN_AFTER = 3; // re-login setelah N network error berturut
 
 // ═══════════════════════════════════════════
 //  ANIMATIONS
@@ -68,7 +70,7 @@ function printLogo() {
   ╚██████╗███████╗██║  ██║██║██║ ╚═╝ ██║╚██████╗╚██████╔╝██║██║ ╚████║
    ╚═════╝╚══════╝╚═╝  ╚═╝╚═╝╚═╝     ╚═╝ ╚═════╝ ╚═════╝ ╚═╝╚═╝  ╚═══╝
 " . reset;
-    echo cyan . "       auto claimer • v" . version . " • by souuxso\n" . reset;
+    echo cyan . "       auto claimer • v" . version . " • by kyriel\n" . reset;
     echo orchid . "       ScriptMaker: " . gold . scriptmaker . reset . "\n";
     echo putih . "  ─────────────────────────────────────────────────────────────────\n\n" . reset;
 }
@@ -236,7 +238,7 @@ function headersPost($referer) {
 }
 
 // ═══════════════════════════════════════════
-//  HTTP
+//  HTTP  ← v2.5: return detail error cURL
 // ═══════════════════════════════════════════
 function req($url, $method = 'GET', $data = [], $headers = [], $isJson = false) {
     global $cookieFile;
@@ -265,16 +267,23 @@ function req($url, $method = 'GET', $data = [], $headers = [], $isJson = false) 
     curl_setopt_array($ch, $options);
     $body = curl_exec($ch);
     $errno = curl_errno($ch);
-    $err = curl_error($ch);
+    $errmsg = curl_error($ch);
     $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $finalUrl = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
     curl_close($ch);
 
     if ($errno !== 0) {
-        err("cURL #$errno: $err");
-        return ['body'=>false, 'status'=>0, 'url'=>$url];
+        // Kembalikan detail biar caller bisa decide
+        return [
+            'body'      => false,
+            'status'    => 0,
+            'url'       => $url,
+            'error'     => true,
+            'errno'     => $errno,
+            'error_msg' => $errmsg,
+        ];
     }
-    return ['body'=>$body, 'status'=>$status, 'url'=>$finalUrl];
+    return ['body'=>$body, 'status'=>$status, 'url'=>$finalUrl, 'error'=>false];
 }
 
 // ═══════════════════════════════════════════
@@ -363,11 +372,27 @@ function parseSitekey($html) {
     return null;
 }
 
+/**
+ * v2.5: Balance parse presisi
+ * Prioritas 1: <h2> di card "Available Balance" (dashboard)
+ * Prioritas 2: "Total Earned" card
+ * Prioritas 3: pola text "X CCP" di sekitar kata Available/Total (bukan reward preview)
+ * Fallback: pola generic "X CCP <sup>" (faucet page)
+ */
 function parseBalance($html) {
-    if (preg_match('/Available\s+Balance.*?<h2>\s*([\d,\.]+)\s*CCP/i', $html, $m))
+    // Priority 1: Dashboard "Available Balance" card
+    if (preg_match('/Available\s+Balance.*?<h2[^>]*>\s*([\d,\.]+)\s*CCP/i', $html, $m))
         return (float)str_replace(',', '', $m[1]);
-    if (preg_match('/([\d,\.]+)\s*CCP/i', $html, $m))
+
+    // Priority 2: "Total Earned" card
+    if (preg_match('/Total\s+Earned.*?<h2[^>]*>\s*([\d,\.]+)\s*CCP/i', $html, $m))
         return (float)str_replace(',', '', $m[1]);
+
+    // Priority 3: Faucet page marker (bukan balance — ini reward preview) - skip
+    // Priority 4: Fallback generic di sekitar "CCP <sup>"
+    if (preg_match('/>\s*([\d,]+(?:\.\d+)?)\s*CCP\s*<sup/i', $html, $m))
+        return (float)str_replace(',', '', $m[1]);
+
     return null;
 }
 
@@ -396,17 +421,10 @@ function isLoggedIn($html) {
         || (stripos($html, 'Total Earned') !== false);
 }
 
-/**
- * FIX v2.3: Cooldown murni based on timer, BUKAN "Good job"
- * (Good job itu indikator SUKSES di claim(), bukan cooldown)
- */
 function isCooldownPage($html) {
-    // Timer JavaScript
     if (preg_match('/var\s+wait\s*=\s*\d+/i', $html)) return true;
-    // Countdown element
     if (preg_match('/id=["\']second["\'][^>]*>\s*\d+/i', $html)) return true;
     if (preg_match('/id=["\']minute["\'][^>]*>\s*\d+/i', $html)) return true;
-    // Halaman "Please Wait" tanpa form
     if (stripos($html, 'Please Wait') !== false && stripos($html, '/faucet/verify') === false) return true;
     return false;
 }
@@ -514,49 +532,55 @@ function checkDashboard() {
 // ═══════════════════════════════════════════
 function getFaucet() {
     $r = req(host . "/faucet", "GET", [], headersGet());
-    if (!$r['body']) return ['state'=>'error'];
 
-    // Redirect ke halaman lain = cooldown
-    $finalUrl = $r['url'] ?? host . '/faucet';
-    if (strpos($finalUrl, '/faucet') === false) {
-        return ['state'=>'cooldown', 'wait'=>30, 'msg'=>'redirected'];
+    // v2.5: propagate network error
+    if ($r['body'] === false || !empty($r['error'])) {
+        return ['state'=>'network_error', 'errno'=>$r['errno'] ?? 0, 'msg'=>$r['error_msg'] ?? ''];
+    }
+
+    $finalUrl = $r['url'] ?? '';
+
+    if ($finalUrl !== '' && stripos($finalUrl, '/faucet') === false) {
+        $path = parse_url($finalUrl, PHP_URL_PATH) ?: '/';
+
+        if (stripos($path, '/login') !== false) {
+            return ['state'=>'need_login', 'msg'=>'redirected_to_login'];
+        }
+        if (stripos($path, '/dashboard') !== false) {
+            return ['state'=>'unknown', 'wait'=>15, 'msg'=>'redirected_to_dashboard'];
+        }
+        return ['state'=>'cooldown', 'wait'=>30, 'msg'=>'redirected_to_' . $path];
     }
 
     if (isLoginPage($r['body'])) return ['state'=>'need_login'];
 
-    // Cooldown page (timer-based aja)
     if (isCooldownPage($r['body'])) {
         $wait = parseWait($r['body']);
         return ['state'=>'cooldown', 'wait'=>max($wait, 10)];
     }
 
-    // Form marker
     $hasVerifyForm = stripos($r['body'], '/faucet/verify') !== false;
     $hasCollectBtn = stripos($r['body'], 'Collect your reward') !== false;
 
     if (!$hasVerifyForm && !$hasCollectBtn) {
-        // Fallback: cek kalau ada timer tersembunyi / status
         $wait = parseWait($r['body']);
         if ($wait > 0) {
             return ['state'=>'cooldown', 'wait'=>$wait, 'msg'=>'fallback_timer'];
         }
 
-        // Debug info
         $title = '(no title)';
         if (preg_match('/<title>([^<]*)<\/title>/i', $r['body'], $tm)) $title = trim($tm[1]);
         dbg("Unknown page: len=" . strlen($r['body']) . " | title=" . $title);
 
-        // Kalau body sangat pendek, itu error server
         if (strlen($r['body']) < 500) {
             return ['state'=>'cooldown', 'wait'=>20, 'msg'=>'short_body'];
         }
-
-        return ['state'=>'cooldown', 'wait'=>30, 'msg'=>'unknown_page'];
+        return ['state'=>'unknown', 'wait'=>20, 'msg'=>'no_form_marker'];
     }
 
     $csrf = parseCsrf($r['body']);
     if (!$csrf) {
-        return ['state'=>'cooldown', 'wait'=>15, 'msg'=>'csrf_parse_fail'];
+        return ['state'=>'unknown', 'wait'=>15, 'msg'=>'csrf_parse_fail'];
     }
 
     return [
@@ -569,9 +593,23 @@ function getFaucet() {
 function claim($csrf) {
     $data = http_build_query(["csrf_token_name" => $csrf]);
     $r = req(host . "/faucet/verify", "POST", $data, headersPost(host . "/faucet"));
-    if (!$r['body']) return ['ok'=>false, 'hint'=>'no_response'];
+
+    // v2.5: propagate network error
+    if ($r['body'] === false || !empty($r['error'])) {
+        return [
+            'ok' => false,
+            'hint' => 'network_error',
+            'errno' => $r['errno'] ?? 0,
+            'error_msg' => $r['error_msg'] ?? '',
+        ];
+    }
 
     $html = $r['body'];
+    $finalUrl = $r['url'] ?? '';
+
+    if ($finalUrl !== '' && stripos($finalUrl, '/login') !== false) {
+        return ['ok'=>false, 'hint'=>'session_dead'];
+    }
 
     if (preg_match("/Swal\.fire\('Good job!',\s*'([^']+)'/", $html, $m)) {
         $amount = parseRewardAmount($m[1]);
@@ -591,7 +629,11 @@ function claim($csrf) {
     if ($wait > 0 && stripos($html, '/faucet/verify') === false)
         return ['ok'=>false, 'hint'=>'cooldown', 'wait'=>$wait];
 
-    foreach (['Invalid','Error','expired','captcha','too fast'] as $h) {
+    if (stripos($html, 'captcha') !== false && stripos($html, 'verify') === false) {
+        return ['ok'=>false, 'hint'=>'captcha_required'];
+    }
+
+    foreach (['Invalid','Error','expired','too fast'] as $h) {
         if (stripos($html, $h) !== false) return ['ok'=>false, 'hint'=>$h];
     }
 
@@ -621,7 +663,7 @@ function main() {
     clear();
     printLogo();
 
-    // STEP 1: Cek session
+    // STEP 1
     step("Cek session /dashboard...");
     $dash = checkDashboard();
 
@@ -632,10 +674,11 @@ function main() {
     } else {
         ok("Session valid");
         info("User    : " . bold . ($dash['username'] ?? '-') . reset);
-        if ($dash['balance'] !== null) info("Balance : " . bold . $dash['balance'] . " CCP" . reset);
+        if (($dash['balance'] ?? null) !== null)
+            info("Balance : " . bold . $dash['balance'] . " CCP" . reset);
     }
 
-    // STEP 2: Login kalau perlu
+    // STEP 2
     if ($needLogin) {
         line();
         if (!login($email, $password, $apikey)) {
@@ -648,41 +691,64 @@ function main() {
             exit(1);
         }
         info("User    : " . bold . ($dash['username'] ?? '-') . reset);
-        if ($dash['balance'] !== null) info("Balance : " . bold . $dash['balance'] . " CCP" . reset);
+        if (($dash['balance'] ?? null) !== null)
+            info("Balance : " . bold . $dash['balance'] . " CCP" . reset);
     }
 
     line();
     echo "\n";
 
-    // STEP 3: Loop claim
+    // STEP 3
     $fail = 0;
     $total = 0;
     $totalCoins = 0.0;
     $lastBalance = $dash['balance'] ?? null;
     $needRelogin = false;
+    $consecutiveRedirects = 0;
+    $netErrorStreak = 0;
 
     while (true) {
         line();
         echo putih . "  " . bold . hijau . " AUTO-CLAIMER " . reset
             . putih . "  sukses: " . hijau . $total . reset
             . putih . "  |  akumulasi: " . gold . sprintf("%.4f", $totalCoins) . " CCP" . reset
-            . putih . "  |  gagal: " . merah . "$fail/" . MAX_FAILS . reset . "\n";
+            . putih . "  |  gagal: " . merah . "$fail/" . MAX_FAILS . reset;
+        if ($lastBalance !== null)
+            echo putih . "  |  bal: " . cyan . $lastBalance . reset;
+        echo "\n";
         line();
 
         if ($needRelogin) {
-            warn("Re-login karena session expired...");
+            warn("Re-login karena session expired / error...");
             if (!login($email, $password, $apikey)) {
                 err("Re-login gagal. Stop.");
                 break;
             }
             $needRelogin = false;
             $fail = 0;
+            $consecutiveRedirects = 0;
+            $netErrorStreak = 0;
         }
 
         $state = getFaucet();
 
+        // v2.5: handle network error di GET /faucet
+        if ($state['state'] === 'network_error') {
+            $netErrorStreak++;
+            warn("Network error saat GET /faucet (#{$state['errno']}). Streak: {$netErrorStreak}");
+            if ($netErrorStreak >= NET_RELOGIN_AFTER) {
+                warn("Network error {$netErrorStreak}x, coba re-login...");
+                $netErrorStreak = 0;
+                $needRelogin = true;
+                continue;
+            }
+            timer(NET_RETRY_WAIT, "net-retry");
+            continue;
+        }
+
         if ($state['state'] === 'need_login') {
-            warn("Session expired, coba re-login...");
+            $msg = $state['msg'] ?? '';
+            warn("Session expired" . ($msg ? " ({$msg})" : "") . ", re-login...");
             $needRelogin = true;
             continue;
         }
@@ -691,7 +757,26 @@ function main() {
             $wait = $state['wait'] ?? 10;
             $msg = $state['msg'] ?? '';
             if ($msg) dbg("Cooldown reason: " . $msg);
+            $consecutiveRedirects++;
+
+            if ($consecutiveRedirects >= 3) {
+                warn("Redirect berturut-turut, coba re-login...");
+                $consecutiveRedirects = 0;
+                $needRelogin = true;
+                continue;
+            }
+
             timer($wait, "cooldown");
+            continue;
+        }
+
+        $consecutiveRedirects = 0;
+
+        if ($state['state'] === 'unknown') {
+            $wait = $state['wait'] ?? 15;
+            $msg = $state['msg'] ?? 'unknown';
+            warn("Halaman gak dikenal ({$msg}), tunggu {$wait}s");
+            timer($wait, "retry");
             continue;
         }
 
@@ -703,20 +788,36 @@ function main() {
             continue;
         }
 
-        if (!empty($state['balance'])) $lastBalance = $state['balance'];
+        // Reset net error streak kalau udah sukses fetch
+        $netErrorStreak = 0;
+
+        if (($state['balance'] ?? null) !== null) $lastBalance = $state['balance'];
 
         info("CSRF    : " . dim . substr($state['csrf'], 0, 16) . "..." . reset);
         if ($lastBalance !== null) info("Balance : " . bold . $lastBalance . " CCP" . reset);
 
         $res = claim($state['csrf']);
 
+        // v2.5: NETWORK ERROR — jangan hitung fail
+        if (($res['hint'] ?? '') === 'network_error') {
+            $netErrorStreak++;
+            warn("Network error saat POST /verify (#{$res['errno']}). Streak: {$netErrorStreak}");
+            if ($netErrorStreak >= NET_RELOGIN_AFTER) {
+                warn("Network error {$netErrorStreak}x, coba re-login...");
+                $netErrorStreak = 0;
+                $needRelogin = true;
+                continue;
+            }
+            timer(NET_RETRY_WAIT, "net-retry");
+            continue;
+        }
+
         if ($res['ok']) {
             $total++;
             $reward = (float)($res['reward'] ?? 0);
             if ($reward > 0) $totalCoins += $reward;
 
-            // Update balance dari response claim
-            if (!empty($res['balance'])) $lastBalance = $res['balance'];
+            if (($res['balance'] ?? null) !== null) $lastBalance = $res['balance'];
 
             echo putih . "  " . bold . hijau . " 💰 SUKSES " . reset
                 . hijau . " +" . ($reward > 0 ? sprintf("%.4f", $reward) : "?") . " CCP" . reset . "\n";
@@ -727,6 +828,8 @@ function main() {
                 info("Balance baru : " . bold . $lastBalance . " CCP" . reset);
 
             $fail = 0;
+            $consecutiveRedirects = 0;
+            $netErrorStreak = 0;
 
             $delay = random_int(DELAY_MIN, DELAY_MAX);
             echo "\n";
@@ -735,6 +838,7 @@ function main() {
             continue;
         }
 
+        // DAILY LIMIT — stop bersih
         if (!empty($res['stop']) && ($res['hint'] ?? '') === 'daily_limit') {
             echo "\n"; line();
             echo putih . "  " . bold . kuning . " 🎯 DAILY LIMIT REACHED " . reset . "\n";
@@ -761,11 +865,29 @@ function main() {
             continue;
         }
 
+        if (($res['hint'] ?? '') === 'captcha_required') {
+            warn("Server minta captcha lagi. Refetch form...");
+            $fail = 0;
+            sleep(3);
+            continue;
+        }
+
         $fail++;
         $hint = $res['hint'] ?? 'unknown';
         err("Claim gagal (hint: $hint) [$fail/" . MAX_FAILS . "]");
 
-        if ($fail >= MAX_FAILS) { warn("Gagal " . MAX_FAILS . "x. Stop."); break; }
+        // Auto re-login kalau error yang butuh session fresh
+        if (in_array($hint, ['captcha', 'Invalid', 'Error'])) {
+            warn("Re-login buat refresh session...");
+            $needRelogin = true;
+            continue;
+        }
+
+        if ($fail >= MAX_FAILS) {
+            warn("Gagal " . MAX_FAILS . "x. Stop.");
+            break;
+        }
+
         sleep(3);
     }
 
