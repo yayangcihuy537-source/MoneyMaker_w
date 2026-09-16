@@ -85,7 +85,7 @@ MINING_BANNER = f"""
 ╚══════════════════════════════════════════════╝{RS}
 """
 
-CONFIG_FILE = "config.json"
+CONFIG_FILE = "cloud.json"
 
 INIT_DATA = ""
 AUTH_TOKEN = ""
