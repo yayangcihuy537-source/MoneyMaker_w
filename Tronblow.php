@@ -1,7 +1,11 @@
 <?php
 /**
- * TronBlow.site Auto Claim Bot v3.2
- * Fix: hapus curl_close, tambah banner sukses keren
+ * ═══════════════════════════════════════════════════════════════
+ *  TronBlow.site Auto Claim Bot v4.0
+ *  - Max Claim: 200/day (info di banner)
+ *  - Full Hacker Animation Pack terintegrasi
+ *  - Fix: hapus curl_close (PHP 8.0+ native)
+ * ═══════════════════════════════════════════════════════════════
  */
 
 if (PHP_VERSION_ID < 80000) {
@@ -9,45 +13,252 @@ if (PHP_VERSION_ID < 80000) {
     exit(1);
 }
 
-// ==================== WARNA ANSI ====================
-$green   = "\033[1;32m";
-$cyan    = "\033[1;36m";
-$yellow  = "\033[1;33m";
-$magenta = "\033[1;35m";
-$white   = "\033[1;37m";
-$bold    = "\033[1m";
-$reset   = "\033[0m";
+// ═══════════════════════════════════════════════════════════════
+//  ANIMATION PACK (Hacker Style)
+// ═══════════════════════════════════════════════════════════════
 
-// ==================== BANNER ====================
-echo $green . "
-╭──────────────────────────────────────────────────────────────╮
-│                                                              │
-│   ████████╗██████╗  ██████╗ ███╗   ██╗                      │
-│   ╚══██╔══╝██╔══██╗██╔═══██╗████╗  ██║                      │
-│      ██║   ██████╔╝██║   ██║██╔██╗ ██║                      │
-│      ██║   ██╔══██╗██║   ██║██║╚██╗██║                      │
-│      ██║   ██║  ██║╚██████╔╝██║ ╚████║                      │
-│      ╚═╝   ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝                      │
-│                                                              │
-│              " . $cyan . "TRONBLOW // AUTO CLAIM" . $green . "                │
-│                                                              │
-│   " . $white . "┌─ SYSTEM ─────────────────────────────────────────┐" . $green . " │
-│   " . $white . "│ " . $green . "● BOT STATUS   : ONLINE" . $white . "                      │" . $green . " │
-│   " . $white . "│ " . $cyan . "⚡ CLAIM MODE   : AUTOMATIC" . $white . "                   │" . $green . " │
-│   " . $white . "│ " . $yellow . "💰 REWARD      : 1000 SATOSHI" . $white . "                 │" . $green . " │
-│   " . $white . "│ " . $magenta . "⏱ INTERVAL     : 60 SECONDS" . $white . "                 │" . $green . " │
-│   " . $white . "└───────────────────────────────────────────────────┘" . $green . " │
-│                                                              │
-│             " . $yellow . ">>> INITIALIZING CLAIM ENGINE..." . $green . "             │
-│                                                              │
-╰──────────────────────────────────────────────────────────────╯
-" . $reset . "\n";
+define('RESET',   "\033[0m");
+define('BOLD',    "\033[1m");
+define('DIM',     "\033[2m");
+define('RED',     "\033[1;31m");
+define('GREEN',   "\033[1;32m");
+define('YELLOW',  "\033[1;33m");
+define('BLUE',    "\033[1;34m");
+define('MAGENTA', "\033[1;35m");
+define('CYAN',    "\033[1;36m");
+define('WHITE',   "\033[1;37m");
+define('GRAY',    "\033[0;90m");
+define('NEON',    "\033[38;5;46m");
+define('NEON_P',  "\033[38;5;201m");
+define('NEON_C',  "\033[38;5;51m");
+define('NEON_Y',  "\033[38;5;226m");
+define('ORANGE',  "\033[38;5;208m");
+define('PURPLE',  "\033[38;5;135m");
 
-// ==================== KONFIGURASI ====================
-$CONFIG_FILE = __DIR__ . "/tronblow_config.json";
-$COOKIE_FILE = __DIR__ . "/cookies_tronblow.txt";
+function clear_screen() {
+    (PHP_OS == "Linux") ? system('clear') : pclose(popen('cls', 'w'));
+}
 
-// ==================== FUNGSI ====================
+function matrix_rain($width = 70, $height = 8, $duration = 2.0) {
+    $chars = "ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉ01010101TRONBLOW";
+    $charsArr = preg_split('//u', $chars, -1, PREG_SPLIT_NO_EMPTY);
+    $start = microtime(true);
+    $lines = array_fill(0, $height, array_fill(0, $width, ' '));
+
+    echo "\n";
+    for ($i = 0; $i < $height; $i++) echo "\n";
+
+    while ((microtime(true) - $start) < $duration) {
+        for ($i = 0; $i < 5; $i++) {
+            $col = random_int(0, $width - 1);
+            $lines[0][$col] = $charsArr[random_int(0, count($charsArr) - 1)];
+        }
+        for ($y = $height - 1; $y > 0; $y--) {
+            $lines[$y] = $lines[$y - 1];
+        }
+        $lines[0] = array_fill(0, $width, ' ');
+
+        echo "\033[" . $height . "A";
+        foreach ($lines as $y => $row) {
+            $color = $y < 1 ? NEON : ($y < 2 ? GREEN : (DIM . GREEN));
+            echo $color . implode('', $row) . RESET . "\n";
+        }
+        usleep(80000);
+    }
+}
+
+function loading_bar($label = "LOADING", $duration = 1.5) {
+    $frames = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
+    $start = microtime(true);
+    $i = 0;
+    $barLen = 30;
+    while ((microtime(true) - $start) < $duration) {
+        $progress = (microtime(true) - $start) / $duration;
+        $filled = (int)($barLen * $progress);
+        $bar = str_repeat('█', $filled) . str_repeat('░', $barLen - $filled);
+        $frame = $frames[$i % count($frames)];
+        $hex = '';
+        for ($h = 0; $h < 4; $h++) $hex .= dechex(random_int(0, 15));
+        $pct = (int)($progress * 100);
+        echo "\r" . PURPLE . "  ┃" . RESET . " " . NEON_P . $frame . RESET . " "
+            . NEON_C . str_pad($label, 24) . RESET
+            . " " . PURPLE . "[" . $bar . "]" . RESET
+            . " " . NEON . sprintf("%3d%%", $pct) . RESET
+            . " " . DIM . "0x" . strtoupper($hex) . RESET;
+        usleep(60000);
+        $i++;
+    }
+    echo "\r" . str_repeat(' ', 110) . "\r";
+}
+
+function scan_line($label = "SCANNING", $steps = 50) {
+    for ($i = 0; $i <= $steps; $i++) {
+        $bar = str_repeat('█', $i) . str_repeat('░', $steps - $i);
+        $noise = '';
+        for ($n = 0; $n < 16; $n++) $noise .= random_int(0, 1);
+        echo "\r" . PURPLE . "  ┃" . RESET . " " . NEON_C . $label . RESET
+            . " " . NEON . $bar . RESET
+            . " " . NEON_P . "[" . $noise . "]" . RESET;
+        usleep(30000);
+    }
+    echo "\n";
+}
+
+function hacking_boot($steps = null) {
+    $steps = $steps ?? [
+        "Initializing kernel module...",
+        "Loading anti-bot engine...",
+        "Rotating device fingerprint...",
+        "Injecting stealth headers...",
+        "Connecting to remote server...",
+        "Bypassing security layers...",
+        "Loading session cookies...",
+        "System ready.",
+    ];
+
+    echo NEON_C . "  ⚡ SYSTEM BOOT SEQUENCE" . RESET . "\n\n";
+    foreach ($steps as $s) {
+        echo NEON . "[✓]" . RESET . " " . $s;
+        usleep(random_int(60000, 90000));
+        echo "\n";
+    }
+    echo NEON_Y . "[⚡]" . RESET . "   Status: " . NEON . "SECURE" . RESET . "\n";
+    echo NEON_P . "[★]" . RESET . "   Welcome, Operative." . RESET . "\n";
+}
+
+function decrypt_text($target, $duration = 1.0) {
+    $chars = "!@#$%^&*()_+-=[]{}|;:,.<>?~ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    $len = strlen($target);
+    $start = microtime(true);
+    $result = str_split(str_repeat(' ', $len));
+
+    while ((microtime(true) - $start) < $duration) {
+        $progress = (microtime(true) - $start) / $duration;
+        $lockCount = (int)($len * $progress);
+        for ($i = 0; $i < $len; $i++) {
+            if ($i < $lockCount) {
+                $result[$i] = $target[$i];
+            } else {
+                $result[$i] = $target[$i] === ' ' ? ' ' : $chars[random_int(0, strlen($chars) - 1)];
+            }
+        }
+        echo "\r  " . NEON . implode('', $result) . RESET;
+        usleep(50000);
+    }
+    echo "\r  " . NEON_C . $target . RESET . "\n";
+}
+
+function glitch_text($text, $duration = 0.8) {
+    $start = microtime(true);
+    $glitchChars = "░▒▓█▄▀■□▪▫";
+    while ((microtime(true) - $start) < $duration) {
+        $out = '';
+        for ($i = 0; $i < strlen($text); $i++) {
+            if (random_int(0, 10) < 2 && $text[$i] !== ' ') {
+                $out .= $glitchChars[random_int(0, strlen($glitchChars) - 1)];
+            } else {
+                $out .= $text[$i];
+            }
+        }
+        echo "\r  " . NEON_P . $out . RESET;
+        usleep(60000);
+    }
+    echo "\r  " . NEON_C . $text . RESET . "\n";
+}
+
+function faucet_progress($label = "Claiming reward", $duration = 3.0) {
+    $barLen = 40;
+    $start = microtime(true);
+    $waves = ['░', '▒', '▓', '█'];
+    while ((microtime(true) - $start) < $duration) {
+        $progress = (microtime(true) - $start) / $duration;
+        $filled = (int)($barLen * $progress);
+        $bar = '';
+        for ($i = 0; $i < $barLen; $i++) {
+            if ($i < $filled) {
+                $bar .= '█';
+            } elseif ($i === $filled) {
+                $bar .= $waves[random_int(0, 3)];
+            } else {
+                $bar .= '░';
+            }
+        }
+        $pct = (int)($progress * 100);
+        echo "\r  " . NEON_C . "⚡ " . str_pad($label, 22) . RESET
+            . " " . NEON . "[" . $bar . "]" . RESET
+            . " " . NEON_Y . sprintf("%3d%%", $pct) . RESET;
+        usleep(50000);
+    }
+    echo "\r  " . NEON . "✓ " . str_pad($label . " — DONE", 22) . RESET
+        . " " . NEON . "[" . str_repeat('█', $barLen) . "]" . RESET
+        . " " . NEON_Y . "100%" . RESET . "\n";
+}
+
+function spinner_wait($seconds, $prefix = "Waiting") {
+    $frames = ['⣾', '⣽', '⣻', '⢿', '⡿', '⣟', '⣯', '⣷'];
+    $fc = count($frames);
+    $cf = 0;
+    $wait = (int)$seconds;
+    while ($wait > 0) {
+        $start = microtime(true);
+        while ((microtime(true) - $start) < 1) {
+            $h = floor($wait / 3600);
+            $m = floor(($wait % 3600) / 60);
+            $s = $wait % 60;
+            $t = sprintf('%02d:%02d:%02d', $h, $m, $s);
+            echo "\r  " . NEON_C . "⏳ " . $prefix . RESET . " : " . NEON . $t . " " . $frames[$cf] . RESET . "  ";
+            usleep(100000);
+            $cf = ($cf + 1) % $fc;
+            if ((microtime(true) - $start) >= 1) break;
+        }
+        $wait--;
+    }
+    echo "\r" . str_repeat(' ', 70) . "\r";
+}
+
+function success_banner($title = "SUCCESS", $lines = []) {
+    $w = 58;
+    echo "\n" . NEON . BOLD . "╔" . str_repeat('═', $w) . "╗" . RESET . "\n";
+    echo NEON . BOLD . "║" . RESET . str_pad("  ✓ " . $title, $w) . NEON . BOLD . "║" . RESET . "\n";
+    echo NEON . BOLD . "╠" . str_repeat('═', $w) . "╣" . RESET . "\n";
+    foreach ($lines as $k => $v) {
+        $line = "  " . str_pad($k, 15) . ": " . $v;
+        echo NEON . BOLD . "║" . RESET . str_pad($line, $w) . NEON . BOLD . "║" . RESET . "\n";
+    }
+    echo NEON . BOLD . "╚" . str_repeat('═', $w) . "╝" . RESET . "\n\n";
+}
+
+function hack_progress($label = "Bypassing security", $duration = 2.5) {
+    $steps = [
+        "Analyzing target...",
+        "Scanning open ports...",
+        "Injecting payload...",
+        "Bypassing firewall...",
+        "Escalating privileges...",
+        "Access granted!",
+    ];
+    foreach ($steps as $i => $s) {
+        echo "  " . NEON_C . "[>]" . RESET . " " . $s;
+        $dots = 0;
+        while ($dots < 3) {
+            echo ".";
+            usleep(random_int(80000, 150000));
+            $dots++;
+        }
+        echo " " . NEON . "[OK]" . RESET . "\n";
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  KONFIGURASI & FUNGSI BOT
+// ═══════════════════════════════════════════════════════════════
+
+$CONFIG_FILE  = __DIR__ . "/tronblow_config.json";
+$COOKIE_FILE  = __DIR__ . "/cookies_tronblow.txt";
+$COUNTER_FILE = __DIR__ . "/tronblow_counter.json";
+
+const DAILY_LIMIT = 200;
+
 function log_msg(string $msg, string $type = "INFO"): void {
     $colors = [
         "SUCCESS" => "\033[32m",
@@ -69,6 +280,32 @@ function read_line(string $prompt = ""): string {
     return trim($line);
 }
 
+// ── Counter 200/day ──────────────────────────────────────────
+function load_counter(): array {
+    global $COUNTER_FILE;
+    $today = date("Y-m-d");
+    if (file_exists($COUNTER_FILE)) {
+        $data = json_decode(file_get_contents($COUNTER_FILE), true);
+        if (is_array($data) && ($data['date'] ?? '') === $today) {
+            return $data;
+        }
+    }
+    return ['date' => $today, 'count' => 0];
+}
+
+function save_counter(array $counter): void {
+    global $COUNTER_FILE;
+    file_put_contents($COUNTER_FILE, json_encode($counter, JSON_PRETTY_PRINT));
+}
+
+function increment_counter(): array {
+    $c = load_counter();
+    $c['count']++;
+    save_counter($c);
+    return $c;
+}
+
+// ── Config ───────────────────────────────────────────────────
 function load_config(): ?array {
     global $CONFIG_FILE;
     if (file_exists($CONFIG_FILE)) {
@@ -90,6 +327,7 @@ function save_config(array $config): void {
     log_msg("Config saved!", "SUCCESS");
 }
 
+// ── HTTP ─────────────────────────────────────────────────────
 function fetch_page(string $url, string $cookie_file): array {
     $ch = curl_init($url);
     $headers = [
@@ -120,7 +358,6 @@ function fetch_page(string $url, string $cookie_file): array {
     $html = curl_exec($ch);
     $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $error = curl_error($ch);
-    // curl_close sudah tidak perlu di PHP 8.0+
 
     if ($error) {
         log_msg("cURL Error: $error", "ERROR");
@@ -175,11 +412,11 @@ function submit_claim(string $url, string $cookie_file, string $email, string $c
 
     $response = curl_exec($ch);
     $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    // curl_close sudah tidak perlu di PHP 8.0+
 
     return ['code' => $http_code, 'body' => (string)$response];
 }
 
+// ── Parser ───────────────────────────────────────────────────
 function extract_csrf_token(string $html): ?string {
     if (preg_match('/<input\s+type="hidden"\s+name="csrf_token"\s+value="([^"]+)"/i', $html, $m)) {
         return $m[1];
@@ -258,48 +495,56 @@ function check_response(string $html): array {
 }
 
 function countdown_seconds(int $seconds): void {
-    global $yellow, $reset, $green;
-    for ($i = $seconds; $i > 0; $i--) {
-        echo "\r" . $yellow . "[" . date("H:i:s") . "] [WAIT] Next claim in {$i}s..." . $reset;
-        sleep(1);
-    }
-    echo "\r" . $green . "[" . date("H:i:s") . "] [INFO] Claiming now!          " . $reset . "\n";
+    // pakai spinner animasi dari animation pack
+    spinner_wait($seconds, "Next claim");
 }
 
-// ==================== BANNER SUKSES KEREN ====================
-function print_success_banner(string $email, string $reward = "1000 SATOSHI TRX"): void {
-    global $green, $cyan, $yellow, $white, $reset, $bold;
+// ── Banner Utama ─────────────────────────────────────────────
+function print_main_banner(array $config): void {
+    $counter = load_counter();
+    $remaining = max(0, DAILY_LIMIT - $counter['count']);
 
-    // Rapikan email (maks 30 karakter)
-    $email_short = strlen($email) > 30 ? substr($email, 0, 27) . '...' : $email;
-    $email_padded = str_pad($email_short, 30);
-    $reward_padded = str_pad($reward, 30);
+    $status_color = $remaining > 50 ? NEON : ($remaining > 10 ? NEON_Y : RED);
 
-    echo "\n" . $green . $bold .
-         "╭──────────────────────────────────────────────────────────╮\n" .
-         "│                                                          │\n" .
-         "│              ✓ CLAIM COMPLETED                           │\n" .
-         "│                                                          │\n" .
-         "│   STATUS   : " . $white . "SUCCESS" . $green . "                                │\n" .
-         "│   REWARD   : " . $yellow . $reward_padded . $green . "                    │\n" .
-         "│   ACCOUNT  : " . $white . $email_padded . $green . "                    │\n" .
-         "│                                                          │\n" .
-         "│              " . $cyan . "WAITING FOR NEXT CYCLE..." . $green . "              │\n" .
-         "│                                                          │\n" .
-         "╰──────────────────────────────────────────────────────────╯" .
-         $reset . "\n";
+    echo NEON . "
+╭──────────────────────────────────────────────────────────────╮
+│                                                              │
+│   ████████╗██████╗  ██████╗ ███╗   ██╗                      │
+│   ╚══██╔══╝██╔══██╗██╔═══██╗████╗  ██║                      │
+│      ██║   ██████╔╝██║   ██║██╔██╗ ██║                      │
+│      ██║   ██╔══██╗██║   ██║██║╚██╗██║                      │
+│      ██║   ██║  ██║╚██████╔╝██║ ╚████║                      │
+│      ╚═╝   ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝                      │
+│                                                              │
+│              " . NEON_C . "TRONBLOW // AUTO CLAIM v4.0" . NEON . "              │
+│                                                              │
+│   " . WHITE . "┌─ SYSTEM ─────────────────────────────────────────┐" . NEON . " │
+│   " . WHITE . "│ " . NEON . "● BOT STATUS   : ONLINE" . WHITE . "                      │" . NEON . " │
+│   " . WHITE . "│ " . NEON_C . "⚡ CLAIM MODE   : AUTOMATIC" . WHITE . "                   │" . NEON . " │
+│   " . WHITE . "│ " . NEON_Y . "💰 REWARD      : 1000 SATOSHI" . WHITE . "                 │" . NEON . " │
+│   " . WHITE . "│ " . NEON_P . "⏱ INTERVAL    : 60 SECONDS" . WHITE . "                 │" . NEON . " │
+│   " . WHITE . "│ " . ORANGE . "📊 DAILY LIMIT : " . DAILY_LIMIT . " / DAY" . WHITE . "                     │" . NEON . " │
+│   " . WHITE . "│ " . $status_color . "🎯 CLAIMED     : " . $counter['count'] . " (" . $remaining . " left)" . WHITE . "             │" . NEON . " │
+│   " . WHITE . "└───────────────────────────────────────────────────┘" . NEON . " │
+│                                                              │
+│             " . NEON_Y . ">>> INITIALIZING CLAIM ENGINE..." . NEON . "             │
+│                                                              │
+╰──────────────────────────────────────────────────────────────╯
+" . RESET . "\n";
 }
 
-// ==================== INTERACTIVE SETUP ====================
+// ═══════════════════════════════════════════════════════════════
+//  INTERACTIVE SETUP
+// ═══════════════════════════════════════════════════════════════
+
 function interactive_setup(): array {
-    global $green, $cyan, $reset;
-    echo "\n" . $green . "╔════════════════════════════════════════════════╗" . $reset . "\n";
-    echo $green . "║     TRONBLOW FAUCET BOT v3.2                  ║" . $reset . "\n";
-    echo $green . "║     Developer: ScriptyXSouu                    ║" . $reset . "\n";
-    echo $green . "╚════════════════════════════════════════════════╝" . $reset . "\n\n";
+    echo "\n" . NEON . "╔════════════════════════════════════════════════╗" . RESET . "\n";
+    echo NEON . "║     TRONBLOW FAUCET BOT v4.0                  ║" . RESET . "\n";
+    echo NEON . "║     Developer: ScriptyXSouu                   ║" . RESET . "\n";
+    echo NEON . "╚════════════════════════════════════════════════╝" . RESET . "\n\n";
 
     $config = [];
-    echo $cyan . "[1/2] Enter your FaucetPay email:" . $reset . "\n";
+    echo NEON_C . "[1/2] Enter your FaucetPay email:" . RESET . "\n";
     $config['email'] = read_line("Email: ");
     while (empty($config['email']) || !filter_var($config['email'], FILTER_VALIDATE_EMAIL)) {
         log_msg("Invalid email!", "WARN");
@@ -310,14 +555,43 @@ function interactive_setup(): array {
     $config['delay'] = 65;
     $config['cookie'] = '';
 
-    echo "\n" . $green . "Config saved!" . $reset . "\n";
+    echo "\n" . NEON . "Config saved!" . RESET . "\n";
     return $config;
 }
 
-// ==================== MAIN ====================
+// ═══════════════════════════════════════════════════════════════
+//  MAIN EXECUTION
+// ═══════════════════════════════════════════════════════════════
+
+clear_screen();
+
+// 1. Efek boot ala hacker
+hacking_boot([
+    "Initializing kernel module...",
+    "Loading anti-bot engine...",
+    "Rotating device fingerprint...",
+    "Injecting stealth headers...",
+    "Connecting to remote server...",
+    "Bypassing security layers...",
+    "Loading session cookies...",
+    "System ready.",
+]);
+echo "\n";
+
+// 2. Decrypt title
+decrypt_text("TRONBLOW AUTO CLAIM ENGINE v4.0", 1.2);
+glitch_text("MAX 200 CLAIM/DAY • 1000 SATOSHI/CLAIM", 0.8);
+echo "\n";
+
+// 3. Loading modules
+loading_bar("Loading modules", 1.0);
+loading_bar("Fetching cookies", 0.8);
+scan_line("Reading target", 40);
+echo "\n";
+
+// 4. Load config
 $config = load_config();
 if ($config) {
-    echo "\n";
     log_msg("Saved config found!", "SUCCESS");
     echo "  Email: {$config['email']}\n";
     echo "  URL:   {$config['base_url']}\n";
@@ -341,27 +615,38 @@ if (!file_exists($COOKIE_FILE)) {
     touch($COOKIE_FILE);
 }
 
-echo "\n┌────────────────────────────────────────┐\n";
-echo "│         CURRENT CONFIGURATION          │\n";
-echo "├────────────────────────────────────────┤\n";
-echo "│ Email: " . str_pad(substr($config['email'], 0, 25), 26) . "│\n";
-echo "│ URL:   " . str_pad($config['base_url'], 26) . "│\n";
-echo "│ Delay: " . str_pad($config['delay'] . "s", 26) . "│\n";
-echo "└────────────────────────────────────────┘\n\n";
+// 5. Banner utama dengan info 200/day
+print_main_banner($config);
+
+// 6. Efek hack sebelum mulai
+hack_progress("Hacking server");
+echo "\n";
+faucet_progress("Bypassing Cloudflare", 1.5);
+echo "\n";
 
 log_msg("=== BOT STARTED ===", "SUCCESS");
+log_msg("Daily limit: " . DAILY_LIMIT . " claims", "INFO");
 log_msg("Press Ctrl+C to stop", "WARN");
 echo "\n";
 
 $cycle = 0;
 while (true) {
+    // Cek limit harian
+    $counter = load_counter();
+    if ($counter['count'] >= DAILY_LIMIT) {
+        log_msg("🚫 Daily limit reached ({$counter['count']}/" . DAILY_LIMIT . "). Waiting for reset...", "WARN");
+        $secs_until_reset = strtotime("tomorrow 00:00 UTC") - time();
+        if ($secs_until_reset > 0) spinner_wait($secs_until_reset, "Reset in");
+        continue;
+    }
+
     $cycle++;
-    log_msg("========== CYCLE #$cycle ==========", "INFO");
+    echo "\n" . NEON_P . "╭─── CYCLE #$cycle ─── " . date("H:i:s") . " ─── " . $counter['count'] . "/" . DAILY_LIMIT . " ───╮" . RESET . "\n";
 
     $result = fetch_page($config['base_url'], $COOKIE_FILE);
     if (!$result['html']) {
         log_msg("Failed to fetch page. Retry in 30s...", "ERROR");
-        countdown_seconds(30);
+        spinner_wait(30, "Retry");
         continue;
     }
     $html = $result['html'];
@@ -370,17 +655,18 @@ while (true) {
     if (strpos($lower, 'cf-browser-verification') !== false ||
         strpos($lower, 'challenge-platform') !== false ||
         strpos($lower, 'just a moment') !== false) {
-        log_msg("Cloudflare challenge detected! Clearing cookies and retrying...", "WARN");
+        log_msg("Cloudflare challenge detected! Clearing cookies...", "WARN");
+        glitch_text("!! CLOUDFLARE CHALLENGE DETECTED !!", 0.6);
         unlink($COOKIE_FILE);
         touch($COOKIE_FILE);
-        countdown_seconds(60);
+        spinner_wait(60, "Cooldown");
         continue;
     }
 
     $csrf = extract_csrf_token($html);
     if (!$csrf) {
         log_msg("CSRF token not found! Retry in 30s...", "ERROR");
-        countdown_seconds(30);
+        spinner_wait(30, "Retry");
         continue;
     }
     log_msg("CSRF: " . substr($csrf, 0, 10) . "...", "DEBUG");
@@ -388,11 +674,17 @@ while (true) {
     $math = extract_math_question($html);
     if (!$math) {
         log_msg("Could not extract math question. Retry in 30s...", "ERROR");
-        countdown_seconds(30);
+        spinner_wait(30, "Retry");
         continue;
     }
     $answer = solve_math($math);
     log_msg("Math: {$math['q1']} {$math['op']} {$math['q2']} = $answer", "SUCCESS");
+
+    // Animasi dekripsi payload
+    decrypt_text("SOLVING CAPTCHA → " . $answer, 0.6);
+
+    // Animasi progress claim
+    faucet_progress("Claiming 1000 SATOSHI", 2.0);
 
     $submit = submit_claim($config['base_url'], $COOKIE_FILE, $config['email'], $csrf, $answer);
     log_msg("HTTP Status: {$submit['code']}", "INFO");
@@ -402,8 +694,17 @@ while (true) {
 
     switch ($status['status']) {
         case 'success':
-            // Tampilkan banner keren, hilangkan log sukses yang berisik
-            print_success_banner($config['email']);
+            $counter = increment_counter();
+            $remaining = max(0, DAILY_LIMIT - $counter['count']);
+
+            success_banner("CLAIM COMPLETED", [
+                "Reward"     => "1000 SATOSHI TRX",
+                "Account"    => $config['email'],
+                "Progress"   => $counter['count'] . "/" . DAILY_LIMIT . " today",
+                "Remaining"  => $remaining . " claims left",
+                "Next"       => "Auto-wait...",
+            ]);
+
             $endAt = extract_endAt($submit['body']);
             if ($endAt) {
                 $now = time() * 1000;
@@ -411,6 +712,7 @@ while (true) {
                 if ($wait_ms > 0) $wait_seconds = (int)ceil($wait_ms / 1000);
             }
             break;
+
         case 'wait':
         case 'already':
             log_msg("⏳ Cooldown active. Waiting for server timer.", "WARN");
@@ -421,13 +723,18 @@ while (true) {
                 if ($wait_ms > 0) $wait_seconds = (int)ceil($wait_ms / 1000);
             }
             break;
+
         case 'wrong':
             log_msg("❌ Math answer wrong! Retrying with new page...", "ERROR");
-            countdown_seconds(10);
+            glitch_text("!! CAPTCHA FAILED !!", 0.5);
+            spinner_wait(10, "Retry");
             continue 2;
+
         case 'banned':
             log_msg("🚫 ACCOUNT BANNED! Exiting...", "ERROR");
+            glitch_text("!! ACCESS DENIED — BANNED !!", 0.8);
             exit(1);
+
         default:
             log_msg("❓ Unknown response: {$status['msg']}", "WARN");
             $endAt = extract_endAt($submit['body']);
@@ -438,10 +745,12 @@ while (true) {
             }
     }
 
+    echo NEON . "╰─────────────────────────────────────────────╯" . RESET . "\n";
+
     if ($wait_seconds > 0) {
-        countdown_seconds($wait_seconds);
+        spinner_wait($wait_seconds, "Next claim");
     } else {
         log_msg("No timer found, using default delay {$config['delay']}s", "WARN");
-        countdown_seconds($config['delay']);
+        spinner_wait($config['delay'], "Next claim");
     }
 }
