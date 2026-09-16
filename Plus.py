@@ -32,6 +32,7 @@ BANNER = f"""
 {G}👨‍💻 ScriptMaker : MoneyMaker_w{X}
 {G}📢 TG          : https://t.me/+f3QBLkR5D8k4YzNl{X}
 {G}🤖 Bot         : PlusCrypto{X}
+{G}🧩 Solver      : Skipcha.online{X}
 {C}=============================================================={X}
 """
 
@@ -48,7 +49,6 @@ class PlusCryptoClaimer:
         self.initdata = ""
         self.email = ""
         self.api_key = ""
-        self.api_type = "bypassall"  # "bypassall" atau "waryono"
         self.selected = "5"
         self.proxy = None
         self.csrf_token = ""
@@ -67,7 +67,6 @@ class PlusCryptoClaimer:
                     self.initdata = cfg.get("initdata", "")
                     self.email = cfg.get("email", "")
                     self.api_key = cfg.get("api_key", "")
-                    self.api_type = cfg.get("api_type", "bypassall")
                     self.selected = cfg.get("selected", "5")
                     self.proxy = cfg.get("proxy", None)
                     self.total_claimed = cfg.get("total_claimed", 0.0)
@@ -81,7 +80,6 @@ class PlusCryptoClaimer:
             "initdata": self.initdata,
             "email": self.email,
             "api_key": self.api_key,
-            "api_type": self.api_type,
             "selected": self.selected,
             "proxy": self.proxy,
             "total_claimed": self.total_claimed,
@@ -133,12 +131,15 @@ class PlusCryptoClaimer:
             print(f"{R}❌ [ERROR]     {W}Login error: {e}{X}")
             return False
     
-    # ---------- SOLVER BYPASSALL ----------
-    def solve_captcha_bypassall(self, page_url, retries=3):
+    # ============================================================
+    # SOLVER SKIPCHA.ONLINE
+    # ============================================================
+    def solve_captcha_skipcha(self, page_url, retries=3):
         for attempt in range(retries):
-            print(f"{C}🤖 [HCAPTCHA]   {W}Attempt {attempt+1}/{retries}{X}")
+            print(f"{C}🤖 [HCAPTCHA]   {W}Attempt {attempt+1}/{retries} (Skipcha){X}")
             try:
-                params = {
+                # Step 1: Submit task
+                submit_params = {
                     "key": self.api_key,
                     "method": "hcaptcha",
                     "sitekey": SITEKEY,
@@ -146,110 +147,92 @@ class PlusCryptoClaimer:
                     "json": 1
                 }
                 headers = {"User-Agent": USER_AGENT}
-                resp = requests.get("https://bypassallshortlinks.space/in.php", params=params, headers=headers, timeout=30)
+                resp = requests.get(
+                    "https://skipcha.online/in.php",
+                    params=submit_params,
+                    headers=headers,
+                    timeout=30
+                )
                 if resp.status_code != 200:
                     print(f"{R}❌ [ERROR]     {W}HTTP {resp.status_code}{X}")
                     time.sleep(2)
                     continue
-                data = resp.json()
-                if data.get("status") != 1:
-                    err = data.get("request", "Unknown")
-                    print(f"{R}❌ [ERROR]     {W}Submission error: {err}{X}")
-                    if "ERROR_KEY" in err or "ERROR_WRONG" in err:
-                        print(f"{R}💀 [FATAL]     {W}API key issue, check your key{X}")
-                        return None
+                
+                try:
+                    data = resp.json()
+                except Exception:
+                    print(f"{R}❌ [ERROR]     {W}Invalid JSON response: {resp.text[:120]}{X}")
                     time.sleep(2)
                     continue
-                job_id = data["request"]
-                print(f"{G}🎫 [JOB]        {W}ID received{X}")
-                for _ in range(20):
-                    time.sleep(2)
-                    poll = requests.get("https://bypassallshortlinks.space/res.php", 
-                                        params={"key": self.api_key, "action": "get", "id": job_id, "json": 1},
-                                        headers=headers, timeout=30)
-                    if poll.status_code != 200:
-                        continue
-                    poll_data = poll.json()
-                    if poll_data.get("status") == 1:
-                        token = poll_data["request"]
-                        print(f"{G}✅ [SOLVED]     {W}Token obtained{X}")
-                        return token
-                    if "ERROR" in poll_data.get("request", ""):
-                        print(f"{R}❌ [ERROR]     {W}Poll error: {poll_data['request']}{X}")
-                        break
-                    sys.stdout.write(f"\r⏳ [WAIT]       {W}Solving...{X}   ")
-                    sys.stdout.flush()
-                print()
-            except Exception as e:
-                print(f"{R}❌ [ERROR]     {W}Exception: {e}{X}")
-                time.sleep(2)
-        print(f"{R}❌ [FAILED]     {W}Captcha not solved after {retries} attempts{X}")
-        return None
-    
-    # ---------- SOLVER WARYONO ----------
-    def solve_captcha_waryono(self, page_url, retries=3):
-        for attempt in range(retries):
-            print(f"{C}🤖 [HCAPTCHA]   {W}Attempt {attempt+1}/{retries} (Waryono){X}")
-            try:
-                payload = {
-                    "apikey": self.api_key,
-                    "methods": "hcaptcha",
-                    "domain": page_url,
-                    "sitekey": SITEKEY,
-                    "json": 1
-                }
-                headers = {"Content-Type": "application/json", "User-Agent": USER_AGENT}
-                resp = requests.post("https://api.waryono.my.id/in.php", json=payload, headers=headers, timeout=30)
-                if resp.status_code != 200:
-                    print(f"{R}❌ [ERROR]     {W}HTTP {resp.status_code}{X}")
-                    time.sleep(2)
-                    continue
-                data = resp.json()
+                
                 if data.get("status") != 1:
                     err = data.get("request", "Unknown")
                     print(f"{R}❌ [ERROR]     {W}Submission error: {err}{X}")
                     if "ERROR_KEY" in err or "ERROR_WRONG" in err or "ERROR_ZERO_BALANCE" in err:
-                        print(f"{R}💀 [FATAL]     {W}API key/saldo issue{X}")
+                        print(f"{R}💀 [FATAL]     {W}API key/saldo issue, check your key{X}")
                         return None
                     time.sleep(2)
                     continue
+                
                 job_id = data["request"]
-                print(f"{G}🎫 [JOB]        {W}ID received{X}")
-                for _ in range(25):
-                    time.sleep(2)
-                    poll = requests.get("https://api.waryono.my.id/res.php",
-                                        params={"apikey": self.api_key, "action": "get", "id": job_id, "json": 1},
-                                        headers=headers, timeout=30)
-                    if poll.status_code != 200:
-                        continue
-                    poll_data = poll.json()
-                    if poll_data.get("status") == 1:
-                        token = poll_data["request"]
-                        print(f"{G}✅ [SOLVED]     {W}Token obtained{X}")
-                        return token
-                    if "ERROR" in poll_data.get("request", ""):
-                        print(f"{R}❌ [ERROR]     {W}Poll error: {poll_data['request']}{X}")
-                        break
-                    if poll_data.get("request") == "CAPCHA_NOT_READY":
-                        sys.stdout.write(f"\r⏳ [WAIT]       {W}Solving...{X}   ")
-                        sys.stdout.flush()
-                        continue
-                    else:
+                print(f"{G}🎫 [JOB]        {W}ID received: {job_id}{X}")
+                
+                # Step 2: Poll for result
+                max_polls = 30
+                for _ in range(max_polls):
+                    time.sleep(3)
+                    try:
+                        poll = requests.get(
+                            "https://skipcha.online/res.php",
+                            params={
+                                "key": self.api_key,
+                                "action": "get",
+                                "id": job_id,
+                                "json": 1
+                            },
+                            headers=headers,
+                            timeout=30
+                        )
+                        if poll.status_code != 200:
+                            continue
+                        
+                        poll_data = poll.json()
+                        
+                        if poll_data.get("status") == 1:
+                            token = poll_data["request"]
+                            print(f"{G}✅ [SOLVED]     {W}Token obtained{X}")
+                            return token
+                        
+                        req_val = poll_data.get("request", "")
+                        
+                        if "ERROR" in req_val:
+                            print(f"{R}❌ [ERROR]     {W}Poll error: {req_val}{X}")
+                            break
+                        
+                        if req_val == "CAPCHA_NOT_READY":
+                            sys.stdout.write(f"\r⏳ [WAIT]       {W}Solving...{X}   ")
+                            sys.stdout.flush()
+                            continue
+                        
                         print(f"{R}❌ [ERROR]     {W}Unexpected poll response: {poll_data}{X}")
                         break
+                    
+                    except Exception as e:
+                        print(f"{R}❌ [ERROR]     {W}Poll exception: {e}{X}")
+                        continue
+                
                 print()
+            
             except Exception as e:
                 print(f"{R}❌ [ERROR]     {W}Exception: {e}{X}")
                 time.sleep(2)
+        
         print(f"{R}❌ [FAILED]     {W}Captcha not solved after {retries} attempts{X}")
         return None
     
     # ---------- MAIN SOLVER ----------
     def solve_captcha(self, page_url, retries=3):
-        if self.api_type == "waryono":
-            return self.solve_captcha_waryono(page_url, retries)
-        else:
-            return self.solve_captcha_bypassall(page_url, retries)
+        return self.solve_captcha_skipcha(page_url, retries)
     
     def get_faucet_page(self, currency_id, currency_name):
         print(f"{C}🌐 [NAVIGATE]   {W}Getting {currency_name} faucet page...{X}")
@@ -293,7 +276,6 @@ class PlusCryptoClaimer:
             return True
         return False
     
-    # ==================== SUBMIT CLAIM (UPDATED WITH DEBUG ONLY ON FAILURE) ====================
     def submit_claim(self, currency_id, currency_name, captcha_token):
         print(f"{C}📤 [SUBMIT]     {W}Submitting claim...{X}")
         try:
@@ -315,7 +297,6 @@ class PlusCryptoClaimer:
             }
             resp = self.session.post(claim_url, headers=headers, data=data, timeout=30, allow_redirects=True)
             
-            # Cek sukses
             if "alert-success" in resp.text or "successfully added" in resp.text:
                 reward_match = re.search(r'([\d.]+)\s*' + currency_name, resp.text, re.IGNORECASE)
                 if reward_match:
@@ -328,20 +309,17 @@ class PlusCryptoClaimer:
                 self.save_config()
                 return True
             else:
-                # Gagal – tampilkan debug
                 print(f"{Y}📡 HTTP Status : {resp.status_code}{X}")
                 print(f"{Y}📍 Final URL   : {resp.url}{X}")
                 clean_text = re.sub(r'<[^>]+>', ' ', resp.text)
                 snippet = clean_text[:300].strip()
                 print(f"{Y}📄 Response    : {snippet}{'...' if len(clean_text) > 300 else ''}{X}")
                 
-                # Cek alert-danger
                 error_match = re.search(r'alert-danger[^>]*>(.*?)</div>', resp.text, re.DOTALL)
                 if error_match:
                     err_msg = re.sub(r'<[^>]+>', '', error_match.group(1)).strip()
                     print(f"{R}❌ [FAILED]     {W}{err_msg}{X}")
                 else:
-                    # Deteksi kemungkinan masalah
                     if "login" in resp.url.lower() or "signin" in resp.url.lower() or "auth" in resp.url.lower():
                         print(f"{R}❌ [FAILED]     {W}Session expired / redirected to login!{X}")
                     elif resp.status_code in [302, 303, 307, 308]:
@@ -376,7 +354,7 @@ class PlusCryptoClaimer:
         self.wait_for_countdown(html)
         
         page_url = f"{BASE_URL}/apps-tgmini/plus-crypto-faucet-bot/manual-faucet/{currency_id}/{currency_name}"
-        print(f"{C}🧩                    HCAPTCHA{X}")
+        print(f"{C}🧩                    HCAPTCHA (Skipcha){X}")
         print(f"{C}{'='*54}{X}")
         token = self.solve_captcha(page_url)
         if not token:
@@ -421,15 +399,13 @@ class PlusCryptoClaimer:
             print(f"╚══════════════════════════════════════════════════════════════╝{X}")
             print(f"\n  {C}[{W}1{C}] {Y}Set InitData (Telegram auth){X}")
             print(f"  {C}[{W}2{C}] {Y}Set Email address{X}")
-            print(f"  {C}[{W}3{C}] {Y}Set API Key (BypassAllShortlinks / Waryono){X}")
+            print(f"  {C}[{W}3{C}] {Y}Set API Key (Skipcha.online){X}")
             print(f"  {C}[{W}4{C}] {Y}Select default currency{X}")
             print(f"  {C}[{W}5{C}] {Y}Set proxy (optional){X}")
-            print(f"  {C}[{W}6{C}] {Y}Switch API provider (Current: {self.api_type.upper()}){X}")
             print(f"  {C}[{W}0{C}] {R}Back{X}")
             print(f"\n  Current: InitData={G}{'SET' if self.initdata else 'NOT SET'}{X}")
             print(f"  Email={G}{self.email or 'NOT SET'}{X}")
             print(f"  API Key={G}{self.api_key[:8]+'...' if self.api_key else 'NOT SET'}{X}")
-            print(f"  API Type={G}{self.api_type.upper()}{X}")
             print(f"  Currency={G}{CURRENCIES.get(self.selected, 'N/A')}{X}")
             print(f"  Proxy={G}{self.proxy or 'OFF'}{X}")
             choice = input(f"\n{C}═⫸ {W}Select: {C}").strip()
@@ -452,7 +428,7 @@ class PlusCryptoClaimer:
                     print(f"{R}[ERROR] Cannot be empty{X}")
                 time.sleep(1)
             elif choice == "3":
-                inp = input(f"{M}[?] {W}Enter API Key: {C}").strip()
+                inp = input(f"{M}[?] {W}Enter Skipcha API Key: {C}").strip()
                 if inp:
                     self.api_key = inp
                     self.save_config()
@@ -478,22 +454,6 @@ class PlusCryptoClaimer:
                 self.save_config()
                 print(f"{G}[SUCCESS] Proxy {'set' if self.proxy else 'cleared'}{X}")
                 time.sleep(1)
-            elif choice == "6":
-                print(f"\n{C}═⫸ {W}Switch API provider:{X}")
-                print(f"  {C}[{W}1{C}] BypassAllShortlinks (default){X}")
-                print(f"  {C}[{W}2{C}] Waryono (Skibi){X}")
-                api_choice = input(f"{C}═⫸ {W}Choose (1/2): {C}").strip()
-                if api_choice == "1":
-                    self.api_type = "bypassall"
-                    self.save_config()
-                    print(f"{G}[SUCCESS] Switched to BypassAllShortlinks{X}")
-                elif api_choice == "2":
-                    self.api_type = "waryono"
-                    self.save_config()
-                    print(f"{G}[SUCCESS] Switched to Waryono{X}")
-                else:
-                    print(f"{R}[ERROR] Invalid choice{X}")
-                time.sleep(1)
             elif choice == "0":
                 break
     
@@ -501,7 +461,6 @@ class PlusCryptoClaimer:
         self.clear()
         print(BANNER)
         
-        # Sembunyikan email
         email_display = self.email
         if len(email_display) > 10:
             email_display = email_display[:4] + "####" + email_display[-7:]
@@ -512,7 +471,7 @@ class PlusCryptoClaimer:
         print(f"{G}🆔 InitData  » {W}{'✅ SET' if self.initdata else '❌ NOT SET'}{X}")
         print(f"{G}📧 Email     » {W}{email_display if self.email else '❌ NOT SET'}{X}")
         print(f"{G}🔑 API Key   » {W}{self.api_key[:8]+'...' if self.api_key else '❌ NOT SET'}{X}")
-        print(f"{G}⚙️  API Type  » {W}{self.api_type.upper()}{X}")
+        print(f"{G}🧩 Solver    » {W}SKIPCHA.ONLINE{X}")
         print(f"{G}🌐 Proxy     » {W}{'🟢 ' + self.proxy if self.proxy else '🔴 OFF'}{X}")
         print(f"{G}💰 Currency  » {W}{CURRENCIES.get(self.selected, 'N/A')}{X}")
         
