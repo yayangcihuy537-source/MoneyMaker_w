@@ -1,6 +1,7 @@
 <?php
 // ============================================================
 // 99FAUCET AUTO BOT - PHP + Login Choice
+// Solver: SKIPCHA.ONLINE
 // Deteksi shortlink, jika redirect ke /links/coin -> STOP
 // ============================================================
 
@@ -17,7 +18,7 @@ define('DIM', "\033[2m");
 define('BOLD', "\033[1m");
 
 define('BASE_URL', 'https://99faucet.com');
-define('SOLVER_BASE', 'https://bypassallshortlinks.space');
+define('SOLVER_BASE', 'https://skipcha.online');
 define('CONFIG_FILE', 'config_99.json');
 define('SUCCESS_INTERVAL', 20);
 define('FAIL_INTERVAL', 11);
@@ -116,6 +117,8 @@ function get_login_choice() {
     echo CYAN . "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" . RESET . "\n";
     echo BOLD . KUNING . "              🍪 99FAUCET AUTO BOT" . RESET . "\n";
     echo CYAN . "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" . RESET . "\n";
+    echo DIM . PUTIH . "              Solver: SKIPCHA.ONLINE" . RESET . "\n";
+    echo CYAN . "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" . RESET . "\n";
     echo PUTIH . "Pilih metode login:\n";
     echo HIJAU . "  [1] " . PUTIH . "Pakai Cookie (langsung jalan)\n";
     echo HIJAU . "  [2] " . PUTIH . "Pakai Email + Password (auto login)\n";
@@ -131,7 +134,7 @@ function get_login_choice() {
         $password = trim(fgets(STDIN));
         system('stty echo');
         echo "\n";
-        echo PUTIH . "API Key bypassallshortlinks: " . KUNING;
+        echo PUTIH . "API Key skipcha.online: " . KUNING;
         $apikey = trim(fgets(STDIN));
         echo RESET;
         return [
@@ -144,7 +147,7 @@ function get_login_choice() {
     } else {
         echo PUTIH . "Cookie (dari browser): " . KUNING;
         $cookie = trim(fgets(STDIN));
-        echo PUTIH . "API Key bypassallshortlinks: " . KUNING;
+        echo PUTIH . "API Key skipcha.online: " . KUNING;
         $apikey = trim(fgets(STDIN));
         echo RESET;
         return [
@@ -213,51 +216,104 @@ function http_request($url, $method = 'GET', $data = [], $headers = [], CookieJa
     return $body;
 }
 
+// ============================================================
+// SOLVER: SKIPCHA.ONLINE (JSON-based)
+// ============================================================
 function solve_hcaptcha($sitekey, $pageurl, $apikey, $show_progress = false) {
-    $url = SOLVER_BASE . "/in.php?key=" . urlencode($apikey) . 
-           "&method=hcaptcha&sitekey=" . urlencode($sitekey) . 
-           "&pageurl=" . urlencode($pageurl);
+    // ─── STEP 1: Submit task ───
+    $submit_url = SOLVER_BASE . "/in.php?" . http_build_query([
+        'key'     => $apikey,
+        'method'  => 'hcaptcha',
+        'sitekey' => $sitekey,
+        'pageurl' => $pageurl,
+        'json'    => 1
+    ]);
     
     $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_URL, $submit_url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_TIMEOUT, 30);
     curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
     $result = curl_exec($ch);
     curl_close($ch);
     
-    if (!$result || !str_starts_with($result, 'OK|')) {
-        echo MERAH . "[!] Gagal submit hCaptcha: $result" . RESET . "\n";
+    if (!$result) {
+        echo MERAH . "[!] Gagal submit hCaptcha: no response." . RESET . "\n";
         return null;
     }
     
-    $task_id = explode('|', $result)[1];
-    if ($show_progress) {
-        echo KUNING . "[+] Task ID    : $task_id" . RESET . "\n";
-        echo CYAN . "[*] hCaptcha    : WAITING..." . RESET . "\n";
+    $json = json_decode($result, true);
+    if (!is_array($json) || !isset($json['status']) || $json['status'] != 1) {
+        $err = is_array($json) && isset($json['request']) ? $json['request'] : $result;
+        echo MERAH . "[!] Gagal submit hCaptcha: $err" . RESET . "\n";
+        
+        // Deteksi error fatal
+        if (is_string($err) && (
+            strpos($err, 'ERROR_KEY') !== false ||
+            strpos($err, 'ERROR_WRONG') !== false ||
+            strpos($err, 'ERROR_ZERO_BALANCE') !== false
+        )) {
+            echo MERAH . "[💀] API key / saldo bermasalah. Stop." . RESET . "\n";
+            return null;
+        }
+        return null;
     }
     
+    $task_id = $json['request'];
+    if ($show_progress) {
+        echo KUNING . "[+] Task ID    : $task_id" . RESET . "\n";
+        echo CYAN  . "[*] hCaptcha    : WAITING..." . RESET . "\n";
+    }
+    
+    // ─── STEP 2: Poll result ───
     for ($i = 0; $i < 45; $i++) {
-        sleep(2);
-        $poll_url = SOLVER_BASE . "/res.php?id=" . urlencode($task_id) . "&key=" . urlencode($apikey);
+        sleep(3);
+        $poll_url = SOLVER_BASE . "/res.php?" . http_build_query([
+            'key'    => $apikey,
+            'action' => 'get',
+            'id'     => $task_id,
+            'json'   => 1
+        ]);
+        
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $poll_url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
         $result = curl_exec($ch);
         curl_close($ch);
         
-        if ($result && str_starts_with($result, 'OK|')) {
-            $token = explode('|', $result)[1];
+        if (!$result) continue;
+        
+        $json = json_decode($result, true);
+        if (!is_array($json)) continue;
+        
+        // Sukses
+        if (isset($json['status']) && $json['status'] == 1 && isset($json['request'])) {
+            $token = $json['request'];
             if ($show_progress) {
                 echo HIJAU . "[+] hCaptcha   : SOLVED ✓" . RESET . "\n";
             }
             return $token;
         }
-        if ($show_progress && $i % 5 == 0) {
-            echo DIM . "[*] Polling     : " . ($i+1) . "/45..." . RESET . "\n";
+        
+        $req_val = isset($json['request']) ? $json['request'] : '';
+        
+        // Masih diproses
+        if ($req_val === 'CAPCHA_NOT_READY') {
+            if ($show_progress && $i % 5 == 0) {
+                echo DIM . "[*] Polling     : " . ($i+1) . "/45..." . RESET . "\n";
+            }
+            continue;
+        }
+        
+        // Error lain
+        if (is_string($req_val) && strpos($req_val, 'ERROR') !== false) {
+            echo MERAH . "[!] Solver error: $req_val" . RESET . "\n";
+            return null;
         }
     }
+    
     echo MERAH . "[!] hCaptcha timeout." . RESET . "\n";
     return null;
 }
@@ -339,7 +395,6 @@ function get_coins(CookieJar &$jar) {
     return [];
 }
 
-// ===== DETEKSI SHORTLINK =====
 function is_shortlink_page($html) {
     if (strpos($html, 'name="token"') !== false || strpos($html, 'id="token"') !== false) {
         return false;
@@ -350,13 +405,11 @@ function is_shortlink_page($html) {
     return false;
 }
 
-// ===== GET FAUCET PAGE DENGAN HANDLE REDIRECT =====
 function get_faucet_page(CookieJar &$jar, $coin, &$finalUrl = null) {
     $url = BASE_URL . "/faucet/$coin";
     $result = http_request($url, 'GET', [], [], $jar, $finalUrl);
     if (!$result) return null;
     
-    // Jika redirect ke /links/... -> shortlink
     if ($finalUrl && strpos($finalUrl, '/links/') !== false) {
         return ['status' => 'shortlink', 'url' => $finalUrl, 'redirect' => true];
     }
@@ -529,6 +582,7 @@ echo CYAN . "━━━━━━━━━━━━━━━━━━━━━━�
 echo BOLD . KUNING . "              🍪 99FAUCET AUTO BOT" . RESET . "\n";
 echo CYAN . "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" . RESET . "\n";
 echo KUNING . "[*] Login method: " . $login_data['method'] . RESET . "\n";
+echo KUNING . "[*] Solver      : SKIPCHA.ONLINE" . RESET . "\n";
 
 $jar = new CookieJar();
 
@@ -616,12 +670,11 @@ while (true) {
         }
     }
     
-    // ===== PENANGANAN SHORTLINK =====
     if ($result === 'SHORTLINK') {
         echo MERAH . "[!] Shortlink terdeteksi! Bot berhenti." . RESET . "\n";
         echo KUNING . "[*] Selesaikan shortlink secara manual di browser, lalu jalankan ulang bot." . RESET . "\n";
         echo PUTIH . "Halaman: https://99faucet.com/links/" . $coin . RESET . "\n";
-        break; // Stop bot
+        break;
     }
     
     if ($result) {
