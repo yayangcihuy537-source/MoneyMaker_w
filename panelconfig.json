@@ -104,12 +104,12 @@
           "runner": "php"
         },
         "11": {
-          "label": "ClaimCoin 🔴",
-          "file": "Claimcoin.php",
+          "label": "Ourcoincash 🟢",
+          "file": "Our.php",
           "runner": "php"
         },
         "12": {
-          "label": "Ourcoincash 🟡",
+          "label": "Soon",
           "file": "Our.php",
           "runner": "php"
         }
