@@ -139,7 +139,7 @@
           "runner": "python3"
         },
         "5": {
-          "label": "CloudEarnBot 🔴",
+          "label": "CloudEarnBot 🟢",
           "file": "Cloud.py",
           "runner": "python3"
         },
