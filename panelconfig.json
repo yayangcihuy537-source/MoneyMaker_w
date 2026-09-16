@@ -4,7 +4,7 @@
       "name": "NonApikey 🟢",
       "items": {
         "1": {
-          "label": "TronBlow 🟡",
+          "label": "TronBlow 🟢",
           "file": "Tronblow.php",
           "runner": "php"
         },
@@ -39,7 +39,7 @@
           "runner": "php"
         },
         "8": {
-          "label": "ClaimCrypto 🟡",
+          "label": "ClaimCrypto 🟢",
           "file": "ClaimCrypto.php",
           "runner": "php"
         },
@@ -74,7 +74,7 @@
           "runner": "python3"
         },
         "5": {
-          "label": "Makeyoutask 🔴",
+          "label": "Makeyoutask 🟢",
           "file": "myt.php",
           "runner": "php"
         },
