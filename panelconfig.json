@@ -4,7 +4,7 @@
       "name": "NonApikey 🟢",
       "items": {
         "1": {
-          "label": "TronBlow 🟢",
+          "label": "TronBlow 🟡",
           "file": "Tronblow.php",
           "runner": "php"
         },
@@ -39,7 +39,7 @@
           "runner": "php"
         },
         "8": {
-          "label": "ClaimCrypto 🟢",
+          "label": "ClaimCrypto 🟡",
           "file": "ClaimCrypto.php",
           "runner": "php"
         },
@@ -74,12 +74,12 @@
           "runner": "python3"
         },
         "5": {
-          "label": "Makeyoutask 🟢",
+          "label": "Makeyoutask 🔴",
           "file": "myt.php",
           "runner": "php"
         },
         "6": {
-          "label": "PlusCryptoFaucetBot 🟢",
+          "label": "PlusCryptoFaucetBot 🔴",
           "file": "Plus.py",
           "runner": "python3"
         },
@@ -89,7 +89,7 @@
           "runner": "python3"
         },
         "8": {
-          "label": "99Faucet 🟢",
+          "label": "99Faucet 🔴",
           "file": "99faucet.php",
           "runner": "php"
         },
@@ -104,12 +104,12 @@
           "runner": "php"
         },
         "11": {
-          "label": "ClaimCoin 🟢",
+          "label": "ClaimCoin 🔴",
           "file": "Claimcoin.php",
           "runner": "php"
         },
         "12": {
-          "label": "Ourcoincash 🟢",
+          "label": "Ourcoincash 🟡",
           "file": "Our.php",
           "runner": "php"
         }
@@ -139,7 +139,7 @@
           "runner": "python3"
         },
         "5": {
-          "label": "CloudEarnBot 🟢",
+          "label": "CloudEarnBot 🔴",
           "file": "Cloud.py",
           "runner": "python3"
         },
@@ -149,7 +149,7 @@
           "runner": "python3"
         },
         "7": {
-          "label": "NewTube 🟢",
+          "label": "NewTube 🟡",
           "file": "newtube.py",
           "runner": "python3"
         },
@@ -159,7 +159,7 @@
           "runner": "python3"
         },
         "9": {
-          "label": "OpenEarnApp 🟡",
+          "label": "OpenEarnApp 🔴",
           "file": "OpenEarnApp.py",
           "runner": "python3"
         },
@@ -179,12 +179,12 @@
           "runner": "python3"
         },
         "13": {
-          "label": "LtcMiner 🟢",
+          "label": "LtcMiner 🔴",
           "file": "LtcMiner.py",
           "runner": "python3"
         },
         "14": {
-          "label": "Faucet BTC 🟢",
+          "label": "Faucet BTC 🔴",
           "file": "btc.py",
           "runner": "python3"
         },
@@ -219,12 +219,12 @@
           "runner": "python3"
         },
         "21": {
-          "label": "MineSlpy 🟢",
+          "label": "MineSlpy 🔴",
           "file": "fruit.py",
           "runner": "python3"
         },
         "22": {
-          "label": "FarmingMatesBot 🟢",
+          "label": "FarmingMatesBot 🔴",
           "file": "FarmingMatesBot.py",
           "runner": "python3"
         },
