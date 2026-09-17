@@ -89,7 +89,7 @@
           "runner": "python3"
         },
         "8": {
-          "label": "99Faucet 🔴",
+          "label": "99Faucet 🟢",
           "file": "99faucet.php",
           "runner": "php"
         },
