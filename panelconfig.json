@@ -229,13 +229,13 @@
           "runner": "python3"
         },
         "23": {
-          "label": "Coming Soon 🟣",
+          "label": "MangoCash 🟢",
           "file": "Mango.py",
           "runner": "python3"
         },
         "24": {
-          "label": "Coming Soon",
-          "file": ".py",
+          "label": "DogeMinerVip 🟢",
+          "file": "Dogevip.py",
           "runner": "python3"
         },
         "25": {
