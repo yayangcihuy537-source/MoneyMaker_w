@@ -97,7 +97,7 @@ WATCH_DURATION = 20
 
 NETWORKS = [
     "adsgram", "monetag", "richads", "onclicka", "gigapup",
-    "towerads", "adsgalaxy", "adexium", "adloop", "monetix", "tads",
+    "towerads", "adexium", "adloop", "monetix", "tads",
 ]
 
 MAX_RETRY = 1
