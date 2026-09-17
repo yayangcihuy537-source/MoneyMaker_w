@@ -1,3 +1,14 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+🌾 FARMING MATES BOT v2.0
+- Auto-skip ads yang gagal/limit
+- Animation pack (anti-spam clear-line)
+- Loop sampai semua ads abis
+- Handle rate limit 429
+- ScriptMaker: @MoneyMaker_w
+"""
+
 import requests
 import json
 import time
@@ -5,392 +16,461 @@ import os
 import random
 import sys
 from datetime import datetime
-from colorama import init, Fore, Back, Style
 
-init(autoreset=True)
+# ============================================================
+# COLORS + ANIM
+# ============================================================
+CLEAR = '\033[K'
+G = '\033[92m'
+Y = '\033[93m'
+R = '\033[91m'
+C = '\033[96m'
+M = '\033[95m'
+W = '\033[97m'
+BOLD = '\033[1m'
+DIM = '\033[2m'
+RST = '\033[0m'
+NG = '\033[38;5;46m'
+NC = '\033[38;5;51m'
+NY = '\033[38;5;226m'
+NP = '\033[38;5;201m'
 
-# ==================== BANNER ====================
-BANNER = f"""
-{Fore.CYAN}{Style.BRIGHT}==================================================
-              🌾 FARMING MATES BOT
-==================================================
-              @FarmingMatesBot
-           ScriptMaker: @MoneyMaker_w
-=================================================={Style.RESET_ALL}
+BANNER = f"""{NY}{BOLD}
+╔══════════════════════════════════════════════════════════════════╗
+║                                                                  ║
+║  ███████╗ █████╗ ██████╗ ███╗   ███╗██╗███╗   ██╗ ██████╗      ║
+║  ██╔════╝██╔══██╗██╔══██╗████╗ ████║██║████╗  ██║██╔════╝      ║
+║  █████╗  ███████║██████╔╝██╔████╔██║██║██╔██╗ ██║██║  ███╗     ║
+║  ██╔══╝  ██╔══██║██╔══██╗██║╚██╔╝██║██║██║╚██╗██║██║   ██║     ║
+║  ██║     ██║  ██║██║  ██║██║ ╚═╝ ██║██║██║ ╚████║╚██████╔╝     ║
+║  ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝      ║
+║                                                                  ║
+║  {NY}🌾 FARMING MATES BOT  {NC}│ {NG}v2.0 {NC}│ {NP}AUTO FARM + SKIP{RST}{NY}              ║
+║                                                                  ║
+║  {NG}▸ Bot     : {NC}@FarmingMatesBot{RST}{NY}                            ║
+║  {NG}▸ Script  : {NC}@MoneyMaker_w{RST}{NY}                               ║
+║  {NG}▸ Channel : {NC}https://t.me/ScriptyXSouu{RST}{NY}                  ║
+║                                                                  ║
+╚══════════════════════════════════════════════════════════════════╝{RST}
 """
 
-# ==================== CLASS ====================
+# ============================================================
+# ANIMATIONS
+# ============================================================
+class Anim:
+    @staticmethod
+    def spinner(text, duration=1.5):
+        frames = ["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"]
+        end = time.time() + duration
+        i = 0
+        while time.time() < end:
+            sys.stdout.write('\r' + CLEAR + f" {NC}{frames[i%10]}{RST} {W}{text}{RST}")
+            sys.stdout.flush()
+            time.sleep(0.08); i += 1
+        sys.stdout.write('\r' + CLEAR + f" {NG}✓{RST} {W}{text}{RST}\n")
+        sys.stdout.flush()
+
+    @staticmethod
+    def dots(text, duration=1.5):
+        end = time.time() + duration
+        n = 0
+        while time.time() < end:
+            d = "." * ((n % 3) + 1)
+            sys.stdout.write('\r' + CLEAR + f" {NC}•{RST} {W}{text}{NC}{d:<4}{RST}")
+            sys.stdout.flush()
+            time.sleep(0.3); n += 1
+        sys.stdout.write('\r' + CLEAR + f" {NG}✓{RST} {W}{text}{RST}\n")
+        sys.stdout.flush()
+
+    @staticmethod
+    def bar(label, provider, duration):
+        """Live watch bar dengan clear-line"""
+        spinner = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏']
+        bar_len = 18
+        start = time.time(); i = 0
+        while True:
+            elapsed = time.time() - start
+            if elapsed >= duration: break
+            pct = elapsed / duration
+            filled = int(bar_len * pct)
+            bar = '█' * filled + '░' * (bar_len - filled)
+            rem = duration - elapsed
+            row = (f"  {NP}{spinner[i%10]}{RST} {NC}{label:<9}{RST} "
+                   f"{DIM}{provider:<10}{RST} "
+                   f"{NG}[{bar}]{RST} {NY}{int(pct*100):3d}%{RST} {NY}{rem:4.1f}s{RST}")
+            sys.stdout.write('\r' + CLEAR + row)
+            sys.stdout.flush()
+            time.sleep(0.1); i += 1
+        sys.stdout.write('\r' + CLEAR); sys.stdout.flush()
+
+    @staticmethod
+    def glitch(text, duration=0.5):
+        gc = "░▒▓█▄▀■□▪▫@#$%&*"
+        end = time.time() + duration
+        while time.time() < end:
+            out = ''.join(random.choice(gc) if (random.randint(0,10)<2 and ch!=' ') else ch for ch in text)
+            sys.stdout.write('\r' + CLEAR + f"  {NP}{out}{RST}")
+            sys.stdout.flush()
+            time.sleep(0.06)
+        sys.stdout.write('\r' + CLEAR + f"  {NC}{text}{RST}\n"); sys.stdout.flush()
+
+# ============================================================
+# BOT CLASS
+# ============================================================
 class FarmingMatesBot:
+    BASE = "https://api.farmingmates.site/api"
+
     def __init__(self):
-        self.base_url = "https://api.farmingmates.site/api"
-        self.init_data = None
-        self.device_id = "dev_" + str(int(time.time()))
+        self.init_data = ""
+        self.device_id = "dev_" + ''.join(random.choices('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', k=22))
         self.token = None
         self.profile = None
+        self.session = requests.Session()
         self.headers = {
             "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (Linux; Android 12; K) Telegram-Android/12.10.1",
+            "User-Agent": "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.7977.87 Mobile Safari/537.36 Telegram-Android/12.9.2 (Samsung SM-A556E; Android 16; SDK 36; HIGH)",
             "Accept": "*/*",
             "Origin": "https://farmingmates.site",
             "Referer": "https://farmingmates.site/",
-            "X-Requested-With": "org.telegram.messenger"
+            "X-Requested-With": "org.telegram.messenger.web",
+            "Sec-Fetch-Site": "same-site",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Dest": "empty",
+            "Accept-Language": "id,id-ID;q=0.9,en-US;q=0.8,en;q=0.7"
         }
+        self.session.headers.update(self.headers)
         self.stats = {
-            'total_watched': 0,
-            'total_earned': 0,
-            'start_time': datetime.now()
+            'watched': 0,
+            'earned': 0,
+            'failed': 0,
+            'skipped': 0,
+            'start': datetime.now()
         }
+        self.load_init()
 
-    def clear_screen(self):
+    def load_init(self):
+        f = "farmingmates_init.txt"
+        if os.path.exists(f):
+            with open(f, 'r') as fp:
+                self.init_data = fp.read().strip()
+
+    def save_init(self, data):
+        with open("farmingmates_init.txt", 'w') as fp:
+            fp.write(data.strip())
+        self.init_data = data.strip()
+
+    def clear(self):
         os.system('cls' if os.name == 'nt' else 'clear')
 
-    def print_login_success(self):
-        print(f"{Fore.GREEN}[✓] Login berhasil{Style.RESET_ALL}")
-        print(f"{Fore.CYAN}[👤] @{self.profile.get('username')}{Style.RESET_ALL}")
-        print(f"{Fore.YELLOW}[💰] Balance : {self.profile.get('coins', 0)}{Style.RESET_ALL}")
-        print(f"{Fore.BLUE}[⚡] Energy  : {self.profile.get('energy', 0)}/{self.profile.get('energyMax', 0)}{Style.RESET_ALL}")
-
-    def print_header(self, text):
-        print(f"\n{Fore.CYAN}{'=' * 50}{Style.RESET_ALL}")
-        print(f"{Fore.YELLOW}[{text}]{Style.RESET_ALL}")
-
-    def print_error(self, text):
-        print(f"{Fore.RED}[✗] {text}{Style.RESET_ALL}")
-
-    def print_success(self, text):
-        print(f"{Fore.GREEN}[✓] {text}{Style.RESET_ALL}")
-
-    def print_warning(self, text):
-        print(f"{Fore.YELLOW}[⚠] {text}{Style.RESET_ALL}")
-
-    def print_info(self, text):
-        print(f"{Fore.CYAN}[ℹ] {text}{Style.RESET_ALL}")
-
-    # ==================== REQUEST WITH RETRY ====================
-    def request_with_retry(self, method, url, headers=None, json_data=None, data=None, max_retries=3, timeout=30):
-        """Request dengan retry jika timeout"""
-        for attempt in range(1, max_retries + 1):
+    # ============ API ============
+    def request(self, method, path, json_data=None, timeout=30):
+        url = f"{self.BASE}{path}"
+        for attempt in range(3):
             try:
                 if method.upper() == 'GET':
-                    response = requests.get(url, headers=headers, json=json_data, timeout=timeout)
-                elif method.upper() == 'POST':
-                    response = requests.post(url, headers=headers, json=json_data, data=data, timeout=timeout)
+                    r = self.session.get(url, timeout=timeout)
                 else:
-                    return None
-                return response
-            except requests.exceptions.Timeout:
-                if attempt < max_retries:
-                    print(f"{Fore.YELLOW}[⏳] Timeout, retry {attempt}/{max_retries}...{Style.RESET_ALL}")
-                    time.sleep(2)
+                    r = self.session.post(url, json=json_data, timeout=timeout)
+
+                # rate limit
+                if r.status_code == 429:
+                    wait = int(r.headers.get('Retry-After', 5))
+                    print(f"{Y}  ⚠️  Rate limited, tunggu {wait}s...{RST}")
+                    time.sleep(wait)
                     continue
-                else:
-                    self.print_error(f"Request timeout setelah {max_retries} percobaan")
-                    return None
+                return r
+            except requests.exceptions.Timeout:
+                if attempt < 2:
+                    time.sleep(2); continue
+                return None
             except Exception as e:
-                self.print_error(f"Request error: {e}")
+                print(f"{R}  ❌ {e}{RST}")
                 return None
         return None
 
-    # ==================== LOGIN ====================
+    # ============ AUTH ============
     def login(self):
-        print(f"\n{Fore.YELLOW}⏳ Logging in...{Style.RESET_ALL}")
-
         if not self.init_data:
-            self.print_error("InitData tidak ditemukan!")
             return False
-
-        data = {
-            "initData": self.init_data,
-            "deviceId": self.device_id
-        }
-
-        response = self.request_with_retry(
-            'POST',
-            f"{self.base_url}/auth/telegram",
-            headers=self.headers,
-            json_data=data,
-            timeout=30
-        )
-
-        if response is None:
-            self.print_error("Tidak ada response dari server")
+        data = {"initData": self.init_data, "deviceId": self.device_id}
+        r = self.request('POST', "/auth/telegram", data)
+        if not r or r.status_code != 200:
+            print(f"{R}❌ Login gagal (HTTP {r.status_code if r else 'timeout'}){RST}")
             return False
-
-        if response.status_code == 200:
-            try:
-                result = response.json()
-                if result.get('ok'):
-                    self.token = result.get('token')
-                    self.profile = result.get('profile')
-                    self.headers["Authorization"] = f"Bearer {self.token}"
-                    self.print_login_success()
-                    return True
-                else:
-                    self.print_error(f"Login gagal: {result.get('message')}")
-                    return False
-            except:
-                self.print_error("Gagal parse response login")
+        try:
+            j = r.json()
+            if not j.get('ok'):
+                print(f"{R}❌ Login gagal: {j.get('message')}{RST}")
                 return False
-        else:
-            self.print_error(f"HTTP {response.status_code}")
+            self.token = j.get('token')
+            self.profile = j.get('profile', {})
+            self.session.headers["Authorization"] = f"Bearer {self.token}"
+            return True
+        except:
             return False
 
-    # ==================== FARMING ====================
-    def get_slots(self, task_id):
-        response = self.request_with_retry(
-            'GET',
-            f"{self.base_url}/tasks/{task_id}/slots",
-            headers=self.headers,
-            timeout=30
-        )
-
-        if response is None:
-            return {"ok": False}
-
-        if response.status_code == 200:
+    # ============ TASKS ============
+    def get_tasks(self):
+        r = self.request('GET', "/tasks")
+        if r and r.status_code == 200:
             try:
-                return response.json()
+                return r.json().get('tasks', [])
+            except:
+                return []
+        return []
+
+    def get_slots(self, task_id):
+        r = self.request('GET', f"/tasks/{task_id}/slots")
+        if r and r.status_code == 200:
+            try:
+                return r.json()
             except:
                 return {"ok": False}
-        else:
-            return {"ok": False}
+        return {"ok": False}
 
-    def watch_ad(self, task_id, slot_index, slot_total, current_slot, provider, reward):
-        # Buat session
-        session_resp = self.request_with_retry(
-            'POST',
-            f"{self.base_url}/ads/task/{task_id}/session",
-            headers=self.headers,
-            json_data={"slotIndex": slot_index},
-            timeout=30
-        )
-
-        if session_resp is None:
-            self.print_error(f"Gagal buat session slot {slot_index+1}")
+    # ============ WATCH ============
+    def watch_slot(self, task_id, slot_index, provider, reward, task_name, idx, total):
+        # 1) Session
+        r = self.request('POST', f"/ads/task/{task_id}/session", {"slotIndex": slot_index})
+        if not r or r.status_code != 200:
             return None
-
-        if session_resp.status_code != 200:
-            self.print_error(f"Gagal buat session (HTTP {session_resp.status_code})")
-            return None
-
         try:
-            session_data = session_resp.json()
-            if not session_data.get('ok'):
-                self.print_error(f"Session error: {session_data.get('message')}")
+            sd = r.json()
+            if not sd.get('ok'):
                 return None
         except:
-            self.print_error("Gagal parse session response")
             return None
 
-        session_id = session_data.get('sessionId')
-        watch_duration = random.randint(8, 12)
-
-        print(f"\n{Fore.CYAN}[{current_slot:02d}/{slot_total:02d}] ▶ Watching...{Style.RESET_ALL}")
-        print(f"{Fore.MAGENTA}[🌐] Provider : {provider.upper()}{Style.RESET_ALL}")
-        print(f"{Fore.GREEN}[💰] Reward   : {reward} Koin{Style.RESET_ALL}")
-
-        # Progress bar
-        bar_width = 24
-        for i in range(watch_duration):
-            percent = (i + 1) / watch_duration
-            filled = int(bar_width * percent)
-            bar = f"{Fore.GREEN}{'█' * filled}{Fore.WHITE}{'░' * (bar_width - filled)}{Style.RESET_ALL}"
-            sys.stdout.write(f"\r[{bar}] {int(percent * 100)}%")
-            sys.stdout.flush()
-            time.sleep(1)
-        print()
-
-        # Complete
-        complete_resp = self.request_with_retry(
-            'POST',
-            f"{self.base_url}/ads/task/{task_id}/complete",
-            headers=self.headers,
-            json_data={
-                "sessionId": session_id,
-                "slotIndex": slot_index,
-                "provider": provider,
-                "clicked": True
-            },
-            timeout=30
-        )
-
-        if complete_resp is None:
-            self.print_error("Timeout saat complete ads")
+        session_id = sd.get('sessionId')
+        if not session_id:
             return None
 
-        if complete_resp.status_code == 200:
-            try:
-                data = complete_resp.json()
-                if data.get('ok'):
-                    reward_got = data.get('reward', 0)
-                    coins = data.get('profile', {}).get('coins', 0)
-                    xp = data.get('xp', {})
+        provider = sd.get('provider', provider)
+        min_watch = sd.get('minWatchSec', 1)
+        watch_dur = max(3, min_watch + random.randint(2, 4))  # 3-5 detik
 
-                    self.stats['total_watched'] += 1
-                    self.stats['total_earned'] += reward_got
+        print(f"\n{NC}  ┌─ [{idx:02d}/{total:02d}] {task_name}{RST}")
+        Anim.bar(task_name[:9], provider, watch_dur)
 
-                    print(f"{Fore.GREEN}[✓] +{reward_got} koin (Total: {coins:,}){Style.RESET_ALL}")
-                    print(f"{Fore.MAGENTA}[⭐] XP: {xp.get('xp', 0)}/{xp.get('xpMax', 0)}{Style.RESET_ALL}")
-
-                    if data.get('profile'):
-                        self.profile = data.get('profile')
-
-                    return data
-                else:
-                    self.print_error(f"Gagal complete: {data.get('message')}")
-                    return None
-            except:
-                self.print_error("Gagal parse complete response")
+        # 2) Complete
+        payload = {
+            "sessionId": session_id,
+            "slotIndex": slot_index,
+            "provider": provider,
+            "clicked": True,
+            "adsgramClicked": None
+        }
+        r2 = self.request('POST', f"/ads/task/{task_id}/complete", payload)
+        if not r2 or r2.status_code != 200:
+            return None
+        try:
+            d = r2.json()
+            if not d.get('ok'):
                 return None
-        else:
-            self.print_error(f"Complete failed (HTTP {complete_resp.status_code})")
+            return d
+        except:
             return None
 
-    def watch_ads(self, task_id, task_name, total_slots=10):
-        print(f"\n{Fore.CYAN}{'=' * 50}{Style.RESET_ALL}")
-        print(f"{Fore.YELLOW}[{task_id:02d}] {task_name.upper()}{Style.RESET_ALL}")
+    def watch_task(self, task):
+        """Watch satu task (10 slot). Return (watched, earned, failed)."""
+        task_id = task['id']
+        name = task['title'].strip()
+        total_slots = task.get('adSlots', 10) or 10
+
+        # Skip task yang gak support ads
+        if task.get('kind') != 'ad' and task.get('type') != 'ad':
+            return 0, 0, 0
 
         slots_data = self.get_slots(task_id)
         if not slots_data.get('ok'):
-            self.print_error("Gagal cek slot")
-            print(f"{Fore.CYAN}[⏳] Next task dalam 3s...{Style.RESET_ALL}")
-            time.sleep(3)
-            return 0, 0
+            print(f"{Y}  ⚠️  Gagal cek slot: {name}{RST}")
+            return 0, 0, 0
 
         ready = slots_data.get('ready', 0)
-        total = slots_data.get('total', total_slots)
         per_slot = slots_data.get('perSlotReward', 0)
 
         if ready == 0:
-            self.print_warning("Tidak ada slot siap")
-            print(f"{Fore.CYAN}[⏳] Next task dalam 3s...{Style.RESET_ALL}")
-            time.sleep(3)
-            return 0, 0
+            print(f"{Y}  ⏭  {name}: tidak ada slot ready{RST}")
+            return 0, 0, 0
 
-        print(f"{Fore.GREEN}[✓] Slot     : {ready}/{total}{Style.RESET_ALL}")
-        print(f"{Fore.GREEN}[💰] Reward   : {per_slot}/slot{Style.RESET_ALL}")
-        print(f"{Fore.GREEN}[💎] Potential: {per_slot * ready} Koin{Style.RESET_ALL}")
+        print(f"\n{NC}  ╔══════════════════════════════════════════════════╗{RST}")
+        print(f"{NC}  ║{RST}  {NG}📺 {name:<45}{NC}║{RST}")
+        print(f"{NC}  ║{RST}  {NC}Slot ready : {NG}{ready}/{total_slots}{RST}")
+        print(f"{NC}  ║{RST}  {NC}Per slot   : {NG}{per_slot} koin{RST}")
+        print(f"{NC}  ╚══════════════════════════════════════════════════╝{RST}")
 
         watched = 0
-        total_reward = 0
+        earned = 0
+        failed = 0
 
-        for idx, slot in enumerate(slots_data.get('slots', [])):
-            if slot['status'] != 'ready':
+        for idx, slot in enumerate(slots_data.get('slots', []), start=1):
+            if slot.get('status') != 'ready':
                 continue
 
             slot_index = slot['index']
             provider = slot.get('provider', 'unknown')
             reward = slot.get('reward', per_slot)
 
-            result = self.watch_ad(task_id, slot_index, ready, idx + 1, provider, reward)
-            if result:
+            res = self.watch_slot(task_id, slot_index, provider, reward, name, idx, ready)
+
+            if res:
+                got = res.get('reward', 0)
+                profile = res.get('profile', {})
+                if profile:
+                    self.profile = profile
+                coins = profile.get('coins', self.profile.get('coins', 0) if self.profile else 0)
+                self.stats['watched'] += 1
+                self.stats['earned'] += got
                 watched += 1
-                total_reward += result.get('reward', 0)
-                if result.get('profile'):
-                    self.profile = result.get('profile')
+                earned += got
+                print(f"{NG}  ✅ #{idx:02d}: +{got} koin | balance: {coins:,}{RST}")
+                time.sleep(2)
+            else:
+                failed += 1
+                self.stats['failed'] += 1
+                print(f"{Y}  ⏭  #{idx:02d}: gagal → skip{RST}")
 
-            if idx < ready - 1:
-                print(f"{Fore.CYAN}[⏳] Delay 3 detik...{Style.RESET_ALL}")
-                time.sleep(3)
+                # Kalau 3x gagal berturut, stop task ini
+                if failed >= 3 and watched == 0:
+                    print(f"{R}  ❌ {name}: gagal 3x, skip task ini{RST}")
+                    break
 
-        print(f"\n{Fore.GREEN}[✓] Selesai {task_name.upper()}: {watched} iklan, {total_reward} Koin{Style.RESET_ALL}")
-        print(f"{Fore.CYAN}[⏳] Next task dalam 3s...{Style.RESET_ALL}")
-        time.sleep(3)
+        return watched, earned, failed
 
-        return watched, total_reward
+    # ============ MAIN LOOP ============
+    def run(self):
+        print(f"\n{NC}{'═'*60}{RST}")
+        print(f"{NY}🚜 AUTO FARMING STARTED{RST}")
+        print(f"{NC}{'═'*60}{RST}")
 
-    # ==================== RUN ALL ====================
-    def run_all(self):
-        print(f"\n{Fore.CYAN}{'=' * 50}{Style.RESET_ALL}")
-        print(f"{Fore.YELLOW}[🚜] AUTO FARMING{Style.RESET_ALL}")
-        print(f"{Fore.CYAN}[⏰] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}{Style.RESET_ALL}")
-        print(f"{Fore.CYAN}{'=' * 50}{Style.RESET_ALL}")
+        session_start = datetime.now()
 
-        tasks = [
-            {"id": 2, "name": "Adsgram", "slots": 10},
-            {"id": 3, "name": "Monetag", "slots": 10},
-            {"id": 7, "name": "Gigapub", "slots": 10},
-            {"id": 9, "name": "Adexium", "slots": 10}
-        ]
+        # Get tasks
+        Anim.dots("fetch tasks", 1.5)
+        tasks = self.get_tasks()
+        if not tasks:
+            print(f"{R}❌ Gagal fetch tasks{RST}")
+            return
+
+        # Filter hanya ads task
+        ad_tasks = [t for t in tasks if t.get('kind') == 'ad' or t.get('type') == 'ad']
+        print(f"{NG}✓ Found {len(ad_tasks)} ads task{RST}\n")
 
         total_watched = 0
         total_earned = 0
+        total_failed = 0
 
-        for task in tasks:
-            print(f"\n{Fore.MAGENTA}{'=' * 50}{Style.RESET_ALL}")
-            watched, earned = self.watch_ads(task['id'], task['name'], task['slots'])
-            total_watched += watched
-            total_earned += earned
+        # Loop terus sampai semua task abis (gak ada ready)
+        loop = 0
+        while True:
+            loop += 1
+            if loop > 50:  # safety
+                print(f"{Y}⚠️  50 loop tercapai, stop.{RST}")
+                break
+
+            any_ready = False
+            for task in ad_tasks:
+                w, e, f = self.watch_task(task)
+                total_watched += w
+                total_earned += e
+                total_failed += f
+                if w > 0:
+                    any_ready = True
+                time.sleep(1)
+
+            if not any_ready:
+                print(f"\n{NY}⏹ Semua ads task abis / limit. Bot berhenti.{RST}")
+                break
+
+            print(f"\n{NC}🔄 Refresh tasks...{RST}")
+            tasks = self.get_tasks()
+            ad_tasks = [t for t in tasks if t.get('kind') == 'ad' or t.get('type') == 'ad']
+            time.sleep(5)
 
         # Summary
-        print(f"\n{Fore.CYAN}{'=' * 50}{Style.RESET_ALL}")
-        print(f"{Fore.YELLOW}[📊] FARMING SUMMARY{Style.RESET_ALL}")
-        print(f"{Fore.CYAN}{'=' * 50}{Style.RESET_ALL}")
-        print(f"{Fore.GREEN}[✓] Watched : {total_watched}{Style.RESET_ALL}")
-        print(f"{Fore.GREEN}[💰] Earned  : {total_earned} Koin{Style.RESET_ALL}")
-        if self.profile:
-            print(f"{Fore.GREEN}[💰] Balance : {self.profile.get('coins', 0)} Koin{Style.RESET_ALL}")
-        print(f"{Fore.CYAN}[⏱️] Time    : {(datetime.now() - self.stats['start_time']).seconds // 60} menit{Style.RESET_ALL}")
-        print(f"{Fore.CYAN}{'=' * 50}{Style.RESET_ALL}")
+        duration = (datetime.now() - session_start).total_seconds()
+        print(f"\n{NC}{'═'*60}{RST}")
+        print(f"{NG}🏁 SESSION SUMMARY{RST}")
+        print(f"{NC}{'═'*60}{RST}")
+        print(f"  {NG}📺 Watched  : {W}{total_watched}{RST}")
+        print(f"  {NG}💰 Earned   : {NY}{total_earned} koin{RST}")
+        print(f"  {R}❌ Failed   : {W}{total_failed}{RST}")
+        print(f"  {NG}💰 Balance  : {NY}{self.profile.get('coins', 0) if self.profile else 0:,} koin{RST}")
+        print(f"  {NC}⏱️  Duration : {W}{int(duration//60)}m {int(duration%60)}s{RST}")
+        print(f"{NC}{'═'*60}{RST}")
 
-    # ==================== MENU ====================
-    def config_menu(self):
-        print(f"\n{Fore.CYAN}🔐 Konfigurasi InitData{Style.RESET_ALL}")
-        if self.init_data:
-            print(f"{Fore.YELLOW}InitData saat ini: {Fore.WHITE}{self.init_data[:30]}...{Style.RESET_ALL}")
-        new_init = input(f"\n{Fore.GREEN}Masukkan InitData baru (kosongkan untuk batal): {Style.RESET_ALL}").strip()
-        if new_init:
-            self.init_data = new_init
-            self.print_success("InitData berhasil diatur")
-        else:
-            self.print_info("Tidak ada perubahan")
-
-    def main_menu(self):
+    # ============ MENU ============
+    def menu(self):
         while True:
-            self.clear_screen()
+            self.clear()
             print(BANNER)
 
-            print(f"{Fore.CYAN}  [1] 🚜 Start Farming")
-            print(f"  [2] 🔐 Config InitData")
-            print(f"  [0] 🚪 Exit")
-            print(f"\n{Fore.YELLOW}================================================")
-            print(f"  ➜ Pilih menu :{Style.RESET_ALL}", end="")
-
-            choice = input().strip()
-
-            if choice == "1":
-                if not self.init_data:
-                    self.print_warning("InitData belum diatur!")
-                    self.config_menu()
-                    if not self.init_data:
-                        continue
-
-                if not self.login():
-                    input(f"\n{Fore.CYAN}Tekan Enter untuk kembali...{Style.RESET_ALL}")
-                    continue
-
-                self.run_all()
-                input(f"\n{Fore.CYAN}Tekan Enter untuk kembali ke menu...{Style.RESET_ALL}")
-
-            elif choice == "2":
-                self.config_menu()
-                input(f"\n{Fore.CYAN}Tekan Enter untuk kembali...{Style.RESET_ALL}")
-
-            elif choice == "0":
-                print(f"\n{Fore.GREEN}Terima kasih telah menggunakan bot ini! 🚀{Style.RESET_ALL}")
-                break
+            if self.init_data:
+                print(f"{NG}🔑 Status : {NG}InitData SET ({self.init_data[:30]}...){RST}")
             else:
-                self.print_error("Pilihan tidak valid!")
+                print(f"{R}🔑 Status : {R}InitData EMPTY{RST}")
 
-# ==================== MAIN ====================
+            print(f"\n{NC}  [1] 🚜 Start Farming")
+            print(f"  [2] 🔑 Set InitData")
+            print(f"  [3] 👤 Refresh Profile")
+            print(f"  {R}[0] 🚪 Exit{RST}")
+            print(f"\n{NC}{'═'*60}{RST}")
+
+            c = input(f"  {NG}➜ {RST}").strip()
+
+            if c == "1":
+                if not self.init_data:
+                    print(f"{R}❌ Set InitData dulu!{RST}")
+                    time.sleep(2); continue
+                Anim.dots("login", 1.5)
+                if not self.login():
+                    input(f"\n{R}Enter...{RST}"); continue
+                print(f"\n{NG}✓ Logged in as @{self.profile.get('username', 'N/A')}{RST}")
+                print(f"{NG}💰 Balance: {NY}{self.profile.get('coins', 0):,}{RST}")
+                self.run()
+                input(f"\n{NC}Enter untuk kembali...{RST}")
+
+            elif c == "2":
+                print(f"\n{Y}🔑 Masukkan InitData (Enter untuk batal):{RST}")
+                d = input(f"  {NG}➜ {RST}").strip()
+                if d:
+                    self.save_init(d)
+                    print(f"{NG}✓ InitData saved!{RST}")
+                time.sleep(1.5)
+
+            elif c == "3":
+                if not self.init_data:
+                    continue
+                Anim.dots("login", 1.5)
+                if self.login():
+                    p = self.profile
+                    print(f"\n{NC}╭─────────────────────────────────────╮{RST}")
+                    print(f"{NC}│{RST} {NG}👤 @{p.get('username', 'N/A'):<33}{NC}│{RST}")
+                    print(f"{NC}│{RST} {NG}💰 Coins     : {NY}{p.get('coins', 0):<20,}{NC}│{RST}")
+                    print(f"{NC}│{RST} {NG}⚡ Energy   : {NY}{p.get('energy', 0)}/{p.get('energyMax', 0):<19}{NC}│{RST}")
+                    print(f"{NC}│{RST} {NG}📈 Level    : {NY}{p.get('level', 1):<20}{NC}│{RST}")
+                    print(f"{NC}│{RST} {NG}📺 Ads Today: {NY}{p.get('adsToday', 0):<20}{NC}│{RST}")
+                    print(f"{NC}│{RST} {NG}💎 Total Ads: {NY}{p.get('totalAds', 0):<20}{NC}│{RST}")
+                    print(f"{NC}╰─────────────────────────────────────╯{RST}")
+                input(f"\n{NC}Enter...{RST}")
+
+            elif c == "0":
+                print(f"\n{NG}👋 Bye, bos.{RST}")
+                break
+
+# ============================================================
+# MAIN
+# ============================================================
 if __name__ == "__main__":
     try:
+        os.system('cls' if os.name == 'nt' else 'clear')
+        Anim.glitch("FARMING MATES BOT v2.0", 0.6)
+        time.sleep(0.3)
         bot = FarmingMatesBot()
-        bot.main_menu()
+        bot.menu()
     except KeyboardInterrupt:
-        print(f"\n\n{Fore.GREEN}Program dihentikan oleh user{Style.RESET_ALL}")
+        print(f"\n{R}⏹️  Stopped by user.{RST}")
     except Exception as e:
-        print(f"\n{Fore.RED}Error: {e}{Style.RESET_ALL}")
-        import traceback
-        traceback.print_exc()
-        input(f"\n{Fore.CYAN}Tekan Enter untuk keluar...{Style.RESET_ALL}")
+        print(f"\n{R}❌ Error: {e}{RST}")
+        import traceback; traceback.print_exc()
+        input(f"\n{NC}Enter untuk keluar...{RST}")
