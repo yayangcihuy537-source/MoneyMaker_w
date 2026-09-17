@@ -239,8 +239,8 @@
           "runner": "python3"
         },
         "25": {
-          "label": "Coming Soon",
-          "file": "",
+          "label": "ARTMiner 🟢",
+          "file": "art.py",
           "runner": "python3"
         }
       }
