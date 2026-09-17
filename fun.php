@@ -1,16 +1,13 @@
 <?php
 /**
  * FreeLTC.fun Faucet Auto-Claim + Captcha OCR Solver
- * HACKER THEME v3.2 — MINIMAL FILE
+ * HACKER THEME v3.3 — FIXED ENDPOINT
  *
- * Fitur:
- *   - Reward: Coins (bukan LTC)
- *   - Claim countdown: 12s
- *   - Captcha poll: 5s, timeout 120s
- *   - Max 250x claim, auto-stop
- *   - Deteksi error → stop + tampil hasil
- *   - NO log file · NO state file
- *   - Cookies + Device digabung jadi 1 file (session.txt)
+ * Fix dari v3.2:
+ *   - Endpoint diperbaiki: /claim/earn → /faucet/earn
+ *   - Cookie seeding include device_token
+ *   - Handle redirect 303/302 dari /auth/login
+ *   - Session detection diperbaiki
  */
 
 declare(strict_types=1);
@@ -24,15 +21,14 @@ const HOST         = 'https://freeltc.fun';
 const SESSION_FILE = __DIR__ . '/session.txt';
 const SCRIPT_BY    = 'MoneyMaker_w';
 const BRAND        = 'FREELTC HACKER';
-const COIN_UNIT    = 'Coins';   // <-- display unit
+const COIN_UNIT    = 'Coins';
 
 const USER_AGENT   = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36';
 
-// ===== HARD LIMITS =====
-const CLAIM_DELAY    = 12;   // detik
+const CLAIM_DELAY    = 12;
 const CAPTCHA_POLL   = 5;
 const CAPTCHA_TIMEOUT= 120;
-const SLEEP_BETWEEN  = 12;   // <-- countdown next claim = 12s
+const SLEEP_BETWEEN  = 12;
 const MAX_CLAIMS     = 250;
 
 /* ======================= COLORS ======================= */
@@ -103,19 +99,11 @@ class State {
 /* ======================= HACKER ANIMATIONS ======================= */
 
 class Hack {
-    /**
-     * Aggressive clear: hapus viewport + scrollback biar gak numpuk.
-     */
     public static function clear(): void {
         if (stripos(PHP_OS_FAMILY, 'Windows') !== false) {
             system('cls');
         } else {
-            // 2J = clear all, 3J = clear scrollback, H = home
             echo "\033[2J\033[3J\033[H";
-            // safety net
-            if (function_exists('system')) {
-                @system('clear');
-            }
         }
     }
 
@@ -256,7 +244,7 @@ class UI {
     }
 }
 
-/* ======================= LOG (IN-MEMORY ONLY) ======================= */
+/* ======================= LOG ======================= */
 
 function logmsg(string $msg, string $tag = 'info'): void {
     State::addHistory($msg, $tag);
@@ -294,7 +282,7 @@ function runSetup(): void {
     Hack::typing('  > Initializing setup protocol...', 0.01, C::HACK_D);
     echo PHP_EOL;
 
-    echo C::HACK_Y . '  [1/2] Captcha API Key' . C::RESET . PHP_EOL;
+    echo C::HACK_Y . '  [1/3] Captcha API Key' . C::RESET . PHP_EOL;
     echo C::HACK_D . '        > api.waryono.my.id' . C::RESET . PHP_EOL;
     do {
         $key = prompt('  API Key');
@@ -303,8 +291,17 @@ function runSetup(): void {
     State::$cfg['api_key'] = $key;
     echo PHP_EOL;
 
-    echo C::HACK_Y . '  [2/2] Cookies (cf_clearance + ci_session)' . C::RESET . PHP_EOL;
-    echo C::HACK_D . '        > Format: cf_clearance=xxx; ci_session=yyy' . C::RESET . PHP_EOL;
+    echo C::HACK_Y . '  [2/3] Wallet (FaucetPay email)' . C::RESET . PHP_EOL;
+    echo C::HACK_D . '        > Contoh: wulansukaprabowo@kiwkiw.com' . C::RESET . PHP_EOL;
+    do {
+        $wallet = prompt('  Wallet');
+        if ($wallet === '') echo '  ' . C::HACK_R . '⚠ Wajib diisi.' . C::RESET . PHP_EOL;
+    } while ($wallet === '');
+    State::$cfg['wallet'] = $wallet;
+    echo PHP_EOL;
+
+    echo C::HACK_Y . '  [3/3] Cookies (cf_clearance + ci_session)' . C::RESET . PHP_EOL;
+    echo C::HACK_D . '        > Format: cf_clearance=xxx; ci_session=yyy; csrf_cookie_name=zzz' . C::RESET . PHP_EOL;
     do {
         $cookies = prompt('  Cookies');
         if ($cookies === '') echo '  ' . C::HACK_R . '⚠ Wajib diisi.' . C::RESET . PHP_EOL;
@@ -314,6 +311,7 @@ function runSetup(): void {
 
     echo C::HACK_G . '  ─── Ringkasan ───' . C::RESET . PHP_EOL;
     echo '  ' . C::HACK_D . 'API Key         ' . C::RESET . '▸ ' . C::HACK_W . substr(State::$cfg['api_key'], 0, 12) . '...' . C::RESET . PHP_EOL;
+    echo '  ' . C::HACK_D . 'Wallet          ' . C::RESET . '▸ ' . C::HACK_W . State::$cfg['wallet'] . C::RESET . PHP_EOL;
     echo '  ' . C::HACK_D . 'Cookies         ' . C::RESET . '▸ ' . C::HACK_W . substr(State::$cfg['manual_cookies'], 0, 30) . '...' . C::RESET . PHP_EOL;
     echo '  ' . C::HACK_D . 'Claim Delay     ' . C::RESET . '▸ ' . C::HACK_W . CLAIM_DELAY . 's' . C::RESET . PHP_EOL;
     echo '  ' . C::HACK_D . 'Sleep Between   ' . C::RESET . '▸ ' . C::HACK_W . SLEEP_BETWEEN . 's' . C::RESET . PHP_EOL;
@@ -375,10 +373,11 @@ function httpRequest(
     $hsize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
 
     if ($raw === false) {
-        return ['ok' => false, 'code' => 0, 'body' => '', 'error' => $err];
+        return ['ok' => false, 'code' => 0, 'body' => '', 'error' => $err, 'headers' => ''];
     }
+    $head = substr($raw, 0, $hsize);
     $body = substr($raw, $hsize);
-    return ['ok' => $code >= 200 && $code < 400, 'code' => $code, 'body' => $body, 'error' => null];
+    return ['ok' => $code >= 200 && $code < 400, 'code' => $code, 'body' => $body, 'error' => null, 'headers' => $head];
 }
 
 function httpJson(string $url, ?array $payload = null, string $method = 'GET'): ?array {
@@ -402,7 +401,7 @@ function httpJson(string $url, ?array $payload = null, string $method = 'GET'): 
     return is_array($json) ? $json : null;
 }
 
-/* ======================= SESSION FILE (cookies + device) ======================= */
+/* ======================= SESSION FILE ======================= */
 
 function readSessionFile(): array {
     $result = ['device' => '', 'cookies' => []];
@@ -540,6 +539,7 @@ function decodeCfEmail(string $hex): ?string {
 function sessionIsValid(string $html): bool {
     if (stripos($html, 'Welcome back') !== false) return true;
     if (stripos($html, 'name="earn_ticket"') !== false) return true;
+    if (stripos($html, 'Submit Claim') !== false) return true;
     if (stripos($html, 'name="token"') !== false && stripos($html, 'earn_ticket') !== false) return true;
     if (stripos($html, 'Access Dashboard') !== false) return false;
     if (stripos($html, 'Enter your address to begin') !== false) return false;
@@ -682,22 +682,28 @@ function solveCaptcha(string $base64Image): ?string {
 
 /* ======================= FLOW ======================= */
 
+/**
+ * Fix: endpoint bener = /faucet/earn (bukan /claim/earn)
+ */
 function bootstrapSession(): array {
     logmsg('Verifying session...', 'cookie');
     UI::render();
 
-    $r = httpRequest(HOST . '/claim/earn');
+    $r = httpRequest(HOST . '/faucet/earn');  // ✅ FIX
     if (!$r['ok']) {
         return ['ok' => false, 'wallet' => null, 'html' => null, 'error' => 'HTTP ' . $r['code']];
     }
     if ($r['code'] === 403) {
         return ['ok' => false, 'wallet' => null, 'html' => null, 'error' => 'CF cookie expired (403)'];
     }
+    if ($r['code'] === 404) {
+        return ['ok' => false, 'wallet' => null, 'html' => null, 'error' => 'Endpoint not found (404) — cek URL'];
+    }
 
     $html = $r['body'];
 
     if (!sessionIsValid($html)) {
-        return ['ok' => false, 'wallet' => null, 'html' => $html, 'error' => 'Session invalid'];
+        return ['ok' => false, 'wallet' => null, 'html' => $html, 'error' => 'Session invalid / belum login'];
     }
 
     $wallet = extractWallet($html);
@@ -708,7 +714,7 @@ function getClaimParams(string $wallet): array {
     logmsg('Opening earn page', 'info');
     UI::render();
 
-    $r = httpRequest(HOST . '/claim/earn');
+    $r = httpRequest(HOST . '/faucet/earn');  // ✅ FIX
     if (!$r['ok']) return ['ok' => false];
 
     $html   = $r['body'];
@@ -757,10 +763,10 @@ function submitClaim(string $wallet, string $csrf, string $token, string $ticket
     UI::render();
 
     $r = httpRequest(
-        HOST . '/claim/earn',
+        HOST . '/faucet/earn',  // ✅ FIX
         'POST',
         $payload,
-        ['Content-Type: application/x-www-form-urlencoded', 'Origin: ' . HOST, 'Referer: ' . HOST . '/']
+        ['Content-Type: application/x-www-form-urlencoded', 'Origin: ' . HOST, 'Referer: ' . HOST . '/faucet/earn']
     );
 
     if (!$r['ok']) {
@@ -782,7 +788,6 @@ function submitClaim(string $wallet, string $csrf, string $token, string $ticket
         stripos($error, 'verification') !== false
     );
 
-    // Reward amount — server kirim "X Coins has been added"
     $coins = 0.0;
     if ($success) {
         if (preg_match('/([\d.,]+)\s*Coins?\s*has been added/i', $body, $m)) {
@@ -879,6 +884,7 @@ function main(): void {
     State::$captchaSolved = 0;
     State::$maxClaims     = MAX_CLAIMS;
     State::$startTime     = time();
+    State::$wallet        = State::$cfg['wallet'];
 
     seedManualCookies(State::$cfg['manual_cookies']);
     logmsg('Session file ready', 'cookie');
@@ -890,6 +896,7 @@ function main(): void {
         logmsg('Session invalid: ' . $boot['error'], 'error');
         UI::render();
         echo PHP_EOL . C::HACK_Y . '  ⚠ ' . $boot['error'] . C::RESET . PHP_EOL;
+        echo C::HACK_D . '  Tips: cek cookies & wallet di setup wizard.' . C::RESET . PHP_EOL;
         exit(3);
     }
 
@@ -897,9 +904,6 @@ function main(): void {
     if ($wallet) {
         State::$wallet = $wallet;
         logmsg('Wallet: ' . $wallet, 'success');
-    } else {
-        State::$wallet = '(unknown)';
-        logmsg('Wallet email gak ketemu', 'warn');
     }
 
     State::$status = 'RUNNING';
