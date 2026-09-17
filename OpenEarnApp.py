@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+"""
+OpenEarnApp — ADS ONLY MODE (Hacker UI v4)
+- Live real-time clock
+- Visible countdown on wait
+- Show ALL network status (remaining/cooldown/blocked)
+- By Dev MoneyMaker_w
+"""
 
 import os
 import sys
@@ -7,108 +14,174 @@ import time
 import json
 import random
 import urllib.parse
-from datetime import datetime
+import threading
+from datetime import datetime, timedelta
 
 # ============================================================
-# COLOR
+# ANSI
 # ============================================================
+R  = '\033[91m'
+G  = '\033[92m'
+Y  = '\033[93m'
+C  = '\033[96m'
+W  = '\033[97m'
+BOLD = '\033[1m'
+DIM  = '\033[2m'
+RESET = '\033[0m'
 
-class Colors:
-    GREEN = '\033[92m'
-    LIGHTGREEN = '\033[92m'
-    CYAN = '\033[96m'
-    LIGHTCYAN = '\033[96m'
-    YELLOW = '\033[93m'
-    RED = '\033[91m'
-    MAGENTA = '\033[95m'
-    PURPLE = '\033[35m'
-    WHITE = '\033[97m'
-    BOLD = '\033[1m'
-    RESET = '\033[0m'
-    DIM = '\033[2m'
+N_GREEN  = '\033[38;5;46m'
+N_CYAN   = '\033[38;5;51m'
+N_PINK   = '\033[38;5;201m'
+N_YELLOW = '\033[38;5;226m'
+N_ORANGE = '\033[38;5;208m'
+N_PURPLE = '\033[38;5;135m'
+N_RED    = '\033[38;5;196m'
+N_BLUE   = '\033[38;5;39m'
 
-# ============================================================
-# BANNER
-# ============================================================
-
-BANNER = f"""
-{Colors.LIGHTGREEN}   ____                   ______                 ___
-  / __ \\____  ___  ____  / ____/___ __________  /   |  ____  ____
- / / / / __ \\/ _ \\/ __ \\/ __/ / __ `/ ___/ __ \\/ /| | / __ \\/ __ \\
-/ /_/ / /_/ /  __/ / / / /___/ /_/ / /  / / / / ___ |/ /_/ / /_/ /
-\\____/ .___/\\___/_/ /_/_____/\\__,_/_/  /_/ /_/_/  |_/ .___/ .___/
-    /_/                                            /_/   /_/
-
-{Colors.LIGHTCYAN}────────────────────────────────────────────────────────────{Colors.RESET}
-{Colors.LIGHTGREEN}              AUTO TAP • ADS • MINES • WHEEL{Colors.RESET}
-{Colors.LIGHTCYAN}────────────────────────────────────────────────────────────{Colors.RESET}
-{Colors.RESET}
-{Colors.LIGHTCYAN}┃ {Colors.YELLOW}By Dev ScriptyXSou{Colors.RESET}
-{Colors.LIGHTCYAN}┃ {Colors.YELLOW}Channel : t.me/ScriptyXSouu{Colors.RESET}
-"""
+CLEAR_LINE = '\033[K'
 
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
-def print_banner():
-    clear_screen()
-    print(BANNER)
+def cls_line():
+    sys.stdout.write('\r' + CLEAR_LINE)
+    sys.stdout.flush()
+
+def matrix_rain(lines=5, width=60, duration=1.2):
+    chars = list("01ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉ")
+    start = time.time()
+    canvas = [[' '] * width for _ in range(lines)]
+    for _ in range(lines): print()
+    while time.time() - start < duration:
+        for _ in range(3):
+            col = random.randint(0, width - 1)
+            canvas[0][col] = random.choice(chars)
+        for i in range(lines - 1, 0, -1):
+            canvas[i] = canvas[i - 1][:]
+        canvas[0] = [' '] * width
+        sys.stdout.write(f"\033[{lines}A")
+        for i, row in enumerate(canvas):
+            color = N_GREEN if i < 1 else (G if i < 2 else DIM + G)
+            sys.stdout.write(color + ''.join(row) + RESET + "\n")
+        sys.stdout.flush()
+        time.sleep(0.08)
+
+def typing_text(text, color=N_CYAN, delay=0.015):
+    sys.stdout.write('  ')
+    for ch in text:
+        sys.stdout.write(color + ch + RESET)
+        sys.stdout.flush()
+        time.sleep(delay)
+    print()
+
+def glitch_text(text, duration=0.5):
+    gc = "░▒▓█▄▀■□▪▫@#$%&*"
+    start = time.time()
+    while time.time() - start < duration:
+        out = ''.join(random.choice(gc) if (random.randint(0,10)<2 and ch!=' ') else ch for ch in text)
+        cls_line()
+        sys.stdout.write('  ' + N_PINK + out + RESET)
+        sys.stdout.flush()
+        time.sleep(0.06)
+    cls_line()
+    sys.stdout.write('  ' + N_CYAN + text + RESET + '\n')
+    sys.stdout.flush()
+
+def boot_sequence():
+    steps = [
+        "Initializing kernel module...",
+        "Loading stealth headers...",
+        "Rotating device fingerprint...",
+        "Connecting to remote server...",
+        "Session ready.",
+    ]
+    print()
+    for s in steps:
+        sys.stdout.write(f"  {N_GREEN}[✓]{RESET} {W}{s}{RESET}\n")
+        sys.stdout.flush()
+        time.sleep(random.uniform(0.06, 0.12))
+    print(f"  {N_YELLOW}[⚡]{RESET} {W}Status: {N_GREEN}SECURE{RESET}")
+    print(f"  {N_PINK}[★]{RESET} {W}Welcome, {N_CYAN}Operative{RESET}\n")
+    time.sleep(0.6)
 
 # ============================================================
-# BOX FUNCTIONS
+# LIVE CLOCK
 # ============================================================
+class LiveClock:
+    """Update clock di terminal setiap detik — background thread"""
+    def __init__(self, y_offset=0):
+        self.running = False
+        self.thread = None
+        self.y_offset = y_offset
 
-def box_top(title, time_str=""):
-    title_part = f" {title} " if title else ""
-    if time_str:
-        return f"{Colors.LIGHTCYAN}╭──────────────────────────────────────────────────────────╮{Colors.RESET}\n{Colors.LIGHTCYAN}│{Colors.RESET}  {Colors.LIGHTGREEN}{title_part}{Colors.RESET}{' ' * (40 - len(title_part))}{Colors.LIGHTCYAN}{time_str}{Colors.RESET}        {Colors.LIGHTCYAN}│{Colors.RESET}"
-    return f"{Colors.LIGHTCYAN}╭──────────────────────────────────────────────────────────╮{Colors.RESET}\n{Colors.LIGHTCYAN}│{Colors.RESET}  {Colors.LIGHTGREEN}{title_part}{Colors.RESET}{' ' * (54 - len(title_part))}{Colors.LIGHTCYAN}│{Colors.RESET}"
+    def _loop(self):
+        while self.running:
+            now = datetime.now().strftime("%H:%M:%S")
+            sys.stdout.write(f"\033[s")  # save cursor
+            sys.stdout.write(f"\033[{self.y_offset};52H")  # move to position
+            sys.stdout.write(f"{N_YELLOW}{now}{RESET}")
+            sys.stdout.write(f"\033[u")  # restore cursor
+            sys.stdout.flush()
+            time.sleep(1)
 
-def box_mid():
-    return f"{Colors.LIGHTCYAN}│{Colors.RESET}  {Colors.DIM}──────────────────────────────────────────────────────{Colors.RESET}  {Colors.LIGHTCYAN}│{Colors.RESET}"
+    def start(self):
+        if self.running: return
+        self.running = True
+        self.thread = threading.Thread(target=self._loop, daemon=True)
+        self.thread.start()
 
-def box_line(text, indent=0):
-    pad = " " * indent
-    return f"{Colors.LIGHTCYAN}│{Colors.RESET}  {pad}{text}{' ' * (52 - len(pad) - len(text))}{Colors.LIGHTCYAN}│{Colors.RESET}"
-
-def box_bottom():
-    return f"{Colors.LIGHTCYAN}╰──────────────────────────────────────────────────────────╯{Colors.RESET}"
-
-def box_double():
-    return f"{Colors.LIGHTCYAN}├──────────────────────────────────────────────────────────┤{Colors.RESET}"
-
-def box_status_line(icon, label, value, color=Colors.WHITE):
-    return f"{Colors.LIGHTCYAN}│{Colors.RESET}  {icon} {Colors.LIGHTGREEN}{label}{Colors.RESET}{' ' * (20 - len(label))}{color}{value}{Colors.RESET}{' ' * (30 - len(str(value)))}{Colors.LIGHTCYAN}│{Colors.RESET}"
+    def stop(self):
+        self.running = False
 
 # ============================================================
-# KONFIGURASI
+# BANNER
 # ============================================================
+BANNER = f"""
+{N_GREEN}{BOLD}  ███████╗ █████╗ ██████╗ ███╗   ██╗
+  ██╔════╝██╔══██╗██╔══██╗████╗  ██║
+  █████╗  ███████║██████╔╝██╔██╗ ██║
+  ██╔══╝  ██╔══██║██╔══██╗██║╚██╗██║
+  ███████╗██║  ██║██║  ██║██║ ╚████║
+  ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝{RESET}
 
+{N_CYAN}  ╔════════════════════════════════════════════╗
+  ║ {N_YELLOW}📺  ADS ONLY  •  {N_PINK}8H MAX  •  {N_GREEN}HACKER MODE{N_CYAN} ║
+  ╚════════════════════════════════════════════╝{RESET}
+
+  {N_GREEN}▸ Dev     : {N_CYAN}MoneyMaker_w{RESET}
+  {N_GREEN}▸ Channel : {N_CYAN}t.me/ScriptyXSouu{RESET}
+  {DIM}  ────────────────────────────────────────────{RESET}
+"""
+
+# ============================================================
+# KONFIG
+# ============================================================
 BASE_URL = "https://app.theopenearn.info/api"
-TAPS_PER_CYCLE = 100
-COOLDOWN_SECONDS = 300
 AD_WATCH_DURATION = 30
+MAX_RUNTIME_HOURS = 8
+MAX_RUNTIME_SECONDS = MAX_RUNTIME_HOURS * 3600
+COOLDOWN_BETWEEN_ADS = 3
+COOLDOWN_WHEN_EMPTY = 120
+COOLDOWN_BEFORE_CYCLE = 15    # jeda antar cycle walau masih ada ads
 
 PROVIDER_CONFIG = {
-    'adsgram': {'ad_type': 'video', 'fallback': True},
-    'monetag': {'ad_type': 'impression', 'fallback': True},
-    'telega': {'ad_type': 'video', 'fallback': True},
-    'richads': {'ad_type': 'video', 'fallback': True},
-    'onclicka': {'ad_type': 'video', 'fallback': True},
-    'taddy': {'ad_type': 'video', 'fallback': True},
-    'gigapub': {'ad_type': 'video', 'fallback': True},
-    'adsgram_task': {'ad_type': 'task', 'fallback': True},
+    'adsgram':      {'ad_type': 'video',      'fallback': True},
+    'monetag':      {'ad_type': 'impression', 'fallback': True},
+    'telega':       {'ad_type': 'video',      'fallback': True},
+    'richads':      {'ad_type': 'video',      'fallback': True},
+    'onclicka':     {'ad_type': 'video',      'fallback': True},
+    'taddy':        {'ad_type': 'video',      'fallback': True},
+    'gigapub':      {'ad_type': 'video',      'fallback': True},
+    'adsgram_task': {'ad_type': 'task',       'fallback': True},
 }
 
 # ============================================================
-# BOT CLASS
+# BOT
 # ============================================================
-
-class FurrBot:
+class OpenEarnAdsBot:
     def __init__(self, init_data, username=None):
         self.init_data = init_data
         self.username = username or self._extract_username(init_data)
-        
         self.headers = {
             "authorization": f"tma {init_data}",
             "user-agent": "Mozilla/5.0 (Linux; Android 12; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.181 Mobile Safari/537.36 Telegram-Android/12.9.2",
@@ -118,29 +191,21 @@ class FurrBot:
             "origin": "https://app.theopenearn.info",
             "referer": "https://app.theopenearn.info/"
         }
-        
         self.session = requests.Session()
         self.session.headers.update(self.headers)
-        
+
         self.running = True
         self.balance = "0"
         self.tot_balance = "0"
-        self.total_taps = 0
-        self.total_earned = 0
         self.total_ads = 0
-        self.total_ads_earned = 0
-        self.total_ads_tot = 0
-        self.total_mines_won = 0
-        self.total_mines_busted = 0
-        self.total_wheel = 0
+        self.total_ads_earned = 0.0
+        self.total_ads_tot = 0.0
+        self.success_ads_count = 0
+        self.failed_ads_count = 0
         self.cycles = 0
-        self.last_tx_id = None
-        self.providers_status = {}
-        self.success_ads = []
-        self.failed_ads = []
-        self.ads_results = []
-        self.mines_results = []
-    
+        self.start_time = None
+        self.providers_full = {}   # {name: {remaining, blocked, cooldown}}
+
     def _extract_username(self, init_data):
         try:
             parsed = dict(urllib.parse.parse_qsl(init_data))
@@ -150,11 +215,18 @@ class FurrBot:
             return "Unknown"
         except:
             return "Unknown"
-    
-    def _print_status(self, icon, msg, color=Colors.WHITE):
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        print(f"{Colors.CYAN}[{timestamp}]{Colors.RESET} {icon} {msg}")
-    
+
+    def elapsed_str(self):
+        if not self.start_time: return "00:00:00"
+        e = int((datetime.now() - self.start_time).total_seconds())
+        return f"{e//3600:02d}:{(e%3600)//60:02d}:{e%60:02d}"
+
+    def remaining_str(self):
+        if not self.start_time: return f"{MAX_RUNTIME_HOURS:02d}:00:00"
+        e = int((datetime.now() - self.start_time).total_seconds())
+        r = max(0, MAX_RUNTIME_SECONDS - e)
+        return f"{r//3600:02d}:{(r%3600)//60:02d}:{r%60:02d}"
+
     def get_user_info(self):
         try:
             resp = self.session.get(f"{BASE_URL}/user")
@@ -163,522 +235,372 @@ class FurrBot:
                 self.balance = str(data.get('balance', '0'))
                 self.tot_balance = str(data.get('tot_balance', '0'))
                 return data
-            return None
-        except:
-            return None
-    
-    # ============================================================
-    # TAP
-    # ============================================================
-    
-    def do_tap(self, taps=100):
-        try:
-            resp = self.session.post(f"{BASE_URL}/earn", json={"taps": taps})
-            if resp.status_code == 200:
-                data = resp.json()
-                self.total_taps += taps
-                self.total_earned += data.get('score', 0)
-                self.balance = str(data.get('tot_balance', 0))
-                return data
-            return None
-        except:
-            return None
-    
-    def wait_for_cooldown(self, cooldown_until):
-        if cooldown_until:
-            try:
-                cooldown_time = datetime.fromisoformat(cooldown_until.replace('Z', '+00:00'))
-                now = datetime.now().astimezone()
-                wait_seconds = (cooldown_time - now).total_seconds()
-                
-                if wait_seconds > 0:
-                    remaining = int(wait_seconds)
-                    menit = remaining // 60
-                    detik = remaining % 60
-                    print(f"{Colors.LIGHTCYAN}│{Colors.RESET}  {Colors.YELLOW}⏳ Sisa {menit}m {detik}s...{Colors.RESET}                   {Colors.LIGHTCYAN}│{Colors.RESET}")
-                    while remaining > 0 and self.running:
-                        time.sleep(min(10, remaining))
-                        remaining -= 10
-                        if remaining > 0:
-                            menit = remaining // 60
-                            detik = remaining % 60
-                            print(f"\r{Colors.LIGHTCYAN}│{Colors.RESET}  {Colors.YELLOW}⏳ Sisa {menit}m {detik}s...{Colors.RESET}                   {Colors.LIGHTCYAN}│{Colors.RESET}", end="", flush=True)
-                    print(f"\r{Colors.LIGHTCYAN}│{Colors.RESET}  {Colors.LIGHTGREEN}✅ Cooldown selesai!{Colors.RESET}                         {Colors.LIGHTCYAN}│{Colors.RESET}")
-                    return
-            except:
-                pass
-        
-        print(f"{Colors.LIGHTCYAN}│{Colors.RESET}  {Colors.YELLOW}⏳ Cooldown 5 menit...{Colors.RESET}                     {Colors.LIGHTCYAN}│{Colors.RESET}")
-        for i in range(5, 0, -1):
-            if not self.running:
-                break
-            print(f"\r{Colors.LIGHTCYAN}│{Colors.RESET}  {Colors.YELLOW}⏳ Sisa {i} menit...   {Colors.RESET}                     {Colors.LIGHTCYAN}│{Colors.RESET}", end="", flush=True)
-            time.sleep(60)
-        print(f"\r{Colors.LIGHTCYAN}│{Colors.RESET}  {Colors.LIGHTGREEN}✅ Cooldown selesai!{Colors.RESET}                         {Colors.LIGHTCYAN}│{Colors.RESET}")
-    
-    # ============================================================
-    # ADS
-    # ============================================================
-    
-    def get_daily_ad_status(self):
+        except: pass
+        return None
+
+    def fetch_ads_status(self):
+        """Ambil status lengkap semua network + return list ready"""
         try:
             resp = self.session.get(f"{BASE_URL}/ads/daily-status")
             if resp.status_code == 200:
-                data = resp.json()
-                providers = data.get('providers', {})
-                self.providers_status = {}
+                providers = resp.json().get('providers', {})
+                self.providers_full = {}
                 available = []
-                
                 for name, info in providers.items():
                     remaining = info.get('remaining', 0)
                     blocked = info.get('blocked', False)
                     cooldown = info.get('cooldown_remaining', 0)
-                    
-                    self.providers_status[name] = {
+                    self.providers_full[name] = {
                         'remaining': remaining,
                         'blocked': blocked,
                         'cooldown': cooldown
                     }
-                    
                     if remaining > 0 and not blocked and cooldown == 0:
                         available.append(name)
-                
-                return available, self.providers_status
-            return None, None
-        except:
-            return None, None
-    
-    def watch_ad_simulation(self, provider):
-        print(f"{Colors.LIGHTCYAN}│{Colors.RESET}  {Colors.YELLOW}├─ Watch        : {AD_WATCH_DURATION}s{Colors.RESET}                   {Colors.LIGHTCYAN}│{Colors.RESET}")
-        for remaining in range(AD_WATCH_DURATION, 0, -1):
-            if not self.running:
-                return False
-            if remaining % 5 == 0 or remaining <= 3:
-                print(f"\r{Colors.LIGHTCYAN}│{Colors.RESET}  {Colors.YELLOW}├─ Watch        : {remaining}s remaining{Colors.RESET}              {Colors.LIGHTCYAN}│{Colors.RESET}", end="", flush=True)
-            time.sleep(1)
-        print(f"\r{Colors.LIGHTCYAN}│{Colors.RESET}  {Colors.LIGHTGREEN}├─ Status       : ✓ SUCCESS{Colors.RESET}                       {Colors.LIGHTCYAN}│{Colors.RESET}")
+                return available
+        except Exception as e:
+            print(f"  {N_RED}⚠ fetch ads status error: {e}{RESET}")
+        return None
+
+    def _watch_animation(self, provider, duration):
+        spinner = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏']
+        bar_len = 20
+        start = time.time()
+        i = 0
+        while True:
+            elapsed = time.time() - start
+            if elapsed >= duration or not self.running:
+                break
+            pct = elapsed / duration
+            filled = int(bar_len * pct)
+            bar = '█' * filled + '░' * (bar_len - filled)
+            remaining = duration - elapsed
+            row = (f"  {N_PINK}{spinner[i % len(spinner)]}{RESET} "
+                   f"{N_CYAN}WATCH {provider.upper():<14}{RESET} "
+                   f"{N_GREEN}[{bar}]{RESET} "
+                   f"{N_YELLOW}{int(pct*100):3d}%{RESET} "
+                   f"{N_ORANGE}{remaining:4.1f}s{RESET}")
+            cls_line()
+            sys.stdout.write(row)
+            sys.stdout.flush()
+            time.sleep(0.08)
+            i += 1
+        cls_line()
         return True
-    
+
     def complete_ad(self, provider):
         try:
-            if not self.watch_ad_simulation(provider):
-                return None
-            
+            print(f"  {N_CYAN}┌─ {N_GREEN}▶ {provider.upper()}{RESET}")
+            self._watch_animation(provider, AD_WATCH_DURATION)
+
             config = PROVIDER_CONFIG.get(provider, {'ad_type': 'video', 'fallback': True})
-            
             payload = {
                 "ad_type": config.get('ad_type', 'video'),
                 "provider": provider,
                 "watched": True,
                 "fallback": config.get('fallback', True)
             }
-            
             resp = self.session.post(f"{BASE_URL}/ads/complete", json=payload)
-            
+
             if resp.status_code == 200:
                 data = resp.json()
-                
                 reward = data.get('reward', 0)
                 base_reward = data.get('base_reward', 0)
                 bonus_reward = data.get('bonus_reward', 0)
                 tot_reward = data.get('tot_reward', 0)
                 new_balance = data.get('new_balance')
-                tx_id = data.get('tx_id')
                 is_bonus = data.get('is_bonus', False)
-                is_tot_only = data.get('is_tot_only', False)
-                
                 ton_reward = reward if reward > 0 else (base_reward + bonus_reward)
-                
-                if new_balance:
-                    self.balance = str(new_balance)
-                if tot_reward:
-                    self.tot_balance = str(float(self.tot_balance) + tot_reward)
-                
+
+                if new_balance: self.balance = str(new_balance)
+                if tot_reward:  self.tot_balance = str(float(self.tot_balance) + tot_reward)
+
                 self.total_ads += 1
                 self.total_ads_earned += ton_reward
                 self.total_ads_tot += tot_reward
-                
-                # Tampilkan reward
+                self.success_ads_count += 1
+
                 if ton_reward > 0:
-                    print(f"{Colors.LIGHTCYAN}│{Colors.RESET}  {Colors.LIGHTGREEN}├─ TON Reward   : +{ton_reward} TON{Colors.RESET}                   {Colors.LIGHTCYAN}│{Colors.RESET}")
+                    print(f"  {N_CYAN}│{RESET}  {N_GREEN}✓ {N_YELLOW}+{ton_reward} TON{RESET}  {N_CYAN}+{tot_reward} TOT{RESET}"
+                          + (f"  {N_PINK}★ BONUS!{RESET}" if is_bonus else ""))
                 else:
-                    print(f"{Colors.LIGHTCYAN}│{Colors.RESET}  {Colors.YELLOW}├─ TON Reward   : +0 TON{Colors.RESET}                     {Colors.LIGHTCYAN}│{Colors.RESET}")
-                
-                if tot_reward > 0:
-                    print(f"{Colors.LIGHTCYAN}│{Colors.RESET}  {Colors.CYAN}├─ TOT Reward   : +{tot_reward} TOT{Colors.RESET}                    {Colors.LIGHTCYAN}│{Colors.RESET}")
-                
-                if is_tot_only:
-                    print(f"{Colors.LIGHTCYAN}│{Colors.RESET}  {Colors.YELLOW}└─ Type         : TOT-only{Colors.RESET}                      {Colors.LIGHTCYAN}│{Colors.RESET}")
-                elif is_bonus:
-                    print(f"{Colors.LIGHTCYAN}│{Colors.RESET}  {Colors.MAGENTA}└─ Type         : BONUS!{Colors.RESET}                        {Colors.LIGHTCYAN}│{Colors.RESET}")
-                else:
-                    print(f"{Colors.LIGHTCYAN}│{Colors.RESET}  {Colors.LIGHTGREEN}└─ Type         : STANDARD{Colors.RESET}                      {Colors.LIGHTCYAN}│{Colors.RESET}")
-                
-                self.success_ads.append(provider)
-                
-                # Main Mines
-                if tx_id and tx_id != self.last_tx_id:
-                    self.last_tx_id = tx_id
-                    mines_result = self.play_mines(tx_id, provider)
-                    if mines_result:
-                        self.mines_results.append(mines_result)
-                    else:
-                        self.mines_results.append({'status': 'busted', 'reward': 0})
-                else:
-                    self.mines_results.append({'status': 'skipped', 'reward': 0})
-                
-                self.spin_wheel()
-                
+                    print(f"  {N_CYAN}│{RESET}  {N_GREEN}✓ TOT-only{RESET}  {N_CYAN}+{tot_reward} TOT{RESET}")
+                print(f"  {N_CYAN}└{'─' * 55}{RESET}")
                 return data
             else:
-                self.failed_ads.append(provider)
+                self.failed_ads_count += 1
+                print(f"  {N_CYAN}│{RESET}  {N_RED}✗ HTTP {resp.status_code}{RESET}")
+                print(f"  {N_CYAN}└{'─' * 55}{RESET}")
                 return None
-                
         except Exception as e:
-            self.failed_ads.append(provider)
+            self.failed_ads_count += 1
+            print(f"  {N_CYAN}│{RESET}  {N_RED}✗ ERROR: {str(e)[:45]}{RESET}")
+            print(f"  {N_CYAN}└{'─' * 55}{RESET}")
             return None
-    
-    # ============================================================
-    # MINES
-    # ============================================================
-    
-    def play_mines(self, tx_id, provider, difficulty=3):
-        mines_headers = self.headers.copy()
-        mines_headers['Referer'] = 'https://app.theopenearn.info/mines'
-        
-        try:
-            start = requests.post(
-                f"{BASE_URL}/mines/start",
-                json={"ad_reward_tx_id": tx_id, "ad_provider": provider, "mines_count": difficulty},
-                headers=mines_headers,
-                timeout=15
-            )
-            
-            if start.status_code != 200:
-                return None
-            
-            game_data = start.json()
-            game_id = game_data.get('game_id')
-            if not game_id:
-                return None
-            
-            used = []
-            clicks = random.randint(2, 3)
-            busted = False
-            
-            for i in range(clicks):
-                tile = random.randint(0, 24)
-                while tile in used:
-                    tile = random.randint(0, 24)
-                used.append(tile)
-                
-                click = requests.post(
-                    f"{BASE_URL}/mines/{game_id}/click",
-                    json={"cell_index": tile},
-                    headers=mines_headers,
-                    timeout=10
-                )
-                
-                if click.status_code == 200:
-                    result = click.json()
-                    if result.get('status') in ['busted', 'hit_mine']:
-                        busted = True
-                        self.total_mines_busted += 1
-                        return {'status': 'busted', 'reward': 0}
-                time.sleep(0.5)
-            
-            # Cashout
-            cash = requests.post(
-                f"{BASE_URL}/mines/{game_id}/cashout",
-                json={},
-                headers=mines_headers,
-                timeout=10
-            )
-            
-            if cash.status_code == 200:
-                cash_data = cash.json()
-                new_bal = cash_data.get('new_balance')
-                if new_bal:
-                    self.balance = str(new_bal)
-                reward = cash_data.get('reward', 0)
-                if reward > 0:
-                    self.total_mines_won += reward
-                    return {'status': 'won', 'reward': reward}
-            
-            return None
-            
-        except Exception as e:
-            return None
-    
-    # ============================================================
-    # WHEEL
-    # ============================================================
-    
-    def spin_wheel(self):
-        try:
-            stat = self.session.get(f"{BASE_URL}/wheel/status")
-            if stat.status_code != 200:
-                return 0
-            
-            data = stat.json()
-            free_spins = data.get('free_spins_available', 0)
-            
-            if free_spins > 0:
-                spin = self.session.post(
-                    f"{BASE_URL}/wheel/spin",
-                    json={"is_paid": False}
-                )
-                
-                if spin.status_code == 200:
-                    result = spin.json()
-                    reward = result.get('reward', 0)
-                    if reward > 0:
-                        self.total_wheel += reward
-                        return reward
-            return 0
-        except:
-            return 0
-    
-    # ============================================================
-    # MAIN LOOP
-    # ============================================================
-    
+
+    def _visible_sleep(self, seconds, label="WAITING"):
+        """Countdown live biar keliatan bot gak stuck"""
+        spinner = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏']
+        i = 0
+        start = time.time()
+        while time.time() - start < seconds and self.running:
+            elapsed = time.time() - start
+            remaining = seconds - elapsed
+            bar_len = 20
+            pct = elapsed / seconds
+            filled = int(bar_len * pct)
+            bar = '█' * filled + '░' * (bar_len - filled)
+            row = (f"  {N_PURPLE}{spinner[i % len(spinner)]}{RESET} "
+                   f"{N_CYAN}{label:<12}{RESET} "
+                   f"{N_GREEN}[{bar}]{RESET} "
+                   f"{N_YELLOW}{int(pct*100):3d}%{RESET} "
+                   f"{N_ORANGE}{remaining:5.1f}s{RESET}")
+            cls_line()
+            sys.stdout.write(row)
+            sys.stdout.flush()
+            time.sleep(0.1)
+            i += 1
+        cls_line()
+
+    def _status_network_panel(self):
+        """Tampilkan status semua network — kenapa cuma N yang ready"""
+        print(f"  {N_CYAN}┌─ {N_GREEN}📡 NETWORK STATUS{N_CYAN} ───────────────────────────┐{RESET}")
+        for name in sorted(self.providers_full.keys()):
+            info = self.providers_full[name]
+            remaining = info['remaining']
+            blocked = info['blocked']
+            cooldown = info['cooldown']
+
+            if blocked:
+                icon = f"{N_RED}⛔ BLOCKED{RESET}"
+                detail = ""
+            elif remaining <= 0:
+                icon = f"{N_ORANGE}✗ HABIS{RESET}"
+                detail = f"{DIM}(0 left){RESET}"
+            elif cooldown > 0:
+                icon = f"{N_YELLOW}⏳ CD {int(cooldown)}s{RESET}"
+                detail = f"{N_CYAN}{remaining} left{RESET}"
+            else:
+                icon = f"{N_GREEN}✓ READY{RESET}"
+                detail = f"{N_CYAN}{remaining} left{RESET}"
+
+            line = f"  {N_CYAN}│{RESET}  {name:<15} {icon:<20} {detail}"
+            print(line)
+        print(f"  {N_CYAN}└{'─' * 55}{RESET}")
+
     def run(self):
         self.running = True
+        self.start_time = datetime.now()
+        deadline = self.start_time + timedelta(seconds=MAX_RUNTIME_SECONDS)
+
+        print(f"  {N_GREEN}🚀 {BOLD}ADS-ONLY LOOP STARTED{RESET}")
+        print(f"  {DIM}Auto-stop after {MAX_RUNTIME_HOURS}h ({deadline.strftime('%H:%M:%S')}){RESET}")
+        print(f"  {DIM}Ctrl+C to stop manually{RESET}\n")
+        time.sleep(1.5)
+
         while self.running:
+            if datetime.now() >= deadline:
+                print(f"\n  {N_YELLOW}⏰ 8 HOURS REACHED — AUTO-STOP{RESET}")
+                self.running = False
+                break
+
             self.cycles += 1
             cycle_start = datetime.now()
-            self.success_ads = []
-            self.ads_results = []
-            self.mines_results = []
-            cycle_ton = 0
-            cycle_tot = 0
-            ads_count = 0
-            mines_won = 0
-            mines_busted = 0
-            wheel_reward = 0
-            
-            # ===== CYCLE HEADER =====
+            cycle_ads = 0
+            cycle_ton = 0.0
+            cycle_tot = 0.0
+
+            clear_screen()
+            print(BANNER)
+
+            # ── CYCLE HEADER dengan live clock di kanan ──
+            clock = LiveClock(y_offset=20)  # baris 20 (setelah banner)
+            print(f"  {N_CYAN}╔════════════════════════════════════════════╗{RESET}")
+            print(f"  {N_CYAN}║{RESET} {N_GREEN}🔄 CYCLE #{self.cycles}{RESET}"
+                  f"{' ' * (22 - len(str(self.cycles)))}"
+                  f"{N_YELLOW}{cycle_start.strftime('%H:%M:%S')}{N_CYAN} ║{RESET}")
+            print(f"  {N_CYAN}╠════════════════════════════════════════════╣{RESET}")
+            print(f"  {N_CYAN}║{RESET}  {N_CYAN}⏱  Elapsed  : {N_GREEN}{self.elapsed_str()}{RESET}"
+                  f"{' ' * (18)}{N_CYAN}║{RESET}")
+            print(f"  {N_CYAN}║{RESET}  {N_ORANGE}⏳ Remaining: {N_YELLOW}{self.remaining_str()}{RESET}"
+                  f"{' ' * (18)}{N_CYAN}║{RESET}")
+            print(f"  {N_CYAN}║{RESET}  {N_PURPLE}💰 Balance  : {N_YELLOW}{self.balance} TON{RESET}"
+                  f"{' ' * max(0, 24 - len(str(self.balance)))}{N_CYAN}║{RESET}")
+            print(f"  {N_CYAN}╚════════════════════════════════════════════╝{RESET}\n")
+
+            # ── FETCH ADS ──
+            print(f"  {N_CYAN}┌─ {N_GREEN}📺 AVAILABLE ADS{N_CYAN} ──────────────────────────┐{RESET}")
+            available = self.fetch_ads_status()
+
+            if not available:
+                print(f"  {N_CYAN}│{RESET}  {N_YELLOW}⚠ Semua network HABIS / cooldown{RESET}")
+                print(f"  {N_CYAN}└{'─' * 55}{RESET}\n")
+
+                # Tampilkan status lengkap
+                self._status_network_panel()
+                print()
+
+                # Visible countdown wait
+                print(f"  {N_CYAN}⏳ Menunggu {COOLDOWN_WHEN_EMPTY}s sebelum cek ulang...{RESET}")
+                self._visible_sleep(COOLDOWN_WHEN_EMPTY, "WAIT")
+                continue
+
+            print(f"  {N_CYAN}│{RESET}  {N_YELLOW}▶ Found    : {N_GREEN}{len(available)}{RESET}")
+            print(f"  {N_CYAN}│{RESET}  {N_YELLOW}▶ Ready    : {N_CYAN}{', '.join(available)}{RESET}")
+            print(f"  {N_CYAN}└{'─' * 55}{RESET}\n")
+
+            # ── STATUS PANEL (kenapa cuma N yang ready) ──
+            self._status_network_panel()
             print()
-            print(box_top(f"🔄 CYCLE #{self.cycles}", cycle_start.strftime("%H:%M:%S")))
-            print(box_line(f"{Colors.LIGHTGREEN}⚡ AUTO FARMING SESSION{Colors.RESET}"))
-            print(box_bottom())
-            print()
-            
-            # ===== 1. TAP =====
-            print(box_top(f"⚡ TAP PROCESS"))
-            print(box_line(f"{Colors.YELLOW}├─ Requested      : {TAPS_PER_CYCLE} taps{Colors.RESET}"))
-            
-            result = self.do_tap(TAPS_PER_CYCLE)
-            
-            if result:
-                score = result.get('score', 0)
-                balance = result.get('tot_balance', 0)
-                cooldown_until = result.get('cooldown_until')
-                self.balance = str(balance)
-                
-                print(box_line(f"{Colors.LIGHTGREEN}├─ Status         : ✓ SUCCESS{Colors.RESET}"))
-                print(box_line(f"{Colors.YELLOW}├─ Earned         : +{score}{Colors.RESET}"))
-                print(box_line(f"{Colors.CYAN}├─ Current Score  : {score}{Colors.RESET}"))
-                print(box_line(f"{Colors.LIGHTGREEN}└─ Balance        : {balance}{Colors.RESET}"))
-                print(box_bottom())
-                print()
-                
-                # ===== 2. COOLDOWN =====
-                print(box_top("⏳ COOLDOWN"))
-                print(box_line(f"{Colors.YELLOW}├─ Duration       : 5 minutes{Colors.RESET}"))
-                self.wait_for_cooldown(cooldown_until)
-                print(box_line(f"{Colors.LIGHTGREEN}└─ Next Action    : Checking advertisements{Colors.RESET}"))
-                print(box_bottom())
-                print()
-                
-                # ===== 3. ADS =====
-                print(box_top("📺 ADVERTISEMENTS"))
-                
-                available, status = self.get_daily_ad_status()
-                
-                if available:
-                    print(box_line(f"{Colors.YELLOW}├─ Providers Found : {len(available)}{Colors.RESET}"))
-                    print(box_line(f"{Colors.CYAN}├─ Available       : {', '.join(available)}{Colors.RESET}"))
-                    print(box_mid())
-                    
-                    for provider in available:
-                        if not self.running:
-                            break
-                        print(box_line(f"{Colors.LIGHTGREEN}├─ ✓ {provider.upper()}{Colors.RESET}"))
-                        result_ad = self.complete_ad(provider)
-                        if result_ad:
-                            ads_count += 1
-                        time.sleep(1)
-                    
-                    print(box_bottom())
-                    print()
-                else:
-                    print(box_line(f"{Colors.YELLOW}├─ No ads available{Colors.RESET}"))
-                    print(box_bottom())
-                    print()
-                
-                # ===== 4. MINES SUMMARY =====
-                mines_won = self.total_mines_won
-                mines_busted = self.total_mines_busted
-                
-                print(box_top("🎮 MINES"))
-                print(box_line(f"{Colors.YELLOW}├─ Games Started   : {len(self.mines_results)}{Colors.RESET}"))
-                won_count = sum(1 for r in self.mines_results if r and r.get('status') == 'won')
-                busted_count = sum(1 for r in self.mines_results if r and r.get('status') == 'busted')
-                print(box_line(f"{Colors.LIGHTGREEN}├─ Successful      : {won_count}{Colors.RESET}"))
-                print(box_line(f"{Colors.RED}├─ Busted          : {busted_count}{Colors.RESET}"))
-                print(box_line(f"{Colors.YELLOW}└─ Reward          : +{self.total_mines_won} TON{Colors.RESET}"))
-                print(box_bottom())
-                print()
-                
-                # ===== 5. WHEEL =====
-                wheel_reward = self.spin_wheel()
-                print(box_top("🎰 WHEEL"))
-                print(box_line(f"{Colors.YELLOW}├─ Free Spins      : {1 if wheel_reward > 0 else 0}{Colors.RESET}"))
-                print(box_line(f"{Colors.LIGHTGREEN}└─ Reward          : +{wheel_reward} TON{Colors.RESET}"))
-                print(box_bottom())
-                print()
-                
-                # ===== 6. CYCLE SUMMARY =====
-                duration = (datetime.now() - cycle_start).total_seconds()
-                cycle_ton = self.total_ads_earned + self.total_mines_won + wheel_reward
-                cycle_tot = self.total_ads_tot
-                
-                print(box_top(f"✓ CYCLE #{self.cycles} COMPLETED", f"{int(duration)} seconds"))
-                print(box_line(f"{Colors.LIGHTGREEN}📊 CYCLE SUMMARY{Colors.RESET}"))
-                print(box_mid())
-                print(box_line(f"{Colors.YELLOW}⚡ Taps Earned      : +{self.total_earned}{Colors.RESET}"))
-                print(box_line(f"{Colors.LIGHTGREEN}💰 TON Earned      : +{cycle_ton:.8f} TON{Colors.RESET}"))
-                print(box_line(f"{Colors.CYAN}💎 TOT Earned      : +{cycle_tot} TOT{Colors.RESET}"))
-                print(box_line(f"{Colors.MAGENTA}📺 Ads Completed   : {ads_count}{Colors.RESET}"))
-                print(box_line(f"{Colors.YELLOW}🎮 Mines Won       : {won_count}{Colors.RESET}"))
-                print(box_line(f"{Colors.YELLOW}🎰 Wheel Reward    : +{wheel_reward} TON{Colors.RESET}"))
-                print(box_mid())
-                print(box_line(f"{Colors.LIGHTGREEN}💰 CURRENT BALANCE{Colors.RESET}"))
-                print(box_line(f"{Colors.YELLOW}├─ TON              : {self.balance} TON{Colors.RESET}"))
-                print(box_line(f"{Colors.CYAN}└─ TOT              : {self.tot_balance}{Colors.RESET}"))
-                print(box_bottom())
-                print()
-                
-            else:
-                print(box_line(f"{Colors.RED}├─ Status         : ✗ FAILED{Colors.RESET}"))
-                print(box_line(f"{Colors.YELLOW}└─ Retrying in 30s...{Colors.RESET}"))
-                print(box_bottom())
-                print()
-                time.sleep(30)
+
+            # ── PROCESS ADS ──
+            for provider in available:
+                if not self.running or datetime.now() >= deadline:
+                    break
+                result = self.complete_ad(provider)
+                if result:
+                    cycle_ads += 1
+                    r = result.get('reward', 0)
+                    t = result.get('tot_reward', 0)
+                    cycle_ton += r if r > 0 else (result.get('base_reward', 0) + result.get('bonus_reward', 0))
+                    cycle_tot += t
+                time.sleep(COOLDOWN_BETWEEN_ADS)
+
+            # ── CYCLE SUMMARY ──
+            dur = int((datetime.now() - cycle_start).total_seconds())
+            print(f"\n  {N_CYAN}┌─ {N_GREEN}✓ CYCLE #{self.cycles} DONE{RESET}  {DIM}({dur}s){RESET}")
+            print(f"  {N_CYAN}│{RESET}  {N_GREEN}📺 Ads Success : {N_GREEN}{cycle_ads}{RESET}")
+            print(f"  {N_CYAN}│{RESET}  {N_YELLOW}💰 TON Earned  : {N_GREEN}+{cycle_ton:.8f} TON{RESET}")
+            print(f"  {N_CYAN}│{RESET}  {N_CYAN}💎 TOT Earned  : {N_CYAN}+{cycle_tot} TOT{RESET}")
+            print(f"  {N_CYAN}│{RESET}  {N_ORANGE}⏳ Time Left   : {N_YELLOW}{self.remaining_str()}{RESET}")
+            print(f"  {N_CYAN}└{'─' * 55}{RESET}\n")
+
+            print(f"  {N_PURPLE}💰 Current Balance : {N_GREEN}{self.balance} TON{RESET}")
+            print(f"  {N_PURPLE}💎 Current TOT     : {N_CYAN}{self.tot_balance}{RESET}\n")
+
+            # Refresh balance dari server
+            self.get_user_info()
+
+            # Visible wait sebelum cycle berikutnya
+            print(f"  {N_CYAN}⏳ Cooldown sebelum cycle berikutnya...{RESET}")
+            self._visible_sleep(COOLDOWN_BEFORE_CYCLE, "NEXT CYCLE")
+
+        self._print_final_summary()
+
+    def _print_final_summary(self):
+        print(f"\n  {N_CYAN}╔════════════════════════════════════════════╗{RESET}")
+        print(f"  {N_CYAN}║{RESET}  {N_GREEN}{BOLD}🏁 FINAL SUMMARY{RESET}{' ' * 28}{N_CYAN}║{RESET}")
+        print(f"  {N_CYAN}╠════════════════════════════════════════════╣{RESET}")
+        print(f"  {N_CYAN}║{RESET}  {N_YELLOW}Total Cycles   : {N_GREEN}{self.cycles}{RESET}")
+        print(f"  {N_CYAN}║{RESET}  {N_YELLOW}Runtime        : {N_GREEN}{self.elapsed_str()}{RESET}")
+        print(f"  {N_CYAN}║{RESET}  {N_YELLOW}Total Ads      : {N_GREEN}{self.total_ads}{RESET}")
+        print(f"  {N_CYAN}║{RESET}  {N_YELLOW}Ads Success    : {N_GREEN}{self.success_ads_count}{RESET}")
+        print(f"  {N_CYAN}║{RESET}  {N_YELLOW}Ads Failed     : {N_RED}{self.failed_ads_count}{RESET}")
+        print(f"  {N_CYAN}║{RESET}  {N_YELLOW}TON Earned     : {N_GREEN}{self.total_ads_earned:.8f} TON{RESET}")
+        print(f"  {N_CYAN}║{RESET}  {N_YELLOW}TOT Earned     : {N_CYAN}{self.total_ads_tot} TOT{RESET}")
+        print(f"  {N_CYAN}║{RESET}  {N_YELLOW}Final Balance  : {N_GREEN}{self.balance} TON{RESET}")
+        print(f"  {N_CYAN}╚════════════════════════════════════════════╝{RESET}\n")
 
 # ============================================================
 # MENU
 # ============================================================
-
 def menu(bot):
     while True:
-        print_banner()
-        
-        # Account info
-        print(f"{Colors.LIGHTCYAN}┌─ ACCOUNT ────────────────────────────────────────────────┐{Colors.RESET}")
-        print(f"{Colors.LIGHTCYAN}│{Colors.RESET} {Colors.LIGHTGREEN}👤 Username :{Colors.RESET} {bot.username}")
-        print(f"{Colors.LIGHTCYAN}│{Colors.RESET} {Colors.LIGHTGREEN}💰 Balance  :{Colors.RESET} {Colors.YELLOW}{bot.balance} TON{Colors.RESET}")
-        print(f"{Colors.LIGHTCYAN}│{Colors.RESET} {Colors.LIGHTGREEN}💎 TOT      :{Colors.RESET} {Colors.CYAN}{bot.tot_balance}{Colors.RESET}")
-        print(f"{Colors.LIGHTCYAN}└─────────────────────────────────────────────────────────┘{Colors.RESET}")
-        
+        clear_screen()
+        print(BANNER)
+        print(f"  {N_CYAN}┌─ {N_GREEN}ACCOUNT{N_CYAN} ───────────────────────────────────┐{RESET}")
+        print(f"  {N_CYAN}│{RESET}  {N_GREEN}👤 Username : {N_CYAN}{bot.username}{RESET}")
+        print(f"  {N_CYAN}│{RESET}  {N_GREEN}💰 Balance  : {N_YELLOW}{bot.balance} TON{RESET}")
+        print(f"  {N_CYAN}│{RESET}  {N_GREEN}💎 TOT      : {N_CYAN}{bot.tot_balance}{RESET}")
+        print(f"  {N_CYAN}└{'─' * 44}{RESET}")
         print()
-        print(f"{Colors.LIGHTGREEN}    {Colors.LIGHTGREEN}1 › {Colors.WHITE}🚀 Start Farming{Colors.RESET}")
-        print(f"{Colors.LIGHTGREEN}    {Colors.LIGHTGREEN}2 › {Colors.WHITE}💰 Check Balance{Colors.RESET}")
-        print(f"{Colors.LIGHTGREEN}    {Colors.LIGHTGREEN}3 › {Colors.WHITE}📺 Available Ads{Colors.RESET}")
-        print(f"{Colors.LIGHTGREEN}    {Colors.LIGHTGREEN}4 › {Colors.WHITE}🎰 Spin Wheel{Colors.RESET}")
-        print(f"{Colors.LIGHTGREEN}    {Colors.LIGHTGREEN}5 › {Colors.WHITE}📊 Statistics{Colors.RESET}")
+        print(f"  {N_GREEN}[{N_YELLOW}1{N_GREEN}]{RESET}  {N_CYAN}🚀 Start ADS-ONLY Loop {DIM}(8h max){RESET}")
+        print(f"  {N_GREEN}[{N_YELLOW}2{N_GREEN}]{RESET}  {N_CYAN}💰 Check Balance{RESET}")
+        print(f"  {N_GREEN}[{N_YELLOW}3{N_GREEN}]{RESET}  {N_CYAN}📺 Available Ads + Status{RESET}")
+        print(f"  {N_GREEN}[{N_YELLOW}4{N_GREEN}]{RESET}  {N_CYAN}📊 Statistics{RESET}")
+        print(f"  {N_RED}[{N_YELLOW}0{N_RED}]{RESET}  {N_RED}❌ Exit{RESET}")
         print()
-        print(f"{Colors.RED}    {Colors.RED}0 › {Colors.WHITE}❌ Exit{Colors.RESET}")
-        
-        print(f"\n{Colors.LIGHTCYAN}────────────────────────────────────────────────────────────{Colors.RESET}")
-        
-        choice = input(f"{Colors.LIGHTGREEN}    OpenEarnApp › {Colors.WHITE}").strip()
-        
-        if choice in ["1"]:
+        print(f"  {DIM}────────────────────────────────────────────{RESET}")
+
+        choice = input(f"  {N_GREEN}OpenEarn › {RESET}").strip()
+
+        if choice == "1":
             bot.running = True
             bot.run()
-            input(f"\n{Colors.CYAN}Press Enter to return to menu...{Colors.RESET}")
-            
-        elif choice in ["2"]:
+            input(f"\n  {N_CYAN}Press Enter to return...{RESET}")
+        elif choice == "2":
             bot.get_user_info()
-            print(f"\n💰 Balance : {bot.balance} TON")
-            print(f"💎 TOT     : {bot.tot_balance}")
-            input(f"\n{Colors.CYAN}Press Enter...{Colors.RESET}")
-            
-        elif choice in ["3"]:
-            available, _ = bot.get_daily_ad_status()
+            print(f"\n  {N_GREEN}💰 Balance : {N_YELLOW}{bot.balance} TON{RESET}")
+            print(f"  {N_GREEN}💎 TOT     : {N_CYAN}{bot.tot_balance}{RESET}")
+            input(f"\n  {N_CYAN}Press Enter...{RESET}")
+        elif choice == "3":
+            available = bot.fetch_ads_status()
             print()
             if available:
+                print(f"  {N_GREEN}✓ Ready ({len(available)}):{RESET}")
                 for ad in available:
-                    print(f"{Colors.LIGHTGREEN}● {ad.upper()}{Colors.RESET}")
+                    print(f"    {N_CYAN}● {ad.upper()}{RESET}")
             else:
-                print(f"{Colors.YELLOW}Tidak ada ads tersedia.{Colors.RESET}")
-            input(f"\n{Colors.CYAN}Press Enter...{Colors.RESET}")
-            
-        elif choice in ["4"]:
-            reward = bot.spin_wheel()
-            print(f"\n🎰 Wheel reward: +{reward} TON")
-            input(f"\n{Colors.CYAN}Press Enter...{Colors.RESET}")
-            
-        elif choice in ["5"]:
-            print(f"\n{Colors.LIGHTGREEN}📊 STATISTICS{Colors.RESET}")
-            print(f"Cycles        : {bot.cycles}")
-            print(f"Total Taps    : {bot.total_taps}")
-            print(f"Total Earned  : {bot.total_earned}")
-            print(f"Total Ads     : {bot.total_ads}")
-            print(f"TON Earned    : {bot.total_ads_earned:.8f} TON")
-            print(f"TOT Earned    : {bot.total_ads_tot} TOT")
-            print(f"Mines Won     : {bot.total_mines_won} TON")
-            print(f"Mines Busted  : {bot.total_mines_busted}")
-            print(f"Wheel Reward  : {bot.total_wheel} TON")
-            input(f"\n{Colors.CYAN}Press Enter...{Colors.RESET}")
-            
-        elif choice in ["0"]:
+                print(f"  {N_YELLOW}Tidak ada ads tersedia.{RESET}")
+            print()
+            bot._status_network_panel()
+            input(f"\n  {N_CYAN}Press Enter...{RESET}")
+        elif choice == "4":
+            print(f"\n  {N_GREEN}{BOLD}📊 STATISTICS{RESET}")
+            print(f"  {N_YELLOW}Cycles        : {N_GREEN}{bot.cycles}{RESET}")
+            print(f"  {N_YELLOW}Runtime       : {N_GREEN}{bot.elapsed_str()}{RESET}")
+            print(f"  {N_YELLOW}Total Ads     : {N_GREEN}{bot.total_ads}{RESET}")
+            print(f"  {N_YELLOW}Success       : {N_GREEN}{bot.success_ads_count}{RESET}")
+            print(f"  {N_YELLOW}Failed        : {N_RED}{bot.failed_ads_count}{RESET}")
+            print(f"  {N_YELLOW}TON Earned    : {N_GREEN}{bot.total_ads_earned:.8f}{RESET}")
+            print(f"  {N_YELLOW}TOT Earned    : {N_CYAN}{bot.total_ads_tot}{RESET}")
+            input(f"\n  {N_CYAN}Press Enter...{RESET}")
+        elif choice == "0":
             bot.running = False
-            print(f"\n{Colors.LIGHTGREEN}👋 OpenEarnApp stopped.{Colors.RESET}")
+            print(f"\n  {N_GREEN}👋 Bye, boss.{RESET}")
             break
-            
         else:
-            print(f"{Colors.RED}❌ Menu tidak tersedia!{Colors.RESET}")
+            print(f"  {N_RED}❌ Invalid!{RESET}")
             time.sleep(1)
 
 # ============================================================
 # MAIN
 # ============================================================
-
 def main():
-    print_banner()
-    
-    print(f"\n{Colors.LIGHTCYAN}{'═' * 60}{Colors.RESET}")
-    print(f"{Colors.YELLOW}📌 CARA MENDAPATKAN INIT DATA:{Colors.RESET}")
-    print(f"1. {Colors.WHITE}Buka bot The Open Earn di Telegram{Colors.RESET}")
-    print(f"2. {Colors.WHITE}Buka DevTools (F12) → Tab Network{Colors.RESET}")
-    print(f"3. {Colors.WHITE}Cari request ke '/api/user'{Colors.RESET}")
-    print(f"4. {Colors.WHITE}Copy header 'authorization' (tanpa 'tma ' di awal){Colors.RESET}")
-    print(f"{Colors.LIGHTCYAN}{'═' * 60}{Colors.RESET}")
-    
-    init_data = input(f"\n{Colors.LIGHTGREEN}🔑 Init data: {Colors.RESET}").strip()
-    
+    clear_screen()
+    matrix_rain(lines=5, width=60, duration=1.2)
+    print()
+    typing_text(">>> OpenEarnApp ADS-ONLY v4.0", N_CYAN, 0.015)
+    glitch_text("HACKER EDITION", 0.5)
+    print()
+    boot_sequence()
+    time.sleep(0.5)
+
+    clear_screen()
+    print(BANNER)
+
+    print(f"  {N_CYAN}┌─ {N_GREEN}📌 CARA MENDAPATKAN INIT DATA{N_CYAN} ────────────────┐{RESET}")
+    print(f"  {N_CYAN}│{RESET}  {W}1. Buka bot The Open Earn di Telegram{RESET}")
+    print(f"  {N_CYAN}│{RESET}  {W}2. DevTools (F12) → Tab Network{RESET}")
+    print(f"  {N_CYAN}│{RESET}  {W}3. Cari request ke '/api/user'{RESET}")
+    print(f"  {N_CYAN}│{RESET}  {W}4. Copy header 'authorization' (tanpa 'tma '){RESET}")
+    print(f"  {N_CYAN}└{'─' * 44}{RESET}")
+
+    init_data = input(f"\n  {N_GREEN}🔑 Init data: {RESET}").strip()
     if not init_data:
-        print(f"{Colors.RED}❌ Init data kosong!{Colors.RESET}")
+        print(f"  {N_RED}❌ Init data kosong!{RESET}")
         return
-    
     if init_data.startswith('tma '):
         init_data = init_data[4:]
-    
-    username = input(f"{Colors.LIGHTGREEN}📛 Nama (enter untuk auto): {Colors.RESET}").strip()
-    if not username:
-        username = None
-    
-    bot = FurrBot(init_data, username)
+
+    username = input(f"  {N_GREEN}📛 Nama (enter auto): {RESET}").strip() or None
+    bot = OpenEarnAdsBot(init_data, username)
     menu(bot)
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print(f"\n\n{Colors.RED}⏹️ Bot stopped{Colors.RESET}")
+        print(f"\n\n  {N_RED}⏹️  Stopped by user.{RESET}")
     except Exception as e:
-        print(f"\n{Colors.RED}❌ Error: {e}{Colors.RESET}")
+        print(f"\n  {N_RED}❌ Error: {e}{RESET}")
