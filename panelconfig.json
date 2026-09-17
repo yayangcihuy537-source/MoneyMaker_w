@@ -242,6 +242,16 @@
           "label": "ARTMiner 🟢",
           "file": "art.py",
           "runner": "python3"
+        },
+        "26": {
+          "label": "Coming Soon",
+          "file": "",
+          "runner": "python3"
+        },
+        "27": {
+          "label": "Coming Soon",
+          "file": "",
+          "runner": "python3"
         }
       }
     },
