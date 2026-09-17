@@ -1,446 +1,695 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+
 """
-⛏️  ART MINING BOT v1.0
-- Auto start mining
-- Auto watch ads (10/day, 10 ATF each)
-- Auto stop kalau abis
-- Animation + summary
-- ScriptMaker: @MoneyMaker_w
+ART AIRDROP - ADS Bot (Final Version)
+- Auto-login via Telethon + start_param referral
+- Full GigaPub flow + Ads claim
+- Random delay panjang (anti-deteksi)
+- Max sleep 6-12 jam (pola natural)
+- Multi-akun ready
 """
 
+import asyncio
+import requests
+import json
 import os
 import sys
 import time
-import json
 import random
 import urllib.parse
-import requests
+import re
 from datetime import datetime
+from telethon import TelegramClient, errors
+from telethon.tl.functions.messages import RequestWebViewRequest
 
-# ============================================================
-# COLORS + ANIM
-# ============================================================
-CLEAR = '\033[K'
-G = '\033[92m'
-Y = '\033[93m'
-R = '\033[91m'
-C = '\033[96m'
-M = '\033[95m'
-W = '\033[97m'
-BOLD = '\033[1m'
-DIM = '\033[2m'
-RST = '\033[0m'
-NG = '\033[38;5;46m'
-NC = '\033[38;5;51m'
-NY = '\033[38;5;226m'
-NP = '\033[38;5;201m'
-NO = '\033[38;5;208m'
+# ==================== KONFIGURASI ====================
+API_ID = 28752231
+API_HASH = 'ec1c1f2c30e2f1855c3edee7e348480b'
+BOT_USERNAME = 'ART_AIRDROP_BOT'
+SESSION_NAME = "art_ads_session"
+BASE_URL = "https://art.tamimdev.dev"
+WEBAPP_URL = "https://art.tamimdev.dev/"
 
-BANNER = f"""{NY}{BOLD}
-╔══════════════════════════════════════════════════════════════════╗
-║                                                                  ║
-║      █████╗ ██████╗ ████████╗    ███╗   ███╗██╗███╗   ██╗      ║
-║     ██╔══██╗██╔══██╗╚══██╔══╝    ████╗ ████║██║████╗  ██║      ║
-║     ███████║██████╔╝   ██║       ██╔████╔██║██║██╔██╗ ██║      ║
-║     ██╔══██║██╔══██╗   ██║       ██║╚██╔╝██║██║██║╚██╗██║      ║
-║     ██║  ██║██║  ██║   ██║       ██║ ╚═╝ ██║██║██║ ╚████║      ║
-║     ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝       ╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝      ║
-║                                                                  ║
-║  {NY}⛏️  ART MINING BOT  {NC}│ {NG}v1.0 {NC}│ {NP}Auto Mining + Ads{RST}{NY}            ║
-║                                                                  ║
-║  {NG}▸ Bot     : {NC}@ART_AIRDROP_BOT{RST}{NY}                            ║
-║  {NG}▸ Script  : {NC}@MoneyMaker_w{RST}{NY}                               ║
-║  {NG}▸ Channel : {NC}https://t.me/ScriptyXSouu{RST}{NY}                  ║
-║                                                                  ║
-╚══════════════════════════════════════════════════════════════════╝{RST}
-"""
+# 🔥 REFERRAL — ID user yang mau dijadikan referrer
+# Kosongkan ("") kalau tidak mau pakai referral
+REFERRAL_ID = "6048943114"
 
-INIT_FILE = "art_init.txt"
-BASE = "https://art.tamimdev.dev/api"
+# GigaPub
+GIGA_ANALYTICS_URL = "https://ad.gigapub.tech/v1/ad"
+GIGA_BIDNET_BASE   = "https://bid-net.gigapub.tech"
+GIGA_PROJECT_ID    = "8198"
+GIGA_PLACEMENT_ID  = "36785"
+GIGA_BEARER_TOKEN  = "CEEUHXgZVL184wyaDp6laEchjHQ7RNN3"
+GIGA_VERSION       = "v87"
+GIGA_X_VERSION     = "v33"
 
-# ============================================================
-# ANIMATIONS
-# ============================================================
-class Anim:
-    @staticmethod
-    def spinner(text, duration=1.5):
-        frames = ["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"]
-        end = time.time() + duration
-        i = 0
-        while time.time() < end:
-            sys.stdout.write('\r' + CLEAR + f" {NC}{frames[i%10]}{RST} {W}{text}{RST}")
-            sys.stdout.flush()
-            time.sleep(0.08); i += 1
-        sys.stdout.write('\r' + CLEAR + f" {NG}✓{RST} {W}{text}{RST}\n")
+# Simulasi nonton
+WATCH_DURATION_SEC = 16
+WATCH_TICK_SEC     = 5
+
+# 🔥 RANDOM DELAY PANJANG (natural)
+ADS_DELAY_MIN = 20
+ADS_DELAY_MAX = 90
+CYCLE_JITTER_MIN = 60
+CYCLE_JITTER_MAX = 300
+
+# 🔥 SMART SLEEP — MAX 6-12 JAM
+MIN_SLEEP      = 600
+MAX_SLEEP      = 43200
+DEFAULT_SLEEP  = 10800
+SLEEP_JITTER   = 1800
+
+SLEEP_AFTER_ALL_DONE_MIN = 21600   # 6 jam
+SLEEP_AFTER_ALL_DONE_MAX = 43200   # 12 jam
+
+# ==================== WARNA ====================
+RED    = "\033[38;5;196m"
+YELLOW = "\033[1;93m"
+GREEN  = "\033[1;92m"
+CYAN   = "\033[1;96m"
+DIM    = "\033[90m"
+WHITE  = "\033[1;97m"
+RESET  = "\033[0m"
+
+# ==================== UTILITY ====================
+def countdown_timer(seconds, message="⏳ Menunggu"):
+    frames = ['⣾', '⣽', '⣻', '⢿', '⡿', '⣟', '⣯', '⣷']
+    idx = 0
+    while seconds > 0:
+        h = seconds // 3600
+        m = (seconds % 3600) // 60
+        s = seconds % 60
+        t = f"{h:02d}:{m:02d}:{s:02d}" if h > 0 else f"{m:02d}:{s:02d}"
+        sys.stdout.write(f"\r{YELLOW}{message}: {t}  {frames[idx]}{RESET}")
         sys.stdout.flush()
+        time.sleep(1)
+        seconds -= 1
+        idx = (idx + 1) % len(frames)
+    print(f"\r{YELLOW}{message}: selesai ✅{RESET}")
 
-    @staticmethod
-    def dots(text, duration=1.5):
-        end = time.time() + duration
-        n = 0
-        while time.time() < end:
-            d = "." * ((n % 3) + 1)
-            sys.stdout.write('\r' + CLEAR + f" {NC}•{RST} {W}{text}{NC}{d:<4}{RST}")
-            sys.stdout.flush()
-            time.sleep(0.3); n += 1
-        sys.stdout.write('\r' + CLEAR + f" {NG}✓{RST} {W}{text}{RST}\n")
-        sys.stdout.flush()
+def fmt_duration(seconds):
+    seconds = int(seconds)
+    h = seconds // 3600
+    m = (seconds % 3600) // 60
+    s = seconds % 60
+    if h > 0:
+        return f"{h}j {m}m"
+    if m > 0:
+        return f"{m}m {s}s"
+    return f"{s}s"
 
-    @staticmethod
-    def watch_bar(label, provider, duration):
-        spinner = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏']
-        bar_len = 18
-        start = time.time(); i = 0
-        while True:
-            elapsed = time.time() - start
-            if elapsed >= duration: break
-            pct = elapsed / duration
-            filled = int(bar_len * pct)
-            bar = '█' * filled + '░' * (bar_len - filled)
-            rem = duration - elapsed
-            row = (f"  {NP}{spinner[i%10]}{RST} {NC}{label:<9}{RST} "
-                   f"{DIM}{provider:<10}{RST} "
-                   f"{NG}[{bar}]{RST} {NY}{int(pct*100):3d}%{RST} {NY}{rem:4.1f}s{RST}")
-            sys.stdout.write('\r' + CLEAR + row); sys.stdout.flush()
-            time.sleep(0.1); i += 1
-        sys.stdout.write('\r' + CLEAR); sys.stdout.flush()
+def print_banner():
+    print(f"""
+{CYAN}{'='*60}
+{YELLOW}           📺  ART ADS BOT
+{CYAN}{'='*60}
+{GREEN}🤖  Bot        : @ART_AIRDROP_BOT
+{GREEN}👤  Session    : {SESSION_NAME}
+{GREEN}📺  Ads Source : GigaPub RTB
+{GREEN}🎯  Slot       : 10 / 24h
+{GREEN}⏱️   Delay      : {ADS_DELAY_MIN}-{ADS_DELAY_MAX}s antar slot
+{GREEN}💤  Sleep      : {SLEEP_AFTER_ALL_DONE_MIN//3600}-{SLEEP_AFTER_ALL_DONE_MAX//3600}h setelah selesai
+{CYAN}{'='*60}{RESET}
+""")
 
-    @staticmethod
-    def glitch(text, duration=0.5):
-        gc = "░▒▓█▄▀■□▪▫@#$%&*"
-        end = time.time() + duration
-        while time.time() < end:
-            out = ''.join(random.choice(gc) if (random.randint(0,10)<2 and ch!=' ') else ch for ch in text)
-            sys.stdout.write('\r' + CLEAR + f"  {NP}{out}{RST}")
-            sys.stdout.flush(); time.sleep(0.06)
-        sys.stdout.write('\r' + CLEAR + f"  {NC}{text}{RST}\n"); sys.stdout.flush()
+# ==================== INITDATA PARSER ====================
+def parse_init_data(raw_url: str):
+    init_data_raw = None
 
-    @staticmethod
-    def typewriter(text, delay=0.015, color=None):
-        c = color or W
-        for ch in text:
-            sys.stdout.write(f"{c}{ch}{RST}"); sys.stdout.flush()
-            time.sleep(delay)
-        print()
-
-# ============================================================
-# BOT
-# ============================================================
-class ArtMiningBot:
-    def __init__(self):
-        self.init_data = ""
-        self.user_id = None
-        self.username = None
-        self.profile = {}
-        self.settings = {}
-        self.mining = {}
-        self.stats = {
-            "ads_watched": 0,
-            "ads_earned": 0,
-            "ads_failed": 0,
-            "start_time": datetime.now()
-        }
-        self.session = requests.Session()
-        self.headers = {
-            "Content-Type": "application/json",
-            "Accept": "*/*",
-            "User-Agent": "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.7977.87 Mobile Safari/537.36 Telegram-Android/12.9.2 (Samsung SM-A556E; Android 16; SDK 36; HIGH)",
-            "Origin": "https://art.tamimdev.dev",
-            "Referer": "https://art.tamimdev.dev/",
-            "X-Requested-With": "org.telegram.messenger.web",
-            "Sec-Fetch-Site": "same-origin",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Dest": "empty",
-            "Accept-Language": "id,id-ID;q=0.9,en-US;q=0.8,en;q=0.7"
-        }
-        self.session.headers.update(self.headers)
-        self.load_init()
-
-    def clear(self):
-        os.system('cls' if os.name == 'nt' else 'clear')
-
-    def load_init(self):
-        if os.path.exists(INIT_FILE):
-            with open(INIT_FILE, 'r') as f:
-                self.init_data = f.read().strip()
-            self._parse()
-
-    def save_init(self, data):
-        with open(INIT_FILE, 'w') as f:
-            f.write(data.strip())
-        self.init_data = data.strip()
-        self._parse()
-
-    def _parse(self):
+    if 'tgWebAppData=' in raw_url:
         try:
-            p = urllib.parse.parse_qs(self.init_data)
-            if 'user' in p:
-                u = json.loads(p['user'][0])
-                self.user_id = str(u.get('id'))
-                self.username = u.get('username') or u.get('first_name', 'Unknown')
-        except:
+            init_data_raw = raw_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]
+        except Exception:
             pass
 
-    # ============ API ============
-    def _req(self, method, path, json_data=None, timeout=30):
-        url = f"{BASE}{path}"
-        headers = self.session.headers.copy()
-        headers["x-telegram-init-data"] = self.init_data
-        for attempt in range(3):
+    if not init_data_raw and '#' in raw_url and 'tgWebAppData=' in raw_url:
+        try:
+            frag = raw_url.split('#', 1)[1]
+            init_data_raw = frag.split('tgWebAppData=')[1].split('&')[0]
+        except Exception:
+            pass
+
+    if not init_data_raw:
+        m = re.search(r'tgWebAppData=([^&#]+)', raw_url)
+        if m:
+            init_data_raw = m.group(1)
+
+    if not init_data_raw:
+        return None, None, None, None, None
+
+    try:
+        init_data = urllib.parse.unquote(init_data_raw)
+    except Exception:
+        init_data = init_data_raw
+
+    user_obj = None
+    for target in (init_data, init_data_raw):
+        m = re.search(r'user=([^&]+)', target)
+        if not m:
+            continue
+        raw_user = m.group(1)
+        for parser in (
+            lambda x: json.loads(urllib.parse.unquote(x)),
+            lambda x: json.loads(x),
+            lambda x: json.loads(urllib.parse.unquote(urllib.parse.unquote(x))),
+        ):
             try:
-                if method.upper() == 'GET':
-                    r = self.session.get(url, headers=headers, timeout=timeout)
-                else:
-                    r = self.session.post(url, headers=headers, json=json_data, timeout=timeout)
-                if r.status_code == 429:
-                    wait = int(r.headers.get('Retry-After', 5))
-                    print(f"{Y}  ⚠️  Rate limit, tunggu {wait}s...{RST}")
-                    time.sleep(wait); continue
-                return r
-            except requests.exceptions.Timeout:
-                if attempt < 2: time.sleep(2); continue
-                return None
-            except Exception as e:
-                print(f"{R}  ❌ {e}{RST}")
-                return None
-        return None
+                obj = parser(raw_user)
+                if isinstance(obj, dict) and obj.get("id"):
+                    user_obj = obj
+                    break
+            except Exception:
+                continue
+        if user_obj:
+            break
 
-    # ============ USER ============
-    def get_user(self):
-        r = self._req('GET', f"/user/{self.user_id}")
-        if not r or r.status_code != 200:
-            return False
+    if not user_obj:
         try:
-            j = r.json()
-            self.profile = j.get('user', {})
-            self.settings = j.get('settings', {})
-            self.mining = j.get('miningState', {})
-            return True
-        except:
-            return False
-
-    def start_mining(self):
-        r = self._req('POST', "/user/start-mining", {"userId": self.user_id})
-        if not r or r.status_code != 200:
-            return False
-        try:
-            j = r.json()
-            if j.get('success'):
-                self.profile = j.get('user', {})
-                self.mining = j.get('miningState', {})
-                return True
-        except:
+            parsed = urllib.parse.parse_qs(init_data)
+            if 'user' in parsed:
+                user_obj = json.loads(parsed['user'][0])
+        except Exception:
             pass
+
+    sig = None
+    for target in (init_data, init_data_raw):
+        m = re.search(r'signature=([^&]+)', target)
+        if m:
+            try:
+                sig = urllib.parse.unquote(m.group(1))
+            except Exception:
+                sig = m.group(1)
+            break
+
+    auth_date = None
+    m = re.search(r'auth_date=(\d+)', init_data)
+    if m:
+        auth_date = m.group(1)
+
+    query_id = None
+    m = re.search(r'query_id=([^&]+)', init_data)
+    if m:
+        try:
+            query_id = urllib.parse.unquote(m.group(1))
+        except Exception:
+            query_id = m.group(1)
+
+    return init_data, user_obj, sig, auth_date, query_id
+
+# ==================== TELEGRAM ====================
+async def get_telegram_initdata():
+    client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
+    await client.connect()
+
+    if not await client.is_user_authorized():
+        print(f"{YELLOW}➤ Login Telegram required{RESET}")
+        phone = input(f"{CYAN}📱 Phone (+code): {RESET}")
+        await client.send_code_request(phone)
+        otp = input(f"{CYAN}🔑 OTP Code: {RESET}")
+        try:
+            await client.sign_in(phone, otp)
+        except errors.SessionPasswordNeededError:
+            password = input(f"{RED}🔒 2FA Password: {RESET}")
+            await client.sign_in(password=password)
+
+    bot = await client.get_input_entity(BOT_USERNAME)
+
+    webview = None
+    if REFERRAL_ID:
+        try:
+            webview = await client(RequestWebViewRequest(
+                peer=bot,
+                bot=bot,
+                platform='android',
+                url=WEBAPP_URL,
+                start_param=REFERRAL_ID,
+            ))
+        except TypeError:
+            url_with_ref = f"{WEBAPP_URL}?ref={REFERRAL_ID}"
+            webview = await client(RequestWebViewRequest(
+                peer=bot, bot=bot, platform='android', url=url_with_ref
+            ))
+    else:
+        webview = await client(RequestWebViewRequest(
+            peer=bot, bot=bot, platform='android', url=WEBAPP_URL
+        ))
+
+    init_data, user_obj, sig, auth_date, query_id = parse_init_data(webview.url)
+    await client.disconnect()
+
+    if not init_data:
+        print(f"{RED}❌ tgWebAppData tidak ditemukan{RESET}")
+        return None, None, None, None, None
+
+    if not user_obj:
+        print(f"{RED}❌ Gagal parse user object{RESET}")
+        return None, None, None, None, None
+
+    return init_data, user_obj, sig, auth_date, query_id
+
+# ==================== ADS BOT ====================
+class AdsBot:
+    def __init__(self, init_data, user_obj, sig, auth_date, query_id):
+        self.init_data = init_data
+        self.user_obj = user_obj or {}
+        self.user_id = str(self.user_obj.get("id", ""))
+        self.username = (self.user_obj.get("username")
+                         or self.user_obj.get("first_name")
+                         or "N/A")
+        self.sig = sig or ""
+        self.auth_date = auth_date or ""
+        self.query_id = query_id or ""
+
+        self.session = requests.Session()
+        self.session.headers.update({
+            "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 "
+                          "(KHTML, like Gecko) Chrome/151.0.7922.202 Mobile Safari/537.36 "
+                          "Telegram-Android/12.9.1",
+            "Accept": "*/*",
+            "Content-Type": "application/json",
+            "Origin": BASE_URL,
+            "Referer": f"{BASE_URL}/",
+            "X-Requested-With": "org.telegram.messenger.web",
+            "x-telegram-init-data": init_data,
+        })
+
+        self.bidnet_headers = {
+            "Content-Type": "application/json",
+            "Origin": BASE_URL,
+            "Referer": f"{BASE_URL}/",
+            "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 "
+                          "(KHTML, like Gecko) Chrome/151.0.7922.202 Mobile Safari/537.36 "
+                          "Telegram-Android/12.9.1",
+            "x-requested-with": "org.telegram.messenger.web",
+            "x-version": GIGA_X_VERSION,
+            "project-id": GIGA_PROJECT_ID,
+            "placement-id": GIGA_PLACEMENT_ID,
+        }
+
+        self.giga_headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {GIGA_BEARER_TOKEN}",
+            "project-id": GIGA_PROJECT_ID,
+            "Origin": BASE_URL,
+            "Referer": f"{BASE_URL}/",
+            "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 "
+                          "(KHTML, like Gecko) Chrome/151.0.7922.202 Mobile Safari/537.36 "
+                          "Telegram-Android/12.9.1",
+            "x-requested-with": "org.telegram.messenger.web",
+        }
+
+        user_json_min = json.dumps(self.user_obj, separators=(',', ':'), ensure_ascii=False)
+        dcs = (f"auth_date={self.auth_date}\n"
+               f"query_id={self.query_id}\n"
+               f"user={user_json_min}")
+        self.tg_proof = {"dcs": dcs, "sig": self.sig}
+
+        self.user = None
+        self.settings = None
+        self.total_claimed = 0
+        self.total_reward = 0
+        self.cycle_count = 0
+        self._last_error = None
+        self.show_counter = 0
+        self.uniq_show_id = None
+
+    def log(self, msg, level="INFO"):
+        t = datetime.now().strftime("%H:%M:%S")
+        p = {"INFO": CYAN, "SUCCESS": GREEN, "WARNING": YELLOW,
+             "ERROR": RED, "DIM": DIM}.get(level, WHITE)
+        print(f"{p}[{t}] {msg}{RESET}")
+
+    # ==================== ART API ====================
+    def _req(self, method, endpoint, data=None):
+        url = f"{BASE_URL}{endpoint}"
+        try:
+            if method == "GET":
+                r = self.session.get(url, timeout=15)
+            else:
+                r = self.session.post(url, json=data, timeout=15)
+            if r.status_code in (200, 304):
+                try:
+                    return r.json()
+                except Exception:
+                    return {"_raw": r.text}
+            try:
+                e = r.json()
+                self._last_error = e.get("error") or e.get("message") or r.text[:120]
+            except Exception:
+                self._last_error = r.text[:120]
+            return None
+        except Exception as e:
+            self._last_error = str(e)
+            return None
+
+    def get_user(self, with_ref: bool = False):
+        endpoint = f"/api/user/{self.user_id}"
+        if with_ref and REFERRAL_ID:
+            endpoint += f"?referredBy={REFERRAL_ID}"
+
+        data = self._req("GET", endpoint)
+        if data and data.get("user"):
+            self.user = data["user"]
+            self.settings = data.get("settings", self.settings)
+            return True
         return False
 
-    # ============ ADS ============
     def ads_status(self):
-        r = self._req('GET', f"/ads/status/{self.user_id}")
-        if not r or r.status_code != 200:
-            return None
+        return self._req("GET", f"/api/ads/status/{self.user_id}")
+
+    def claim_ads_art(self):
+        payload = {"userId": self.user_id}
+        data = self._req("POST", "/api/ads/claim", payload)
+        if data and data.get("success"):
+            reward = data.get("reward", 0)
+            if data.get("user"):
+                self.user = data["user"]
+            return True, reward, data
+        return False, 0, None
+
+    # ==================== GIGAPUB ====================
+    def _giga_user_block(self):
+        return {
+            "user": self.user_obj,
+            "platform": "android",
+            "version": "9.6",
+            "start_param": REFERRAL_ID if REFERRAL_ID else None
+        }
+
+    def giga_analytics(self, method, extra=None):
+        body = {
+            "method": method,
+            "args": {
+                "user": self._giga_user_block(),
+                "version": GIGA_VERSION,
+                **(extra or {})
+            }
+        }
         try:
-            return r.json()
-        except:
+            r = requests.post(GIGA_ANALYTICS_URL, json=body,
+                              headers=self.giga_headers, timeout=10)
+            return r.json() if r.text else {"_ok": True}
+        except Exception:
             return None
 
-    def ads_claim(self):
-        r = self._req('POST', "/ads/claim", {"userId": self.user_id})
-        if not r or r.status_code != 200:
-            return None
+    def bidnet_init(self):
         try:
-            j = r.json()
-            if j.get('success'):
-                self.profile = j.get('user', self.profile)
-                return j
-        except:
-            pass
-        return None
+            r = requests.post(f"{GIGA_BIDNET_BASE}/v1/init",
+                              json={"projectId": int(GIGA_PROJECT_ID)},
+                              headers=self.bidnet_headers, timeout=10)
+            return r.json() if r.text else None
+        except Exception:
+            return None
 
-    # ============ MAIN FLOW ============
-    def run(self):
-        # Step 1: Fetch user
-        Anim.dots("fetch user data", 1.5)
-        if not self.get_user():
-            print(f"{R}❌ Gagal fetch user data{RST}")
-            return
+    def bidnet_get_rtb(self):
+        body = {"user": self._giga_user_block(), "tg_proof": self.tg_proof}
+        try:
+            r = requests.post(f"{GIGA_BIDNET_BASE}/v1/get-rtb",
+                              json=body, headers=self.bidnet_headers, timeout=15)
+            return r.json() if r.text else None
+        except Exception:
+            return None
 
-        # Step 2: Check mining
-        is_mining = self.mining.get('isMining', False)
-        if is_mining:
-            print(f"{NG}⛏️  Mining sudah aktif{RST}")
-            print(f"{NC}   Elapsed  : {NY}{self.mining.get('elapsedSeconds', 0)}s{RST}")
-            print(f"{NC}   Acc ATF  : {NY}{self.mining.get('accumulatedAtf', 0):.4f}{RST}")
-            print(f"{NC}   Remaining: {NY}{self.mining.get('remainingSeconds', 0)}s{RST}")
-        else:
-            Anim.spinner("start mining", 1.5)
-            if self.start_mining():
-                print(f"{NG}⛏️  Mining aktivasi!{RST}")
-                print(f"{NC}   Duration : {NY}8 jam{RST}")
-                print(f"{NC}   Rate     : {NY}{self.mining.get('hourlyRate', 0)} ATF/jam{RST}")
-            else:
-                print(f"{Y}⚠️  Mining gagal diaktifkan (mungkin udah jalan){RST}")
+    def bidnet_ad_event(self, transaction_id, passed_time_ms):
+        body = {
+            "data": {"passedTime": passed_time_ms, "stackId": None, "stackIndex": 0},
+            "userData": self._giga_user_block(),
+        }
+        h = {**self.bidnet_headers, "transaction-id": str(transaction_id)}
+        try:
+            r = requests.post(f"{GIGA_BIDNET_BASE}/v1/ad-event",
+                              json=body, headers=h, timeout=10)
+            return r.json() if r.text else None
+        except Exception:
+            return None
 
-        # Step 3: Show profile
-        self._show_profile()
+    def bidnet_ad_showed(self, transaction_id, passed_time_ms):
+        body = {
+            "data": {"passedTime": passed_time_ms, "stackId": None, "stackIndex": 0},
+            "userData": self._giga_user_block(),
+        }
+        h = {**self.bidnet_headers, "transaction-id": str(transaction_id)}
+        try:
+            r = requests.post(f"{GIGA_BIDNET_BASE}/v1/ad-showed",
+                              json=body, headers=h, timeout=10)
+            return r.json() if r.text else None
+        except Exception:
+            return None
 
-        # Step 4: Check ads status
-        print()
-        Anim.dots("check ads status", 1.0)
-        ads = self.ads_status()
-        if not ads:
-            print(f"{R}❌ Gagal cek status ads{RST}")
-            return
+    def watch_one_ad(self, slot_index):
+        self.show_counter += 1
+        self.uniq_show_id = f"{int(time.time()*1000)}.{random.randint(0, 999999)}"
+        fall_list = ["rich", "mc", "rD", "monetag", "rB"]
 
-        if not ads.get('enabled'):
-            print(f"{R}❌ Ads disabled{RST}")
-            return
+        self.giga_analytics("adShowTryStart", {
+            "placementId": "main",
+            "network": "b",
+            "rotationType": "chanceOrder",
+            "showCounter": slot_index - 1,
+            "transactionId": None,
+            "anyData": {
+                "fallPriorityList": fall_list,
+                "fallRotationType": "chanceOrder",
+                "showCounter": slot_index - 1,
+                "showTryCounter": slot_index,
+                "uniqShowId": self.uniq_show_id,
+                "readyNetsCount": 6,
+                "showTag": None,
+            }
+        })
+        time.sleep(0.3)
 
-        remaining = ads.get('remaining', 0)
-        limit = ads.get('limit', 10)
-        reward = ads.get('rewardAtf', 10)
+        rtb = self.bidnet_get_rtb()
+        if not rtb or not rtb.get("ads"):
+            return False, None, "no_rtb"
 
-        print(f"\n{NC}╭─────────────────────────────────────────╮{RST}")
-        print(f"{NC}│{RST} {NG}📺 Ads Available{RST}")
-        print(f"{NC}│{RST} {NC}Watch count : {NG}{ads.get('watched', 0)}/{limit}{RST}")
-        print(f"{NC}│{RST} {NC}Remaining   : {NG}{remaining}{RST}")
-        print(f"{NC}│{RST} {NC}Reward each : {NY}{reward} ATF{RST}")
-        print(f"{NC}╰─────────────────────────────────────────╯{RST}")
+        ad = rtb["ads"][0]
+        tid = ad.get("tId")
+        if not tid:
+            return False, None, "no_tid"
+
+        start_ts = time.time()
+        ticks = max(1, WATCH_DURATION_SEC // WATCH_TICK_SEC)
+        for i in range(ticks):
+            time.sleep(WATCH_TICK_SEC)
+            passed = int((time.time() - start_ts) * 1000)
+            self.bidnet_ad_event(tid, passed)
+
+        final_ms = int((time.time() - start_ts) * 1000)
+        self.bidnet_ad_showed(tid, final_ms)
+
+        self.giga_analytics("adShowed", {
+            "placementId": "main",
+            "network": "b",
+            "rotationType": "bid",
+            "showCounter": slot_index,
+            "transactionId": None,
+            "seconds": final_ms / 1000.0,
+            "anyData": {
+                "showDone": False,
+                "fallPriorityList": fall_list,
+                "fallRotationType": "chanceOrder",
+                "showCounter": slot_index - 1,
+                "showTryCounter": slot_index + 1,
+                "uniqShowId": self.uniq_show_id,
+                "readyNetsCount": 6,
+                "showTag": None,
+            }
+        })
+        time.sleep(0.2)
+        self.giga_analytics("adShowedX", {
+            "placementId": "main",
+            "network": "b",
+            "rotationType": "chanceOrder",
+            "showCounter": slot_index + 1,
+            "transactionId": None,
+            "seconds": final_ms / 1000.0,
+            "anyData": {
+                "showDone": True,
+                "fallPriorityList": fall_list,
+                "fallRotationType": "chanceOrder",
+                "showCounter": slot_index,
+                "showTryCounter": slot_index + 2,
+                "uniqShowId": self.uniq_show_id,
+                "readyNetsCount": 6,
+                "showTag": None,
+            }
+        })
+
+        return True, tid, "ok"
+
+    # ==================== ADS CYCLE ====================
+    def run_ads_cycle(self):
+        self.log("📺 Cek status ads...", "INFO")
+        status = self.ads_status()
+
+        if not status:
+            self.log(f"⚠️  Gagal ambil status: {str(self._last_error)[:50]}", "WARNING")
+            return 0, 0, DEFAULT_SLEEP
+
+        if not status.get("enabled"):
+            self.log("ℹ️  Ads disabled oleh admin", "DIM")
+            return 0, 0, DEFAULT_SLEEP
+
+        remaining = status.get("remaining", 0)
+        watched = status.get("watched", 0)
+        limit = status.get("limit", 10)
+        reward_per = status.get("rewardAtf", 10)
+        reset_s = status.get("resetsInSeconds", 86400)
+
+        self.log(f"📊 Slot: {watched}/{limit} | Sisa: {remaining} | "
+                 f"Reward: +{reward_per}/iklan | Reset: {fmt_duration(reset_s)}", "INFO")
 
         if remaining <= 0:
-            print(f"\n{Y}⏹ Semua ads sudah ditonton hari ini.{RST}")
-            print(f"{NC}   Reset dalam: {NY}{ads.get('resetsInSeconds', 0) // 3600} jam{RST}")
-            self._print_summary()
-            return
+            self.log(f"✅ Semua slot sudah terpakai", "SUCCESS")
+            return 0, 0, reset_s
 
-        # Step 5: Watch ads
-        print(f"\n{NY}🎬 MULAI WATCH ADS ({remaining}x tersisa){RST}")
+        init_resp = self.bidnet_init()
+        self.giga_analytics("init", {"seconds": round(random.uniform(1, 10), 3)})
 
-        consecutive_fail = 0
-        for i in range(1, remaining + 1):
-            print(f"\n{NC}  ┌─ [{i:02d}/{remaining:02d}] Watch Ads{RST}")
-            Anim.watch_bar("ADS", "gigapub", 5)
+        claimed = 0
+        reward_total = 0
+        rtb_ok = 0
+        rtb_fail = 0
 
-            res = self.ads_claim()
-            if res:
-                consecutive_fail = 0
-                rew = res.get('reward', 0)
-                watched = res.get('watched', 0)
-                lim = res.get('limit', 10)
-                rem_after = res.get('remaining', 0)
-                self.stats['ads_watched'] += 1
-                self.stats['ads_earned'] += rew
-
-                print(f"{NG}  ✅ #{i:02d}: +{rew} ATF | today: {watched}/{lim} | remaining: {rem_after}{RST}")
-                time.sleep(3)
-            else:
-                consecutive_fail += 1
-                self.stats['ads_failed'] += 1
-                print(f"{Y}  ⚠️  Ads claim gagal (attempt {consecutive_fail}/3){RST}")
-
-                if consecutive_fail >= 3:
-                    print(f"{R}  ❌ Ads limit/error 3x → STOP ads loop{RST}")
-                    break
-                time.sleep(5)
-
-        # Step 6: Refresh
-        print()
-        Anim.dots("refresh profile", 1.5)
-        self.get_user()
-        self._print_summary()
-
-    def _show_profile(self):
-        p = self.profile
-        s = self.settings
-        print(f"\n{NC}╭─────────────────────────────────────────╮{RST}")
-        print(f"{NC}│{RST} {NG}👤 Profile{RST}")
-        print(f"{NC}│{RST} {NC}Username    : {W}@{p.get('username', 'N/A')}{RST}")
-        print(f"{NC}│{RST} {NC}Level       : {W}{p.get('level', 1)}{RST}")
-        print(f"{NC}│{RST} {NC}Holding     : {NY}{p.get('holdingWallet', 0):.4f} {s.get('tokenSymbol', 'ART')}{RST}")
-        print(f"{NC}│{RST} {NC}Pool Wallet : {NY}{p.get('poolWallet', 0):.4f}{RST}")
-        print(f"{NC}│{RST} {NC}Today PNL   : {NY}{p.get('todayPnl', 0):.4f}{RST}")
-        print(f"{NC}│{RST} {NC}All-Time    : {NY}{p.get('allTimeMined', 0):.4f}{RST}")
-        print(f"{NC}│{RST} {NC}Ads Watched : {W}{p.get('adsWatchedCount', 0)}/10{RST}")
-        print(f"{NC}│{RST} {NC}ATF Price   : {NY}${s.get('atfPriceUsd', 0)}{RST}")
-        print(f"{NC}╰─────────────────────────────────────────╯{RST}")
-
-    def _print_summary(self):
-        duration = (datetime.now() - self.stats['start_time']).total_seconds()
-        print(f"\n{NC}{'═' * 55}{RST}")
-        print(f"{NG}🏁 SESSION SUMMARY{RST}")
-        print(f"{NC}{'═' * 55}{RST}")
-        print(f"  {NG}📺 Ads watched  : {W}{self.stats['ads_watched']}{RST}")
-        print(f"  {NY}💰 ATF earned   : {NG}{self.stats['ads_earned']}{RST}")
-        print(f"  {R}❌ Ads failed   : {W}{self.stats['ads_failed']}{RST}")
-        print(f"  {NC}⏱️  Duration     : {W}{int(duration//60)}m {int(duration%60)}s{RST}")
-        p = self.profile
-        if p:
-            print(f"  {NG}💰 Holding      : {NY}{p.get('holdingWallet', 0):.4f} ART{RST}")
-            print(f"  {NC}📈 All-time    : {NY}{p.get('allTimeMined', 0):.4f} ART{RST}")
-        print(f"{NC}{'═' * 55}{RST}")
-
-    # ============ MENU ============
-    def menu(self):
-        while True:
-            self.clear()
-            print(BANNER)
-            if self.init_data:
-                print(f"{NG}🔑 Status : {NG}SET ({self.init_data[:30]}...){RST}")
-                if self.username:
-                    print(f"{NC}👤 User   : {W}@{self.username}{RST}")
-            else:
-                print(f"{R}🔑 Status : {R}EMPTY{RST}")
-
-            print(f"\n{NC}  [1] 🚀 Start (Auto Mining + Watch Ads)")
-            print(f"  [2] 🔑 Set InitData")
-            print(f"  [3] 👤 Check Profile")
-            print(f"  {R}[0] 🚪 Exit{RST}")
-            print(f"\n{NC}{'═' * 55}{RST}")
-
-            c = input(f"  {NG}➜ {RST}").strip()
-
-            if c == "1":
-                if not self.init_data:
-                    print(f"{R}❌ Set InitData dulu!{RST}")
-                    time.sleep(2); continue
-                print()
-                Anim.glitch("ART MINING STARTED", 0.5)
-                self.run()
-                input(f"\n{NC}Enter untuk kembali...{RST}")
-
-            elif c == "2":
-                print(f"\n{Y}🔑 Masukkan initData (Enter untuk batal):{RST}")
-                d = input(f"  {NG}➜ {RST}").strip()
-                if d:
-                    self.save_init(d)
-                    print(f"{NG}✓ Saved! User: @{self.username}{RST}")
-                time.sleep(1.5)
-
-            elif c == "3":
-                if not self.init_data:
-                    continue
-                Anim.dots("fetch profile", 1.5)
-                if self.get_user():
-                    self._show_profile()
-                input(f"\n{NC}Enter...{RST}")
-
-            elif c == "0":
-                print(f"\n{NG}👋 Bye, bos.{RST}")
+        for i in range(remaining):
+            st = self.ads_status()
+            if not st or st.get("remaining", 0) <= 0:
+                self.log("⏭️  Limit habis", "WARNING")
                 break
 
-# ============================================================
-# MAIN
-# ============================================================
+            slot_no = watched + i + 1
+            self.log(f"▶️  Slot {slot_no}/{limit}...", "INFO")
+
+            watched_ok, tid, reason = self.watch_one_ad(slot_no)
+            if watched_ok:
+                rtb_ok += 1
+            else:
+                rtb_fail += 1
+
+            ok, rew, _ = self.claim_ads_art()
+            if ok:
+                claimed += 1
+                reward_total += rew
+                pool = self.user.get("poolWallet", 0) if self.user else 0
+                tag = "📺+" if watched_ok else "⚡+"
+                self.log(f"   {tag} {rew} ART | Pool: {pool:.2f} ART", "SUCCESS")
+            else:
+                err = str(self._last_error)
+                if "LIMIT" in err.upper() or "DISABLED" in err.upper():
+                    self.log(f"   ⏭️  {err[:50]}", "WARNING")
+                    break
+                elif "USER_NOT_FOUND" in err.upper():
+                    self.log(f"   ❌ User tidak ditemukan", "ERROR")
+                    break
+                else:
+                    self.log(f"   ⚠️  {err[:50]}", "WARNING")
+
+            if i < remaining - 1:
+                delay = random.uniform(ADS_DELAY_MIN, ADS_DELAY_MAX)
+                self.log(f"   ⏱️  Delay {delay:.0f}s...", "DIM")
+                time.sleep(delay)
+
+        self.log(f"📊 Statistik RTB: {rtb_ok} berhasil, {rtb_fail} gagal", "DIM")
+
+        st_final = self.ads_status()
+        next_reset = st_final.get("resetsInSeconds", DEFAULT_SLEEP) if st_final else DEFAULT_SLEEP
+        if next_reset <= 0:
+            next_reset = DEFAULT_SLEEP
+
+        return claimed, reward_total, next_reset
+
+    # ==================== SLEEP CALCULATOR ====================
+    def calculate_sleep(self, reset_s, all_claimed):
+        if all_claimed and reset_s > 3600:
+            sleep_sec = random.randint(SLEEP_AFTER_ALL_DONE_MIN, SLEEP_AFTER_ALL_DONE_MAX)
+            return sleep_sec, f"sudah selesai semua, reset {fmt_duration(reset_s)}"
+
+        if reset_s > 0 and reset_s < DEFAULT_SLEEP:
+            sleep_sec = max(MIN_SLEEP, reset_s + random.randint(-60, 300))
+            return min(sleep_sec, MAX_SLEEP), "tunggu reset"
+
+        sleep_sec = DEFAULT_SLEEP + random.randint(-SLEEP_JITTER, SLEEP_JITTER)
+        return max(MIN_SLEEP, min(sleep_sec, MAX_SLEEP)), "default"
+
+    # ==================== MAIN RUN ====================
+    def run(self):
+        print(f"{GREEN}✅ Login sukses!{RESET}")
+        print(f"{CYAN}👤 User  : {self.username} (ID: {self.user_id}){RESET}")
+
+        if not self.get_user(with_ref=True):
+            print(f"{RED}❌ Gagal load user: {str(self._last_error)[:60]}{RESET}")
+            return
+
+        pool = self.user.get("poolWallet", 0)
+        watched = self.user.get("adsWatchedCount", 0)
+        print(f"{CYAN}💰 Pool   : {pool:.4f} ART{RESET}")
+        print(f"{CYAN}📊 Watched: {watched}{RESET}\n")
+
+        while True:
+            try:
+                self.cycle_count += 1
+                now = datetime.now().strftime("%H:%M:%S")
+                print(f"\n{CYAN}{'─'*55}{RESET}")
+                print(f"{CYAN}🔄 Cycle #{self.cycle_count} — {now}{RESET}")
+                print(f"{CYAN}{'─'*55}{RESET}")
+
+                self.get_user()
+
+                if self.cycle_count > 1:
+                    jitter = random.randint(CYCLE_JITTER_MIN, CYCLE_JITTER_MAX)
+                    self.log(f"🎲 Jitter {fmt_duration(jitter)} sebelum mulai...", "DIM")
+                    time.sleep(jitter)
+
+                claimed, reward, reset_s = self.run_ads_cycle()
+
+                self.get_user()
+                pool = self.user.get("poolWallet", 0) if self.user else 0
+
+                self.log(f"✅ Cycle #{self.cycle_count}: {claimed} slot | +{reward} ART", "SUCCESS")
+                self.log(f"💼 Pool: {pool:.4f} ART", "INFO")
+
+                all_claimed = (claimed >= 10) or (reset_s > 3600 and claimed > 0)
+                wait_sec, reason = self.calculate_sleep(reset_s, all_claimed)
+
+                self.log(f"💤 Sleep {fmt_duration(wait_sec)} ({reason})", "INFO")
+                countdown_timer(wait_sec, "💤 Sleeping")
+
+            except KeyboardInterrupt:
+                print()
+                self.log("🛑 Dihentikan oleh user", "WARNING")
+                self.log(f"📊 Total cycles: {self.cycle_count}", "INFO")
+                self.log(f"📺 Total ads: {self.total_claimed}", "SUCCESS")
+                self.log(f"💰 Total reward: {self.total_reward} ART", "SUCCESS")
+                break
+            except Exception as e:
+                self.log(f"❌ Error: {e}", "ERROR")
+                self.log("⏳ Retry in 60s...", "WARNING")
+                time.sleep(60)
+
+# ==================== MAIN ====================
+async def main():
+    os.system('clear' if os.name == 'posix' else 'cls')
+    print_banner()
+
+    print(f"{CYAN}🔐 Login ke Telegram...{RESET}")
+    try:
+        init_data, user_obj, sig, auth_date, query_id = await get_telegram_initdata()
+    except Exception as e:
+        print(f"{RED}❌ Login gagal: {e}{RESET}")
+        return
+
+    if not init_data or not user_obj:
+        print(f"{RED}❌ InitData tidak valid{RESET}")
+        return
+
+    bot = AdsBot(init_data, user_obj, sig, auth_date, query_id)
+    bot.run()
+
 if __name__ == "__main__":
     try:
-        os.system('cls' if os.name == 'nt' else 'clear')
-        Anim.glitch("ART MINING BOT v1.0", 0.5)
-        time.sleep(0.3)
-        bot = ArtMiningBot()
-        bot.menu()
+        asyncio.run(main())
     except KeyboardInterrupt:
-        print(f"\n{R}⏹️  Stopped.{RST}")
-    except Exception as e:
-        print(f"\n{R}❌ Error: {e}{RST}")
-        import traceback; traceback.print_exc()
-        input(f"\n{NC}Enter...{RST}")
+        print(f"\n{YELLOW}👋 Bye!{RESET}")
+        sys.exit(0)
