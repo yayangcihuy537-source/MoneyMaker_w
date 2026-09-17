@@ -14,7 +14,6 @@ from collections import deque
 # ============================================================
 # COLOR
 # ============================================================
-
 class Colors:
     HEADER = '\033[95m'
     BLUE = '\033[94m'
@@ -31,38 +30,57 @@ class Colors:
     DIM = '\033[2m'
     END = '\033[0m'
 
-BANNER = f"""
-{Colors.PINK}{Colors.BOLD}╔══════════════════════════════════════════════════════════════════╗
-║                                                                          ║
-║  {Colors.HEADER}██╗     ████████╗ ██████╗██╗   ██╗██╗  ██╗███████╗██╗   ██╗║
-║  {Colors.HEADER}██║     ╚══██╔══╝██╔════╝╚██╗ ██╔╝██║  ██║██╔════╝╚██╗ ██╔╝║
-║  {Colors.HEADER}██║        ██║   ██║      ╚████╔╝ ███████║█████╗   ╚████╔╝ ║
-║  {Colors.HEADER}██║        ██║   ██║       ╚██╔╝  ██╔══██║██╔══╝    ╚██╔╝  ║
-║  {Colors.HEADER}███████╗   ██║   ╚██████╗   ██║   ██║  ██║███████╗   ██║   ║
-║  {Colors.HEADER}╚══════╝   ╚═╝    ╚═════╝   ╚═╝   ╚═╝  ╚═╝╚══════╝   ╚═╝   ║
-║                                                                          ║
-║  {Colors.PINK}🔥 LTC MINER BOT   {Colors.CYAN}│ {Colors.GREEN}v3.4 {Colors.CYAN}│ {Colors.YELLOW}Auto Cycle {Colors.PINK}5S→3P→2M{Colors.END} ║
-║                                                                          ║
-╚════════════════════════════════════════════════════════════════════════════╝{Colors.END}
+BANNER = f"""{Colors.PINK}{Colors.BOLD}
+╔══════════════════════════════════════════════════════════════════╗
+║                                                                  ║
+║  ██╗     ████████╗ ██████╗██╗   ██╗██╗  ██╗███████╗██╗   ██╗  ║
+║  ██║     ╚══██╔══╝██╔════╝╚██╗ ██╔╝██║  ██║██╔════╝╚██╗ ██╔╝  ║
+║  ██║        ██║   ██║      ╚████╔╝ ███████║█████╗   ╚████╔╝   ║
+║  ██║        ██║   ██║       ╚██╔╝  ██╔══██║██╔══╝    ╚██╔╝    ║
+║  ███████╗   ██║   ╚██████╗   ██║   ██║  ██║███████╗   ██║     ║
+║  ╚══════╝   ╚═╝    ╚═════╝   ╚═╝   ╚═╝  ╚═╝╚══════╝   ╚═╝     ║
+║                                                                  ║
+║  {Colors.PINK}🔥 LTC MINER BOT  {Colors.CYAN}│ {Colors.GREEN}v4.1 {Colors.CYAN}│ {Colors.YELLOW}Auto Watch Multi-Counter{Colors.END}  {Colors.PINK}║
+║                                                                  ║
+╚══════════════════════════════════════════════════════════════════╝{Colors.END}
 """
 
 INIT_FILE = "init_ltcminer.txt"
 TOKEN_FILE = "token_ltcminer.txt"
 
+# Config default
+CFG_IKLAN_BIASA   = 10
+CFG_IKLAN_PREMIUM = 10
+CFG_POP_AD        = 10
+CFG_MEGA_POP      = 5
+CFG_COOLDOWN      = 20
+CFG_DUR_BIASA     = 30
+CFG_DUR_PREMIUM   = 30
+CFG_DUR_POP       = 22
+CFG_DUR_MEGA      = 12
+
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
+
+def strip_ansi(s):
+    import re
+    return re.sub(r'\033\[[0-9;]*m', '', s)
 
 def print_banner():
     clear_screen()
     print(BANNER)
 
 def print_box(title, lines, color=Colors.CYAN):
-    print(f"{color}╭{'─' * 52}╮{Colors.END}")
-    print(f"{color}│{Colors.END} {Colors.BOLD}{color}{title:^50}{Colors.END} {color}│{Colors.END}")
-    print(f"{color}├{'─' * 52}┤{Colors.END}")
+    w = 66
+    print(f"{color}╭{'─' * w}╮{Colors.END}")
+    print(f"{color}│{Colors.END} {Colors.BOLD}{color}{title:^{w}}{Colors.END} {color}│{Colors.END}")
+    print(f"{color}├{'─' * w}┤{Colors.END}")
     for line in lines:
-        print(f"{color}│{Colors.END} {line:<50} {color}│{Colors.END}")
-    print(f"{color}╰{'─' * 52}╯{Colors.END}")
+        clean = strip_ansi(line)
+        pad = w - len(clean)
+        if pad < 0: pad = 0
+        print(f"{color}│{Colors.END} {line}{' ' * pad} {color}│{Colors.END}")
+    print(f"{color}╰{'─' * w}╯{Colors.END}")
 
 def ad_progress(seconds=30, label="📺 Watching ad"):
     for i in range(seconds, 0, -1):
@@ -72,33 +90,47 @@ def ad_progress(seconds=30, label="📺 Watching ad"):
         sys.stdout.write(f"\r{Colors.GREEN}{label} [{bar}] {i}s left{Colors.END}")
         sys.stdout.flush()
         time.sleep(1)
-    print()
+    sys.stdout.write("\r" + " " * 70 + "\r")
+    sys.stdout.flush()
 
 # ============================================================
 # MAIN BOT
 # ============================================================
-
 class LTCMinerBot:
     def __init__(self):
         self.init_data = ""
         self.telegram_id = None
         self.username = None
+        self.first_name = None
         self.balance = 0.0
         self.xp = 0
         self.level = 1
         self.total_earned = 0.0
-        self.daily_ad_count = 0
-        self.daily_ad_limit = 10
         self.boost_active = False
         self.mining_active = False
         self.boost_expires = None
+        self.is_banned = False
+        self.country = "Unknown"
+        self.init_age_hours = 0.0
+
+        # Counter per kategori (dari server)
+        self.cnt_biaya_global = 0
+        self.cnt_premium = 0
+        self.cnt_pop = 0
+        self.cnt_mega = 0
+
+        # Counter per sesi (buat tracking)
+        self.sess_biaya = 0
+        self.sess_premium = 0
+        self.sess_pop = 0
+        self.sess_mega = 0
 
         self.logs = deque(maxlen=8)
-        self.total_gain_session = 0.0
+        self.session_gain = 0.0
         self.cycle_count = 0
+        self.ads_done_total = 0
 
         self.base_url = "https://supabase.ltcminer.xyz"
-        self.api_url = f"{self.base_url}/functions/v1"
         self.token = self.load_token()
         self.session = requests.Session()
         self.session.headers.update(self.build_headers())
@@ -117,11 +149,18 @@ class LTCMinerBot:
             "authorization": f"Bearer {self.token}",
             "apikey": self.token,
             "content-type": "application/json",
-            "user-agent": "Mozilla/5.0 (Linux; Android 12; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7871.181 Mobile Safari/537.36 Telegram-Android/12.9.2",
+            "user-agent": "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.7977.87 Mobile Safari/537.36 Telegram-Android/12.9.2 (Samsung SM-A556E; Android 16; SDK 36; HIGH)",
             "origin": "https://tgltcminer.vercel.app",
             "referer": "https://tgltcminer.vercel.app/",
-            "x-requested-with": "org.telegram.messenger",
-            "accept": "*/*"
+            "x-requested-with": "org.telegram.messenger.web",
+            "sec-ch-ua": '"Chromium";v="152", "Not?A_Brand";v="24", "Android WebView";v="152"',
+            "sec-ch-ua-mobile": "?1",
+            "sec-ch-ua-platform": '"Android"',
+            "sec-fetch-site": "cross-site",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-dest": "empty",
+            "accept": "*/*",
+            "accept-language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7"
         }
 
     # ========== INIT DATA ==========
@@ -146,58 +185,68 @@ class LTCMinerBot:
                 user = json.loads(parsed['user'][0])
                 self.telegram_id = user.get('id')
                 self.username = user.get('username') or user.get('first_name', 'Unknown')
+                self.first_name = user.get('first_name', 'Unknown')
+            if 'auth_date' in parsed:
+                auth_ts = int(parsed['auth_date'][0])
+                self.init_age_hours = (time.time() - auth_ts) / 3600
         except:
             pass
 
-    # ========== LOG & DASHBOARD ==========
-    def add_log(self, icon, message, color=Colors.WHITE):
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        self.logs.append(f"{Colors.DIM}[{timestamp}]{Colors.END} {icon} {color}{message}{Colors.END}")
-        if len(self.logs) > 8:
-            self.logs.popleft()
+    def show_init_extract(self):
+        print(f"\n{Colors.CYAN}⌛ Mengekstrak data dari _init_data...{Colors.END}")
+        time.sleep(0.5)
+        if not self.init_data:
+            print(f"{Colors.RED}❌ InitData kosong! Set dulu lewat menu.{Colors.END}")
+            return False
+        print(f"{Colors.GREEN}✅ Telegram ID : {Colors.WHITE}{self.telegram_id}{Colors.END}")
+        print(f"{Colors.GREEN}✅ Username    : {Colors.WHITE}@{self.username}{Colors.END}")
+        print(f"{Colors.GREEN}✅ Nama        : {Colors.WHITE}{self.first_name}{Colors.END}")
+        print(f"{Colors.YELLOW}🕒 Umur init   : {Colors.WHITE}{self.init_age_hours:.1f} jam{Colors.END}")
+        print(f"\n{Colors.CYAN}⌛ Memverifikasi login...{Colors.END}")
+        return True
 
-    def show_status(self):
-        clear_screen()
-        print_banner()
-        mining_status = "🟢 ON" if self.mining_active else "🔴 OFF"
-        boost_status = "🟢 ON" if self.boost_active else "🔴 OFF"
+    def show_login_result(self):
         lines = [
-            f"{Colors.GREEN}● SYSTEM{Colors.END}                 {Colors.GREEN}ONLINE{Colors.END}",
-            f"{Colors.CYAN}◈ ENGINE{Colors.END}                 {Colors.GREEN}READY{Colors.END}",
-            f"{Colors.PINK}◉ NETWORK{Colors.END}                {Colors.GREEN}ACTIVE{Colors.END}",
-            f"{Colors.GREEN}💰 BALANCE{Colors.END}              {Colors.YELLOW}{self.balance:.8f} LTC{Colors.END}",
-            f"{Colors.PURPLE}📈 LEVEL{Colors.END}               {Colors.GREEN}{self.level}{Colors.END} (XP: {self.xp})",
-            f"{Colors.CYAN}📺 ADS TODAY{Colors.END}             {Colors.YELLOW}{self.daily_ad_count}/{self.daily_ad_limit}{Colors.END}",
-            f"{Colors.MAGENTA}⛏️ MINING{Colors.END}              {Colors.GREEN}{mining_status}{Colors.END}",
-            f"{Colors.PINK}🚀 BOOST{Colors.END}                 {Colors.GREEN}{boost_status}{Colors.END}",
-            f"{Colors.ORANGE}🔄 SIKLUS{Colors.END}               {Colors.WHITE}{self.cycle_count}{Colors.END}",
+            f"{Colors.GREEN}👤 Username       : {Colors.WHITE}@{self.username}{Colors.END}",
+            f"{Colors.GREEN}📛 Nama           : {Colors.WHITE}{self.first_name}{Colors.END}",
+            f"{Colors.GREEN}🆔 Telegram ID    : {Colors.WHITE}{self.telegram_id}{Colors.END}",
+            f"{Colors.YELLOW}💰 Saldo          : {Colors.WHITE}{self.balance:.10f} LTC{Colors.END}",
+            f"{Colors.YELLOW}📺 Daily Ad       : {Colors.WHITE}{self.cnt_biaya_global}/{CFG_IKLAN_BIASA}{Colors.END}",
+            f"{Colors.CYAN}🎖️ Level / XP     : {Colors.WHITE}Lv{self.level} / {self.xp} XP{Colors.END}",
+            f"{Colors.CYAN}🌍 Negara         : {Colors.WHITE}{self.country}{Colors.END}",
+            f"{Colors.RED}🚫 Banned         : {Colors.WHITE}{self.is_banned}{Colors.END}",
         ]
-        if self.init_data:
-            lines.append(f"{Colors.GREEN}◈ INIT DATA{Colors.END}            {Colors.GREEN}LOADED{Colors.END}")
-            lines.append(f"{Colors.CYAN}👤 USER{Colors.END}                {Colors.WHITE}{self.username}{Colors.END}")
-        else:
-            lines.append(f"{Colors.RED}◈ INIT DATA{Colors.END}            {Colors.RED}EMPTY{Colors.END}")
+        print_box("✅ LOGIN BERHASIL", lines, Colors.GREEN)
 
-        print_box("LTC MINER BOT", lines, Colors.PINK)
+    def show_auto_config(self):
+        total_ads = CFG_IKLAN_BIASA + CFG_IKLAN_PREMIUM + CFG_POP_AD + CFG_MEGA_POP
+        total_sec = (CFG_IKLAN_BIASA * CFG_DUR_BIASA
+                     + CFG_IKLAN_PREMIUM * CFG_DUR_PREMIUM
+                     + CFG_POP_AD * CFG_DUR_POP
+                     + CFG_MEGA_POP * CFG_DUR_MEGA
+                     + total_ads * CFG_COOLDOWN)
+        est_min = total_sec // 60
+        lines = [
+            f"{Colors.CYAN}Iklan biasa        : {Colors.WHITE}{CFG_IKLAN_BIASA}x{Colors.END}",
+            f"{Colors.CYAN}Iklan premium      : {Colors.WHITE}{CFG_IKLAN_PREMIUM}x{Colors.END}",
+            f"{Colors.CYAN}Pop-ad             : {Colors.WHITE}{CFG_POP_AD}x{Colors.END}",
+            f"{Colors.CYAN}Mega pop-ad        : {Colors.WHITE}{CFG_MEGA_POP}x{Colors.END}",
+            f"{Colors.CYAN}Cooldown           : {Colors.WHITE}{CFG_COOLDOWN}s{Colors.END}",
+            f"{Colors.CYAN}Estimasi durasi    : {Colors.YELLOW}±{est_min} menit{Colors.END}",
+        ]
         print()
+        print_box("⚙️ AUTO-CONFIG (default)", lines, Colors.CYAN)
 
-        print(f"{Colors.CYAN}╭{'─' * 52}╮{Colors.END}")
-        print(f"{Colors.CYAN}│{Colors.END} {Colors.BOLD}{Colors.WHITE}{'L I V E   L O G':^50}{Colors.END} {Colors.CYAN}│{Colors.END}")
-        print(f"{Colors.CYAN}├{'─' * 52}┤{Colors.END}")
-        for log in list(self.logs)[-8:]:
-            print(f"{Colors.CYAN}│{Colors.END} {log:<50} {Colors.CYAN}│{Colors.END}")
-        print(f"{Colors.CYAN}╰{'─' * 52}╯{Colors.END}")
-
-    # ========== API CALLS ==========
+    # ========== API ==========
     def _post(self, endpoint, data):
         url = f"{self.base_url}{endpoint}"
         try:
             resp = self.session.post(url, json=data, timeout=30)
             if resp.status_code == 200:
                 return resp.json()
-            return None
-        except:
-            return None
+            return {"_http_error": resp.status_code, "_body": resp.text[:200]}
+        except Exception as e:
+            return {"_error": str(e)}
 
     def _get(self, endpoint, params=None):
         url = f"{self.base_url}{endpoint}"
@@ -209,37 +258,59 @@ class LTCMinerBot:
         except:
             return None
 
-    # ========== AUTH & USER ==========
+    # ========== LOGIN ==========
     def login(self):
+        if not self.init_data:
+            return False
+        payload = {
+            "action": "get_user",
+            "telegram_id": self.telegram_id,
+            "_init_data": self.init_data,
+            "_ts": int(time.time() * 1000)
+        }
+        result = self._post("/functions/v1/user-operations", payload)
+        if result and result.get('success') and result.get('user'):
+            u = result['user']
+            self.balance = u.get('balance', 0.0)
+            self.xp = u.get('xp', 0)
+            self.level = u.get('level', 1)
+            self.total_earned = u.get('total_earned', 0.0)
+            self.cnt_biaya_global = u.get('daily_ad_count', 0)
+            self.mining_active = u.get('mining_active', False)
+            self.boost_active = u.get('boost_active', False)
+            self.boost_expires = u.get('boost_expires_at')
+            self.is_banned = u.get('is_banned', False)
+            self.country = u.get('country_name', 'Indonesia')
+            self.add_log("✅", f"Login OK — bal {self.balance:.10f}", Colors.GREEN)
+            return True
+        else:
+            err = (result or {}).get('error', (result or {}).get('message', 'unknown'))
+            self.add_log("❌", f"Login gagal: {err}", Colors.RED)
+            return False
+
+    def register_or_login(self):
+        """Register pake endpoint asli biar dapet user data lengkap"""
         if not self.init_data:
             return False
         payload = {
             "action": "register_or_login",
             "telegram_id": self.telegram_id,
             "username": self.username or "",
-            "first_name": self.username or "",
+            "first_name": self.first_name or "",
             "last_name": "",
             "language_code": "id",
-            "ip_address": "36.71.173.183",
             "_init_data": self.init_data,
             "_ts": int(time.time() * 1000)
         }
         result = self._post("/functions/v1/user-operations", payload)
         if result and result.get('success'):
             user = result.get('user', {})
-            self.balance = user.get('balance', 0.0)
-            self.xp = user.get('xp', 0)
-            self.level = user.get('level', 1)
-            self.total_earned = user.get('total_earned', 0.0)
-            self.daily_ad_count = user.get('daily_ad_count', 0)
-            self.mining_active = user.get('mining_active', False)
-            self.boost_active = user.get('boost_active', False)
-            self.boost_expires = user.get('boost_expires_at')
-            self.add_log("✅", "Login berhasil", Colors.GREEN)
+            self.balance = user.get('balance', self.balance)
+            self.xp = user.get('xp', self.xp)
+            self.level = user.get('level', self.level)
+            self.cnt_biaya_global = user.get('daily_ad_count', 0)
             return True
-        else:
-            self.add_log("❌", "Login gagal", Colors.RED)
-            return False
+        return False
 
     def start_mining(self):
         if self.mining_active:
@@ -250,14 +321,8 @@ class LTCMinerBot:
             "_init_data": self.init_data,
             "_ts": int(time.time() * 1000)
         }
-        result = self._post("/functions/v1/user-operations", payload)
-        if result and result.get('success'):
-            self.mining_active = True
-            self.add_log("⛏️", "Mining diaktifkan", Colors.GREEN)
-            return True
-        else:
-            self.add_log("❌", "Gagal start mining", Colors.RED)
-            return False
+        r = self._post("/functions/v1/user-operations", payload)
+        return bool(r and r.get('success'))
 
     def activate_boost(self):
         if self.boost_active:
@@ -268,22 +333,44 @@ class LTCMinerBot:
             "_init_data": self.init_data,
             "_ts": int(time.time() * 1000)
         }
-        result = self._post("/functions/v1/user-operations", payload)
-        if result and result.get('success'):
-            self.boost_active = True
-            self.add_log("🚀", "Boost diaktifkan", Colors.GREEN)
-            return True
-        else:
-            self.add_log("❌", "Gagal activate boost", Colors.RED)
-            return False
+        r = self._post("/functions/v1/user-operations", payload)
+        return bool(r and r.get('success'))
 
-    # ========== SHORT AD ==========
-    def watch_short_ad(self):
-        if self.daily_ad_count >= self.daily_ad_limit:
-            return False
+    def claim_daily_task(self):
+        payload = {
+            "action": "claim_daily_ad_task",
+            "telegram_id": self.telegram_id,
+            "task_type": "watch_3",
+            "_init_data": self.init_data,
+            "_ts": int(time.time() * 1000)
+        }
+        r = self._post("/functions/v1/user-operations", payload)
+        return bool(r and r.get('success'))
 
-        # Progress 30 detik
-        ad_progress(30, "📺 Short ad")
+    # ========== AD RESULT DISPLAY ==========
+    def _show_ad_result(self, kind, reward, provider):
+        print(f"{Colors.GREEN}✅ Reward         : {Colors.YELLOW}{reward:.10f} LTC{Colors.END}")
+        print(f"{Colors.CYAN}📊 Daily Count    : {Colors.WHITE}{self.cnt_biaya_global}{Colors.END}")
+        print(f"{Colors.CYAN}🛡️  VPN            : {Colors.WHITE}False{Colors.END}")
+        print(f"{Colors.CYAN}📡 Provider       : {Colors.WHITE}{provider}{Colors.END}")
+        # Cooldown visual
+        for i in range(CFG_COOLDOWN, 0, -1):
+            bar_len = 12
+            filled = int((CFG_COOLDOWN - i) / CFG_COOLDOWN * bar_len)
+            bar = '█' * filled + '░' * (bar_len - filled)
+            sys.stdout.write(f"\r{Colors.YELLOW}⏱️  Cooldown       : {Colors.CYAN}[{bar}]{Colors.WHITE} {i}s tersisa...{Colors.END}")
+            sys.stdout.flush()
+            time.sleep(1)
+        sys.stdout.write("\r" + " " * 70 + "\r")
+        sys.stdout.flush()
+
+    # ========== IKLAN BIASA ==========
+    def watch_short_ad(self, idx, total):
+        if self.sess_biaya >= CFG_IKLAN_BIASA:
+            return False
+        print(f"\n{Colors.BOLD}{Colors.CYAN}┌─ [{Colors.WHITE}IKLAN BIASA{Colors.CYAN}] IKLAN #{idx}/{total}{Colors.END}")
+        print(f"{Colors.CYAN}└─────────────────────────────────────────────────────{Colors.END}")
+        ad_progress(CFG_DUR_BIASA, "📺 Watching ad")
 
         payload = {
             "action": "ad_watch_reward",
@@ -296,14 +383,49 @@ class LTCMinerBot:
             reward = result.get('reward', 0.0)
             if reward > 0:
                 self.balance += reward
-                self.total_gain_session += reward
-                self.daily_ad_count += 1
-                print(f"\n{Colors.GREEN}💰 +{reward:.8f} LTC (Short){Colors.END}")
-                self.add_log(f"💰 +{reward:.8f} LTC", Colors.GREEN)
-                # Jeda 20 detik setelah nonton
-                self._cooldown(20, "⏳ Cooldown 20s")
+                self.session_gain += reward
+                self.cnt_biaya_global = result.get('dailyAdCount', self.cnt_biaya_global + 1)
+                self.sess_biaya += 1
+                self.ads_done_total += 1
+                self._show_ad_result("short", reward, result.get('provider', 'adsgram_reward'))
                 return True
-        self.add_log("❌", "Short ad gagal", Colors.RED)
+        err = (result or {}).get('message', (result or {}).get('error', 'no reward'))
+        self.add_log("❌", f"Short: {err}", Colors.RED)
+        return False
+
+    # ========== IKLAN PREMIUM ==========
+    def watch_premium_ad(self, idx, total):
+        if self.sess_premium >= CFG_IKLAN_PREMIUM:
+            return False
+        print(f"\n{Colors.BOLD}{Colors.PURPLE}┌─ [{Colors.WHITE}IKLAN PREMIUM{Colors.PURPLE}] IKLAN #{idx}/{total}{Colors.END}")
+        print(f"{Colors.PURPLE}└─────────────────────────────────────────────────────{Colors.END}")
+        ad_progress(CFG_DUR_PREMIUM, "📺 Premium ad")
+
+        payload = {
+            "action": "premium_ad_reward",
+            "telegram_id": self.telegram_id,
+            "provider": "gigapub",
+            "_init_data": self.init_data,
+            "_ts": int(time.time() * 1000)
+        }
+        result = self._post("/functions/v1/user-operations", payload)
+        if result and result.get('success'):
+            reward = result.get('reward', 0.0)
+            if reward > 0:
+                self.balance += reward
+                self.session_gain += reward
+                self.cnt_premium = result.get('dailyAdCount', self.cnt_premium + 1)
+                self.cnt_biaya_global = self.cnt_premium
+                self.sess_premium += 1
+                self.ads_done_total += 1
+                self._show_ad_result("premium", reward, result.get('provider', 'gigapub'))
+                return True
+            else:
+                # success tapi reward 0 = limit tercapai
+                self.add_log("⚠️", "Premium limit reached", Colors.YELLOW)
+                return False
+        err = (result or {}).get('message', (result or {}).get('error', 'no reward'))
+        self.add_log("❌", f"Premium: {err}", Colors.RED)
         return False
 
     # ========== POP AD ==========
@@ -333,29 +455,31 @@ class LTCMinerBot:
             reward = result.get('reward', 0.0)
             if reward > 0:
                 self.balance += reward
-                self.total_gain_session += reward
-                self.daily_ad_count += 1
+                self.session_gain += reward
+                self.cnt_pop += 1
+                self.ads_done_total += 1
                 return reward
         return 0
 
-    def watch_pop_ad(self):
-        if self.daily_ad_count >= self.daily_ad_limit:
+    def watch_pop_ad(self, idx, total):
+        if self.sess_pop >= CFG_POP_AD:
             return False
+        print(f"\n{Colors.BOLD}{Colors.MAGENTA}┌─ [{Colors.WHITE}POP-AD{Colors.MAGENTA}] IKLAN #{idx}/{total}{Colors.END}")
+        print(f"{Colors.MAGENTA}└─────────────────────────────────────────────────────{Colors.END}")
         session_id = self.pop_ad_start()
         if not session_id:
+            self.add_log("❌", "Pop start gagal", Colors.RED)
             return False
-        ad_progress(30, "📺 Pop ad")
+        ad_progress(CFG_DUR_POP, "📺 Pop ad")
         reward = self.pop_ad_claim(session_id)
         if reward > 0:
-            print(f"\n{Colors.PURPLE}💰 +{reward:.8f} LTC (Pop){Colors.END}")
-            self.add_log(f"💰 +{reward:.8f} LTC", Colors.GREEN)
-            self._cooldown(20, "⏳ Cooldown 20s")
+            self.sess_pop += 1
+            self._show_ad_result("pop", reward, "pop_reward")
             return True
-        else:
-            self.add_log("❌", "Pop claim gagal", Colors.RED)
-            return False
+        self.add_log("❌", "Pop claim gagal", Colors.RED)
+        return False
 
-    # ========== MEGA POP AD ==========
+    # ========== MEGA POP ==========
     def mega_pop_ad_start(self):
         payload = {
             "telegram_id": self.telegram_id,
@@ -382,145 +506,189 @@ class LTCMinerBot:
             reward = result.get('reward', 0.0)
             if reward > 0:
                 self.balance += reward
-                self.total_gain_session += reward
-                self.daily_ad_count += 1
+                self.session_gain += reward
+                self.cnt_mega += 1
+                self.ads_done_total += 1
                 return reward
         return 0
 
-    def watch_mega_pop_ad(self):
-        if self.daily_ad_count >= self.daily_ad_limit:
+    def watch_mega_pop_ad(self, idx, total):
+        if self.sess_mega >= CFG_MEGA_POP:
             return False
+        print(f"\n{Colors.BOLD}{Colors.ORANGE}┌─ [{Colors.WHITE}MEGA POP-AD{Colors.ORANGE}] IKLAN #{idx}/{total}{Colors.END}")
+        print(f"{Colors.ORANGE}└─────────────────────────────────────────────────────{Colors.END}")
         session_id = self.mega_pop_ad_start()
         if not session_id:
+            self.add_log("❌", "Mega start gagal", Colors.RED)
             return False
-        ad_progress(30, "📺 Mega Pop")
+        ad_progress(CFG_DUR_MEGA, "📺 Mega ad")
         reward = self.mega_pop_ad_claim(session_id)
         if reward > 0:
-            print(f"\n{Colors.PINK}💰 +{reward:.8f} LTC (Mega){Colors.END}")
-            self.add_log(f"💰 +{reward:.8f} LTC", Colors.GREEN)
-            self._cooldown(20, "⏳ Cooldown 20s")
+            self.sess_mega += 1
+            self._show_ad_result("mega", reward, "mega_reward")
             return True
-        else:
-            self.add_log("❌", "Mega claim gagal", Colors.RED)
-            return False
-
-    # ========== COOLDOWN HELPER ==========
-    def _cooldown(self, seconds, label="⏳ Cooldown"):
-        for i in range(seconds, 0, -1):
-            sys.stdout.write(f"\r{Colors.YELLOW}{label} {i}s left{Colors.END}")
-            sys.stdout.flush()
-            time.sleep(1)
-        print()  # newline
-
-    # ========== DAILY TASK ==========
-    def claim_daily_task(self):
-        payload = {
-            "action": "claim_daily_ad_task",
-            "telegram_id": self.telegram_id,
-            "task_type": "watch_3",
-            "_init_data": self.init_data,
-            "_ts": int(time.time() * 1000)
-        }
-        result = self._post("/functions/v1/user-operations", payload)
-        if result and result.get('success'):
-            self.add_log("✅", "Daily task claimed", Colors.GREEN)
-            return True
+        self.add_log("❌", "Mega claim gagal", Colors.RED)
         return False
 
-    # ========== CYCLE ==========
-    def run_cycle(self):
-        self.cycle_count += 1
-        print(f"\n{Colors.CYAN}{'═' * 50}{Colors.END}")
-        print(f"{Colors.CYAN}🔄 SIKLUS #{self.cycle_count}{Colors.END}")
-        print(f"{Colors.CYAN}{'─' * 50}{Colors.END}")
+    # ========== AUTO WATCH SESSION ==========
+    def auto_watch_session(self):
+        start_time = datetime.now()
+        saldo_awal = self.balance
 
-        # Short 5x
-        for i in range(5):
-            if self.daily_ad_count >= self.daily_ad_limit:
-                print(f"\n{Colors.YELLOW}⏹️ Kuota harian habis (limit {self.daily_ad_limit}){Colors.END}")
-                return False
-            print(f"\n{Colors.CYAN}📺 Short #{i+1}/5{Colors.END}")
-            if not self.watch_short_ad():
-                time.sleep(2)
-            # jeda sudah di dalam watch_short_ad
+        # Reset counter per sesi
+        self.sess_biaya = 0
+        self.sess_premium = 0
+        self.sess_pop = 0
+        self.sess_mega = 0
 
-        # Pop 3x
-        for i in range(3):
-            if self.daily_ad_count >= self.daily_ad_limit:
-                print(f"\n{Colors.YELLOW}⏹️ Kuota harian habis{Colors.END}")
-                return False
-            print(f"\n{Colors.PURPLE}📺 Pop #{i+1}/3{Colors.END}")
-            if not self.watch_pop_ad():
-                time.sleep(2)
+        total_ads = CFG_IKLAN_BIASA + CFG_IKLAN_PREMIUM + CFG_POP_AD + CFG_MEGA_POP
 
-        # Mega 2x
-        for i in range(2):
-            if self.daily_ad_count >= self.daily_ad_limit:
-                print(f"\n{Colors.YELLOW}⏹️ Kuota harian habis{Colors.END}")
-                return False
-            print(f"\n{Colors.PINK}📺 Mega #{i+1}/2{Colors.END}")
-            if not self.watch_mega_pop_ad():
+        print(f"\n{Colors.PINK}🚀 MULAI SESI AUTO-WATCH untuk user {self.telegram_id}{Colors.END}\n")
+        lines = [
+            f"{Colors.CYAN}• Iklan biasa      : {Colors.WHITE}{CFG_IKLAN_BIASA}x{Colors.END}",
+            f"{Colors.CYAN}• Iklan premium    : {Colors.WHITE}{CFG_IKLAN_PREMIUM}x (gigapub){Colors.END}",
+            f"{Colors.CYAN}• Pop-ad           : {Colors.WHITE}{CFG_POP_AD}x ({CFG_DUR_POP}s){Colors.END}",
+            f"{Colors.CYAN}• Mega pop-ad      : {Colors.WHITE}{CFG_MEGA_POP}x ({CFG_DUR_MEGA}s){Colors.END}",
+            f"{Colors.CYAN}• Cooldown         : {Colors.WHITE}{CFG_COOLDOWN}s{Colors.END}",
+            f"{Colors.CYAN}• Waktu mulai      : {Colors.WHITE}{start_time.strftime('%Y-%m-%d %H:%M:%S')}{Colors.END}",
+        ]
+        print_box("SESSION CONFIG", lines, Colors.PINK)
+
+        print(f"{Colors.YELLOW}💰 Saldo awal      : {Colors.WHITE}{saldo_awal:.10f} LTC{Colors.END}\n")
+
+        # === IKLAN BIASA ===
+        print(f"\n{Colors.PINK}🎞️  IKLAN BIASA{Colors.END}")
+        print(f"{Colors.DIM}   {CFG_IKLAN_BIASA} iklan • cooldown {CFG_COOLDOWN}s • provider: adsgram_reward{Colors.END}")
+        for i in range(1, CFG_IKLAN_BIASA + 1):
+            if not self.watch_short_ad(i, CFG_IKLAN_BIASA):
                 time.sleep(2)
 
-        # Claim daily task (opsional)
+        # === IKLAN PREMIUM ===
+        print(f"\n{Colors.PURPLE}🎞️  IKLAN PREMIUM (gigapub){Colors.END}")
+        print(f"{Colors.DIM}   {CFG_IKLAN_PREMIUM} iklan • cooldown {CFG_COOLDOWN}s{Colors.END}")
+        for i in range(1, CFG_IKLAN_PREMIUM + 1):
+            if not self.watch_premium_ad(i, CFG_IKLAN_PREMIUM):
+                time.sleep(2)
+
+        # === POP-AD ===
+        print(f"\n{Colors.MAGENTA}🎞️  POP-AD{Colors.END}")
+        print(f"{Colors.DIM}   {CFG_POP_AD} iklan • {CFG_DUR_POP}s each{Colors.END}")
+        for i in range(1, CFG_POP_AD + 1):
+            if not self.watch_pop_ad(i, CFG_POP_AD):
+                time.sleep(2)
+
+        # === MEGA POP-AD ===
+        print(f"\n{Colors.ORANGE}🎞️  MEGA POP-AD{Colors.END}")
+        print(f"{Colors.DIM}   {CFG_MEGA_POP} iklan • {CFG_DUR_MEGA}s each{Colors.END}")
+        for i in range(1, CFG_MEGA_POP + 1):
+            if not self.watch_mega_pop_ad(i, CFG_MEGA_POP):
+                time.sleep(2)
+
+        # === CLAIM DAILY ===
         self.claim_daily_task()
 
-        print(f"\n{Colors.GREEN}✅ Siklus #{self.cycle_count} selesai!{Colors.END}")
-        print(f"{Colors.CYAN}💰 Gain siklus ini: {self.total_gain_session:.8f} LTC{Colors.END}")
-        print(f"{Colors.CYAN}💰 Balance: {self.balance:.8f} LTC{Colors.END}")
-        return True
+        # === REFRESH BALANCE ===
+        self.login()
 
-    def main_loop(self):
-        if not self.init_data:
-            self.add_log("❌", "InitData kosong! Set dulu.", Colors.RED)
-            return
+        # === SUMMARY ===
+        end_time = datetime.now()
+        duration = (end_time - start_time).total_seconds()
+        gain = self.balance - saldo_awal
 
-        self.add_log("🚀", "Memulai LTC Miner Auto Cycle", Colors.CYAN)
-        if not self.login():
-            return
+        print(f"\n{Colors.GREEN}✅ SESI SELESAI{Colors.END}")
+        lines = [
+            f"{Colors.CYAN}🕒 Durasi         : {Colors.WHITE}{int(duration//60)}m {int(duration%60)}s{Colors.END}",
+            f"{Colors.CYAN}📺 Iklan biasa    : {Colors.WHITE}{self.sess_biaya}/{CFG_IKLAN_BIASA}{Colors.END}",
+            f"{Colors.CYAN}📺 Iklan premium  : {Colors.WHITE}{self.sess_premium}/{CFG_IKLAN_PREMIUM}{Colors.END}",
+            f"{Colors.CYAN}📺 Pop-ad         : {Colors.WHITE}{self.sess_pop}/{CFG_POP_AD}{Colors.END}",
+            f"{Colors.CYAN}📺 Mega pop-ad    : {Colors.WHITE}{self.sess_mega}/{CFG_MEGA_POP}{Colors.END}",
+            f"{Colors.CYAN}📊 Total iklan    : {Colors.WHITE}{self.ads_done_total}{Colors.END}",
+            f"{Colors.YELLOW}💰 Gain sesi      : {Colors.GREEN}+{gain:.10f} LTC{Colors.END}",
+            f"{Colors.YELLOW}💰 Saldo akhir    : {Colors.WHITE}{self.balance:.10f} LTC{Colors.END}",
+        ]
+        print_box("SESSION SUMMARY", lines, Colors.GREEN)
 
-        if not self.mining_active:
-            self.start_mining()
+    # ========== LOG ==========
+    def add_log(self, icon, message, color=Colors.WHITE):
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.logs.append(f"{Colors.DIM}[{timestamp}]{Colors.END} {icon} {color}{message}{Colors.END}")
+        if len(self.logs) > 8:
+            self.logs.popleft()
+
+    # ========== STATUS DISPLAY ==========
+    def show_status(self):
+        clear_screen()
+        print_banner()
+        mining_status = f"{Colors.GREEN}🟢 ON{Colors.END}" if self.mining_active else f"{Colors.RED}🔴 OFF{Colors.END}"
+        boost_status = f"{Colors.GREEN}🟢 ON{Colors.END}" if self.boost_active else f"{Colors.RED}🔴 OFF{Colors.END}"
+        lines = [
+            f"{Colors.GREEN}● SYSTEM        : ONLINE{Colors.END}",
+            f"{Colors.CYAN}◈ ENGINE        : READY{Colors.END}",
+            f"{Colors.PINK}◉ NETWORK       : ACTIVE{Colors.END}",
+            f"{Colors.GREEN}💰 BALANCE      : {Colors.YELLOW}{self.balance:.10f} LTC{Colors.END}",
+            f"{Colors.PURPLE}📈 LEVEL        : Lv{self.level} (XP: {self.xp}){Colors.END}",
+            f"{Colors.CYAN}📺 ADS TODAY    : {Colors.YELLOW}{self.cnt_biaya_global}/{CFG_IKLAN_BIASA}{Colors.END}",
+            f"{Colors.MAGENTA}⛏️ MINING       : {mining_status}",
+            f"{Colors.PINK}🚀 BOOST        : {boost_status}",
+            f"{Colors.ORANGE}🔄 SIKLUS       : {self.cycle_count}{Colors.END}",
+        ]
+        if self.init_data:
+            lines.append(f"{Colors.GREEN}◈ INIT DATA     : LOADED{Colors.END}")
+            lines.append(f"{Colors.CYAN}👤 USER         : {Colors.WHITE}@{self.username}{Colors.END}")
         else:
-            self.add_log("⛏️", "Mining sudah aktif", Colors.CYAN)
+            lines.append(f"{Colors.RED}◈ INIT DATA     : EMPTY{Colors.END}")
 
-        if not self.boost_active:
-            self.activate_boost()
+        print_box("LTC MINER BOT v4.1", lines, Colors.PINK)
+        print()
+
+        # Live log
+        w = 66
+        print(f"{Colors.CYAN}╭{'─' * w}╮{Colors.END}")
+        print(f"{Colors.CYAN}│{Colors.END} {Colors.BOLD}{Colors.WHITE}{'L I V E   L O G':^{w}}{Colors.END} {Colors.CYAN}│{Colors.END}")
+        print(f"{Colors.CYAN}├{'─' * w}┤{Colors.END}")
+        if self.logs:
+            for log in list(self.logs)[-8:]:
+                clean = strip_ansi(log)
+                pad = w - len(clean)
+                if pad < 0: pad = 0
+                print(f"{Colors.CYAN}│{Colors.END} {log}{' ' * pad} {Colors.CYAN}│{Colors.END}")
         else:
-            self.add_log("🚀", "Boost sudah aktif", Colors.CYAN)
+            print(f"{Colors.CYAN}│{Colors.END} {Colors.DIM}(belum ada aktivitas){' ' * (w-22)} {Colors.CYAN}│{Colors.END}")
+        print(f"{Colors.CYAN}╰{'─' * w}╯{Colors.END}")
 
+    # ========== MENU ==========
+    def menu(self):
         while True:
-            if self.daily_ad_count >= self.daily_ad_limit:
-                print(f"\n{Colors.YELLOW}⏹️ Kuota harian habis! ({self.daily_ad_count}/{self.daily_ad_limit}){Colors.END}")
-                print(f"{Colors.CYAN}⏳ Menunggu 10 menit untuk reset...{Colors.END}")
-                for _ in range(10 * 60):
-                    time.sleep(1)
-                    if _ % 30 == 0:
-                        rem = 10 * 60 - _
-                        print(f"\r   {Colors.CYAN}⏱️ {rem//60}m {rem%60}s tersisa{Colors.END}", end="")
-                print()
-                self.daily_ad_count = 0
-                self.login()
-                continue
-
-            if not self.run_cycle():
-                time.sleep(10)
-                continue
-
-            # Tunggu 10 menit sebelum siklus berikutnya
-            print(f"\n{Colors.YELLOW}⏳ Menunggu 10 menit...{Colors.END}")
-            for _ in range(10 * 60):
-                time.sleep(1)
-                if _ % 30 == 0:
-                    rem = 10 * 60 - _
-                    print(f"\r   {Colors.CYAN}⏱️ {rem//60}m {rem%60}s tersisa{Colors.END}", end="")
+            self.show_status()
+            print(f"\n{Colors.CYAN}╭{'─' * 66}╮{Colors.END}")
+            print(f"{Colors.CYAN}│{Colors.END} {Colors.BOLD}{Colors.GREEN}[1]{Colors.END} {Colors.WHITE}Start Auto Watch (10B → 10P → 10POP → 5MEGA){Colors.END}          {Colors.CYAN}│{Colors.END}")
+            print(f"{Colors.CYAN}│{Colors.END} {Colors.BOLD}{Colors.YELLOW}[2]{Colors.END} {Colors.WHITE}Set InitData{Colors.END}                                          {Colors.CYAN}│{Colors.END}")
+            print(f"{Colors.CYAN}│{Colors.END} {Colors.BOLD}{Colors.CYAN}[3]{Colors.END} {Colors.WHITE}Refresh Login (fetch user info){Colors.END}                        {Colors.CYAN}│{Colors.END}")
+            print(f"{Colors.CYAN}│{Colors.END} {Colors.BOLD}{Colors.RED}[0]{Colors.END} {Colors.WHITE}Exit{Colors.END}                                                  {Colors.CYAN}│{Colors.END}")
+            print(f"{Colors.CYAN}╰{'─' * 66}╯{Colors.END}")
             print()
+            choice = input(f"{Colors.CYAN}  Select option → {Colors.END}").strip()
 
-    def start_all(self):
-        self.main_loop()
-        input(f"\n{Colors.CYAN}Press Enter to continue...{Colors.END}")
+            if choice == "0":
+                print(f"\n{Colors.GREEN}👋 Goodbye!{Colors.END}")
+                sys.exit(0)
+            elif choice == "1":
+                self.start_all()
+                input(f"\n{Colors.CYAN}Press Enter to continue...{Colors.END}")
+            elif choice == "2":
+                self.set_init_data()
+                input(f"\n{Colors.CYAN}Press Enter to continue...{Colors.END}")
+            elif choice == "3":
+                if self.show_init_extract():
+                    if self.login():
+                        self.show_login_result()
+                    else:
+                        print(f"{Colors.RED}❌ Login gagal!{Colors.END}")
+                input(f"\n{Colors.CYAN}Press Enter to continue...{Colors.END}")
+            else:
+                print(f"{Colors.RED}❌ Invalid option!{Colors.END}")
+                time.sleep(1)
 
-    # ========== SET INIT DATA ==========
     def set_init_data(self):
         print(f"\n{Colors.CYAN}{Colors.BOLD}📝 MASUKKAN TELEGRAM INIT DATA{Colors.END}")
         print(f"{Colors.YELLOW}(copy dari network log atau WebView){Colors.END}")
@@ -532,33 +700,44 @@ class LTCMinerBot:
         self.save_init_data(new_data)
         print(f"{Colors.GREEN}✅ InitData saved!{Colors.END}")
 
-    # ========== MENU ==========
-    def menu(self):
-        while True:
-            self.show_status()
-            print(f"\n{Colors.CYAN}╭{'─' * 52}╮{Colors.END}")
-            print(f"{Colors.CYAN}│{Colors.END} {Colors.BOLD}{Colors.GREEN}[1]{Colors.END} {Colors.WHITE}Start Auto Cycle (5S→3P→2M){Colors.END}     {Colors.CYAN}│{Colors.END}")
-            print(f"{Colors.CYAN}│{Colors.END} {Colors.BOLD}{Colors.YELLOW}[2]{Colors.END} {Colors.WHITE}Set InitData{Colors.END}                             {Colors.CYAN}│{Colors.END}")
-            print(f"{Colors.CYAN}│{Colors.END} {Colors.BOLD}{Colors.RED}[0]{Colors.END} {Colors.WHITE}Exit{Colors.END}                                      {Colors.CYAN}│{Colors.END}")
-            print(f"{Colors.CYAN}╰{'─' * 52}╯{Colors.END}")
-            print()
-            choice = input(f"{Colors.CYAN}  Select option → {Colors.END}").strip()
-            if choice == "0":
-                print(f"\n{Colors.GREEN}👋 Goodbye!{Colors.END}")
-                sys.exit(0)
-            elif choice == "1":
-                self.start_all()
-            elif choice == "2":
-                self.set_init_data()
-                input(f"\n{Colors.CYAN}Press Enter to continue...{Colors.END}")
-            else:
-                print(f"{Colors.RED}❌ Invalid option!{Colors.END}")
-                time.sleep(1)
+    # ========== START ALL ==========
+    def start_all(self):
+        clear_screen()
+        print_banner()
+
+        if not self.show_init_extract():
+            input(f"\n{Colors.CYAN}Press Enter...{Colors.END}")
+            return
+
+        if not self.login():
+            print(f"{Colors.RED}❌ Verifikasi login gagal!{Colors.END}")
+            input(f"\n{Colors.CYAN}Press Enter...{Colors.END}")
+            return
+
+        print()
+        self.show_login_result()
+        print()
+
+        # Auto-start mining & boost
+        if not self.mining_active:
+            if self.start_mining():
+                print(f"{Colors.GREEN}⛏️ Mining activated{Colors.END}")
+        if not self.boost_active:
+            if self.activate_boost():
+                print(f"{Colors.GREEN}🚀 Boost activated{Colors.END}")
+
+        self.show_auto_config()
+        print()
+        konfirmasi = input(f"{Colors.YELLOW}▶ Mulai sekarang? (y/n): {Colors.END}").strip().lower()
+        if konfirmasi != 'y':
+            print(f"{Colors.RED}❌ Dibatalkan.{Colors.END}")
+            return
+
+        self.auto_watch_session()
 
 # ============================================================
 # MAIN
 # ============================================================
-
 if __name__ == "__main__":
     try:
         bot = LTCMinerBot()
