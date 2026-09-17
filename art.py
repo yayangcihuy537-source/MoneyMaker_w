@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.
 # -*- coding: utf-8 -*-
 
 """
@@ -33,7 +33,7 @@ WEBAPP_URL = "https://art.tamimdev.dev/"
 
 # 🔥 REFERRAL — ID user yang mau dijadikan referrer
 # Kosongkan ("") kalau tidak mau pakai referral
-REFERRAL_ID = "6048943114"
+REFERRAL_ID = "6894031790"
 
 # GigaPub
 GIGA_ANALYTICS_URL = "https://ad.gigapub.tech/v1/ad"
