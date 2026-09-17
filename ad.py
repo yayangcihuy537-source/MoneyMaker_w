@@ -2,15 +2,15 @@
 """
 ╔═══════════════════════════════════════════════════════════════════╗
 ║              ⚡ A D C O I N S   A U T O   B O T ⚡              ║
-║   🔥 FAUCET • PTC • AUTO EARN • MODERN DASHBOARD               ║
-║   📊 LIVE STATUS • COLORFUL UI • EMOJI SUPPORT                 ║
+║   🔥 FAUCET • PTC • AUTO EARN • MULTI SOLVER                   ║
+║   📊 SKIPCHA + WARYONO • MODERN DASHBOARD                      ║
+║   ScriptMaker: MoneyMaker_w                                    ║
 ╚═══════════════════════════════════════════════════════════════════╝
 """
 
 import os, re, json, sys, time, base64, platform, subprocess, logging, requests
 from bs4 import BeautifulSoup
 
-# --- Windows Compatibility Fix ---
 if platform.system() == 'Windows':
     sys.stdout.reconfigure(encoding='utf-8') if hasattr(sys.stdout, 'reconfigure') else None
     try:
@@ -19,11 +19,10 @@ if platform.system() == 'Windows':
         kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
     except: pass
 
-# --- Warna (256-Color Codes) ---
+# --- Warna ---
 RESET = "\033[0m"
 BOLD = "\033[1m"
 DIM = "\033[2m"
-
 RED = "\033[38;5;196m"
 GREEN = "\033[38;5;46m"
 YELLOW = "\033[38;5;226m"
@@ -37,12 +36,17 @@ PINK = "\033[38;5;205m"
 
 # --- Konstanta ---
 CONFIG_FILE = "BAS_config.json"
-API_KEY_FILE = "BASkey.txt"
+API_KEY_FILE = "BASkey.txt"       # backward compat
+API_FILE = "BAS_api.json"          # file baru buat nyimpen 2 provider
 BASE_URL = 'https://adcoins.cc'
-SITE_URL = 'https://bypassallshortlinks.space'
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 WEBSITE_NAME = "AdCoins.cc"
 TURNSTILE_SITEKEY = '0x4AAAAAACyaNDdvQo-05xXY'
+
+# Solver endpoints
+SKIPCHA_IN  = "https://skipcha.online/in.php"
+SKIPCHA_RES = "https://skipcha.online/res.php"
+WARYONO_IN  = "https://api.waryono.my.id/in.php"
+WARYONO_RES = "https://api.waryono.my.id/res.php"
 
 ANSI_RE = re.compile(r'\x1b\[[0-9;]*m')
 def ansi_len(text): return len(ANSI_RE.sub('', text))
@@ -52,7 +56,7 @@ def safe_print(text):
     except UnicodeEncodeError: print(re.sub(r'[^\x00-\x7F]+', '', text))
 
 # ==========================================
-#  DASHBOARD v3.0 (Modern Cyberpunk UI)
+#  DASHBOARD
 # ==========================================
 class Dashboard:
     def __init__(self):
@@ -64,18 +68,17 @@ class Dashboard:
         self.balance = 0.0
         self.last_action = ""
         self.next_action = ""
+        self.solver = ""
 
     def redraw(self):
         print('\033[H\033[2J', end='')
         print('\033[?25l', end='')
         w = 50
 
-        # --- HEADER ---
         print(f"{CYAN}╭{'─' * w}╮{RESET}")
         print(f"{CYAN}│{RESET}{MAGENTA}{BOLD}     ⚡  A D C O I N S   A U T O   B O T  ⚡{RESET}{' ' * (w - 48)}{CYAN}│{RESET}")
         print(f"{CYAN}╰{'─' * w}╯{RESET}")
-        
-        # --- INFO BOX ---
+
         print(f"{BLUE}┌{'─' * w}┐{RESET}")
         print(f"{BLUE}│{RESET}{BOLD}{CYAN}  🌐 WEBSITE & FUNCTIONS{RESET}{' ' * (w - 26)}{BLUE}│{RESET}")
         print(f"{BLUE}├{'─' * w}┤{RESET}")
@@ -84,16 +87,16 @@ class Dashboard:
             print(f"{BLUE}│{RESET} {text}{' ' * (w - ansi_len(text) - 2)}{BLUE}│{RESET}")
         info_line("Website", WHITE + WEBSITE_NAME)
         info_line("Functions", WHITE + "FAUCET | PTC")
+        info_line("Solver", WHITE + (self.solver.upper() if self.solver else "-"))
         print(f"{BLUE}└{'─' * w}┘{RESET}")
 
-        # --- DASHBOARD STATUS BOX ---
         print(f"\n{MAGENTA}┌{'─' * w}┐{RESET}")
         print(f"{MAGENTA}│{RESET}{BOLD}{YELLOW}  📊  L I V E   D A S H B O A R D{RESET}{' ' * (w - 32)}{MAGENTA}│{RESET}")
         print(f"{MAGENTA}├{'─' * w}┤{RESET}")
         def status_line(label, value, color=WHITE):
             text = f"  {label} : {color}{BOLD}{value}{RESET}"
             print(f"{MAGENTA}│{RESET} {text}{' ' * (w - ansi_len(text) - 2)}{MAGENTA}│{RESET}")
-        
+
         status_line("🚀 Mode", self.status_mode, CYAN)
         status_line("🎮 Claim #", self.claim_count, BLUE)
         status_line("💰 Earned", f"{self.total_earned:.2f} Coins", GREEN)
@@ -102,7 +105,6 @@ class Dashboard:
         status_line("⏳ Next In", self.next_action, YELLOW)
         print(f"{MAGENTA}└{'─' * w}┘{RESET}")
 
-        # --- LOGS BOX ---
         print(f"\n{CYAN}┌{'─' * w}┐{RESET}")
         print(f"{CYAN}│{RESET}{BOLD}{PINK}  📜  S Y S T E M   L O G S{RESET}{' ' * (w - 27)}{CYAN}│{RESET}")
         print(f"{CYAN}├{'─' * w}┤{RESET}")
@@ -121,13 +123,14 @@ class Dashboard:
         print(f"{CYAN}└{'─' * w}┘{RESET}")
         print('\033[?25h', end='')
 
-    def update_status(self, mode=None, claim_count=None, total_earned=None, balance=None, last_action=None, next_action=None):
+    def update_status(self, mode=None, claim_count=None, total_earned=None, balance=None, last_action=None, next_action=None, solver=None):
         if mode is not None: self.status_mode = mode
         if claim_count is not None: self.claim_count = claim_count
         if total_earned is not None: self.total_earned = total_earned
         if balance is not None: self.balance = balance
         if last_action is not None: self.last_action = last_action
         if next_action is not None: self.next_action = next_action
+        if solver is not None: self.solver = solver
         self.redraw()
 
     def add_log(self, message):
@@ -138,7 +141,7 @@ class Dashboard:
 dashboard = Dashboard()
 
 # ==========================================
-#  FUNGSI INPUT & KONFIGURASI
+#  KONFIGURASI
 # ==========================================
 def load_config():
     if os.path.exists(CONFIG_FILE):
@@ -149,6 +152,28 @@ def load_config():
 
 def save_config(config_data):
     with open(CONFIG_FILE, 'w', encoding='utf-8') as f: json.dump(config_data, f, indent=4)
+
+def load_api_cfg():
+    """Format baru: {solver: 'skipcha'|'waryono', skipcha: 'xxx', waryono: 'yyy'}"""
+    if os.path.exists(API_FILE):
+        try:
+            with open(API_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if 'solver' not in data: data['solver'] = 'skipcha'
+                if 'skipcha' not in data: data['skipcha'] = ''
+                if 'waryono' not in data: data['waryono'] = ''
+                return data
+        except: pass
+    # migrate dari lama
+    old = ""
+    if os.path.exists(API_KEY_FILE):
+        try:
+            with open(API_KEY_FILE, 'r', encoding='utf-8') as f: old = f.read().strip()
+        except: pass
+    return {'solver': 'skipcha', 'skipcha': old, 'waryono': ''}
+
+def save_api_cfg(data):
+    with open(API_FILE, 'w', encoding='utf-8') as f: json.dump(data, f, indent=4)
 
 def get_email():
     config = load_config()
@@ -162,128 +187,307 @@ def get_email():
         save_config(config)
     return email
 
-def get_bas_api_key():
-    if os.path.exists(API_KEY_FILE):
-        try:
-            with open(API_KEY_FILE, 'r', encoding='utf-8') as f:
-                key = f.read().strip()
-                if key: return key
-        except: pass
-    safe_print(f"{YELLOW}[!] Masukkan BAS API key:{RESET}")
-    api_key = input(f"{CYAN}🔑 BAS API Key: {RESET}").strip()
+def get_active_api():
+    """Return (solver, api_key)"""
+    cfg = load_api_cfg()
+    solver = cfg.get('solver', 'skipcha')
+    key = cfg.get(solver, '')
+    if not key:
+        safe_print(f"{YELLOW}[!] Belum ada API key untuk {solver.upper()}{RESET}")
+        return solver, prompt_for_key(solver)
+    return solver, key
+
+def prompt_for_key(solver):
+    label = "Skipcha" if solver == 'skipcha' else "Waryono"
+    safe_print(f"{YELLOW}[!] Masukkan {label} API key:{RESET}")
+    api_key = input(f"{CYAN}🔑 {label} API Key: {RESET}").strip()
     if api_key:
-        with open(API_KEY_FILE, 'w', encoding='utf-8') as f: f.write(api_key)
-        safe_print(f"{GREEN}[+] API key disimpan{RESET}")
+        cfg = load_api_cfg()
+        cfg[solver] = api_key
+        save_api_cfg(cfg)
+        safe_print(f"{GREEN}[+] API key {label} disimpan{RESET}")
     return api_key
 
-def config_menu():
-    clear_screen()
-    print(f"\n{CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}")
-    print(f"{BOLD}{BLUE}⚙️  KONFIGURASI AKUN & API KEY{RESET}")
-    print(f"{CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}")
-    
-    email = get_email()
-    api_key = get_bas_api_key()
-    
-    print(f"\n{BLUE}📧 Email saat ini: {YELLOW}{email}{RESET}")
-    print(f"{BLUE}🔑 API Key saat ini: {YELLOW}{api_key[:8]}...{api_key[-4:] if len(api_key)>12 else ''}{RESET}")
-    
-    print(f"\n{CYAN}[1] {WHITE}Ubah Email{RESET}")
-    print(f"{CYAN}[2] {WHITE}Ubah API Key{RESET}")
-    print(f"{CYAN}[0] {WHITE}Kembali{RESET}")
-    choice = input(f"\n{CYAN}Pilih: {RESET}").strip()
-    
-    if choice == '1':
-        new_email = input(f"{CYAN}📧 Email baru: {RESET}").strip()
-        if new_email:
-            config = load_config()
-            config['email'] = new_email
-            save_config(config)
-            print(f"{GREEN}✅ Email berhasil diupdate!{RESET}")
-        else:
-            print(f"{RED}❌ Email tidak boleh kosong!{RESET}")
-        time.sleep(1.5)
-        config_menu()
-    elif choice == '2':
-        new_api = input(f"{CYAN}🔑 API Key baru: {RESET}").strip()
-        if new_api:
-            with open(API_KEY_FILE, 'w', encoding='utf-8') as f:
-                f.write(new_api)
-            print(f"{GREEN}✅ API Key berhasil diupdate!{RESET}")
-        else:
-            print(f"{RED}❌ API Key tidak boleh kosong!{RESET}")
-        time.sleep(1.5)
-        config_menu()
-    elif choice == '0':
-        return
-    else:
-        print(f"{RED}❌ Pilihan tidak valid{RESET}")
-        time.sleep(1)
-        config_menu()
-
 # ==========================================
-#  FUNGSI SOLVING CAPTCHA
+#  SOLVER - SKIPCHA
 # ==========================================
-def bas_submit(api_key, method, **kwargs):
-    payload = {'api_key': api_key, 'method': method}
-    payload.update(kwargs)
+def skipcha_solve_adcoins(api_key, image_b64, timeout=120):
+    """Return (x, y) atau (None, None)."""
+    # Submit
+    tid = None
     for _ in range(3):
         try:
-            resp = requests.post(f"{SITE_URL}/in.php", json=payload, timeout=30)
-            text = resp.text.strip()
-            if text.startswith('OK|'): return text[3:].strip()
-            if 'RATE_LIMIT' in text:
-                safe_print(f"{YELLOW}[*] Rate limited, tunggu...{RESET}")
-                time.sleep(10); continue
+            r = requests.post(
+                SKIPCHA_IN,
+                params={'key': api_key, 'method': 'adcoins', 'json': 1},
+                json={'image': image_b64},
+                timeout=30
+            )
+            data = r.json()
+            if data.get('status') == 1:
+                tid = data.get('request')
+                break
+            err = str(data.get('request', ''))
+            if 'ERROR_KEY' in err or 'ERROR_WRONG' in err or 'ERROR_ZERO_BALANCE' in err:
+                dashboard.add_log(f"{RED}[-] Skipcha: {err}{RESET}")
+                return None, None
         except: time.sleep(2)
-    return None
 
-def bas_poll(api_key, task_id, max_wait=120):
-    for _ in range(max_wait // 3):
+    if not tid:
+        return None, None
+
+    # Poll
+    for _ in range(timeout // 3):
         time.sleep(3)
         try:
-            resp = requests.get(f"{SITE_URL}/res.php", params={'key': api_key, 'action': 'get', 'id': task_id}, timeout=30)
-            text = resp.text.strip()
-            if text.startswith('OK|'): return text[3:].strip()
-            if 'CAPCHA_NOT_READY' in text: continue
+            r = requests.get(
+                SKIPCHA_RES,
+                params={'key': api_key, 'action': 'get', 'id': tid, 'json': 1},
+                timeout=30
+            )
+            data = r.json()
+            if data.get('status') == 1:
+                return _parse_coord(data.get('request', ''))
+            if data.get('request') == 'CAPCHA_NOT_READY':
+                continue
+            return None, None
+        except: continue
+    return None, None
+
+def skipcha_solve_turnstile(api_key, page_url=BASE_URL, timeout=120):
+    tid = None
+    for _ in range(3):
+        try:
+            r = requests.get(
+                SKIPCHA_IN,
+                params={'key': api_key, 'method': 'turnstile',
+                        'sitekey': TURNSTILE_SITEKEY, 'pageurl': page_url, 'json': 1},
+                timeout=30
+            )
+            data = r.json()
+            if data.get('status') == 1:
+                tid = data.get('request')
+                break
+            err = str(data.get('request', ''))
+            if 'ERROR_KEY' in err or 'ERROR_WRONG' in err or 'ERROR_ZERO_BALANCE' in err:
+                dashboard.add_log(f"{RED}[-] Skipcha: {err}{RESET}")
+                return None
+        except: time.sleep(2)
+
+    if not tid: return None
+
+    for _ in range(timeout // 3):
+        time.sleep(3)
+        try:
+            r = requests.get(
+                SKIPCHA_RES,
+                params={'key': api_key, 'action': 'get', 'id': tid, 'json': 1},
+                timeout=30
+            )
+            data = r.json()
+            if data.get('status') == 1:
+                return data.get('request', '')
+            if data.get('request') == 'CAPCHA_NOT_READY':
+                continue
             return None
         except: continue
     return None
 
-def solve_adcoins_captcha(api_key, image_b64):
-    task_id = bas_submit(api_key, 'adcoins', image=image_b64)
-    if not task_id: return None, None
-    result = bas_poll(api_key, task_id)
-    if result and ',' in result:
-        parts = result.split(',')
-        try: return int(parts[0]), int(parts[1])
+# ==========================================
+#  SOLVER - WARYONO
+# ==========================================
+def waryono_solve_adcoins(api_key, image_b64, timeout=120):
+    tid = None
+    for _ in range(3):
+        try:
+            r = requests.post(
+                WARYONO_IN,
+                json={
+                    'apikey': api_key,
+                    'methods': 'adscoins',
+                    'image': image_b64,
+                    'json': 1
+                },
+                timeout=30
+            )
+            data = r.json()
+            if data.get('status') == 1:
+                tid = data.get('request')
+                break
+            err = str(data.get('request', ''))
+            if 'ERROR_WRONG_USER_KEY' in err or 'ERROR_ZERO_BALANCE' in err:
+                dashboard.add_log(f"{RED}[-] Waryono: {err}{RESET}")
+                return None, None
+        except: time.sleep(2)
+
+    if not tid: return None, None
+
+    for _ in range(timeout // 3):
+        time.sleep(3)
+        try:
+            r = requests.get(
+                WARYONO_RES,
+                params={'apikey': api_key, 'action': 'get', 'id': tid, 'json': 1},
+                timeout=30
+            )
+            data = r.json()
+            if data.get('status') == 1:
+                return _parse_coord(data.get('request', ''))
+            if data.get('request') == 'CAPCHA_NOT_READY':
+                continue
+            return None, None
+        except: continue
+    return None, None
+
+def waryono_solve_turnstile(api_key, page_url=BASE_URL, timeout=120):
+    tid = None
+    for _ in range(3):
+        try:
+            r = requests.post(
+                WARYONO_IN,
+                json={
+                    'apikey': api_key,
+                    'methods': 'turnstile',
+                    'sitekey': TURNSTILE_SITEKEY,
+                    'pageurl': page_url,
+                    'json': 1
+                },
+                timeout=30
+            )
+            data = r.json()
+            if data.get('status') == 1:
+                tid = data.get('request')
+                break
+        except: time.sleep(2)
+
+    if not tid: return None
+
+    for _ in range(timeout // 3):
+        time.sleep(3)
+        try:
+            r = requests.get(
+                WARYONO_RES,
+                params={'apikey': api_key, 'action': 'get', 'id': tid, 'json': 1},
+                timeout=30
+            )
+            data = r.json()
+            if data.get('status') == 1:
+                return data.get('request', '')
+            if data.get('request') == 'CAPCHA_NOT_READY':
+                continue
+            return None
+        except: continue
+    return None
+
+# ==========================================
+#  COORD PARSER
+# ==========================================
+def _parse_coord(result):
+    """Parse 'x:74,y:42' atau '74,42'."""
+    result = str(result).strip()
+    m = re.search(r'x[:\s]*(\d+)[,\s]+y[:\s]*(\d+)', result, re.IGNORECASE)
+    if m:
+        try: return int(m.group(1)), int(m.group(2))
+        except: return None, None
+    m = re.search(r'(\d+)\s*,\s*(\d+)', result)
+    if m:
+        try: return int(m.group(1)), int(m.group(2))
         except: return None, None
     return None, None
 
-def solve_turnstile(api_key, page_url=BASE_URL):
-    for attempt in range(3):
-        try:
-            resp = requests.get(f"{SITE_URL}/in.php", params={'key': api_key, 'method': 'turnstile', 'sitekey': TURNSTILE_SITEKEY, 'pageurl': page_url, 'json': 1}, timeout=30)
-            data = resp.json()
-            if data.get('status') == 1:
-                task_id = data['request']; break
-        except:
-            if attempt < 2: time.sleep(2)
-            continue
-    else: return None
-    for _ in range(40):
-        time.sleep(3)
-        try:
-            resp = requests.get(f"{SITE_URL}/res.php", params={'key': api_key, 'action': 'get', 'id': task_id, 'json': 1}, timeout=30)
-            data = resp.json()
-            if data.get('status') == 1: return data['request']
-            if data.get('request', '') == 'CAPCHA_NOT_READY': continue
-            return None
-        except: continue
-    return None
+# ==========================================
+#  ROUTER SOLVER
+# ==========================================
+def solve_adcoins_captcha(solver, api_key, image_b64):
+    if solver == 'waryono':
+        return waryono_solve_adcoins(api_key, image_b64)
+    return skipcha_solve_adcoins(api_key, image_b64)
+
+def solve_turnstile(solver, api_key, page_url=BASE_URL):
+    if solver == 'waryono':
+        return waryono_solve_turnstile(api_key, page_url)
+    return skipcha_solve_turnstile(api_key, page_url)
 
 # ==========================================
-#  FUNGSI WEBSITE
+#  CONFIG MENU
+# ==========================================
+def config_menu():
+    while True:
+        clear_screen()
+        print(f"\n{CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}")
+        print(f"{BOLD}{BLUE}⚙️  KONFIGURASI AKUN & API KEY{RESET}")
+        print(f"{CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}")
+
+        config = load_config()
+        email = config.get('email', '(belum diisi)')
+        api_cfg = load_api_cfg()
+        solver = api_cfg.get('solver', 'skipcha')
+        sk = api_cfg.get('skipcha', '')
+        wy = api_cfg.get('waryono', '')
+
+        print(f"\n{BLUE}📧 Email         : {YELLOW}{email}{RESET}")
+        print(f"{BLUE}🔧 Solver aktif  : {GREEN}{solver.upper()}{RESET}")
+        print(f"{BLUE}🔑 Skipcha Key   : {YELLOW}{(sk[:8] + '...' + sk[-4:]) if len(sk) > 12 else (sk or '(kosong)')}{RESET}")
+        print(f"{BLUE}🔑 Waryono Key   : {YELLOW}{(wy[:8] + '...' + wy[-4:]) if len(wy) > 12 else (wy or '(kosong)')}{RESET}")
+
+        print(f"\n{CYAN}[1] {WHITE}Ubah Email{RESET}")
+        print(f"{CYAN}[2] {WHITE}Ubah Skipcha API Key{RESET}")
+        print(f"{CYAN}[3] {WHITE}Ubah Waryono API Key{RESET}")
+        print(f"{CYAN}[4] {WHITE}Ganti Solver Aktif ({GREEN}{solver}{WHITE}){RESET}")
+        print(f"{CYAN}[0] {WHITE}Kembali{RESET}")
+
+        choice = input(f"\n{CYAN}Pilih: {RESET}").strip()
+
+        if choice == '1':
+            new_email = input(f"{CYAN}📧 Email baru: {RESET}").strip()
+            if new_email:
+                config['email'] = new_email
+                save_config(config)
+                print(f"{GREEN}✅ Email diupdate!{RESET}")
+            else:
+                print(f"{RED}❌ Tidak boleh kosong!{RESET}")
+            time.sleep(1.5)
+
+        elif choice == '2':
+            new_api = input(f"{CYAN}🔑 Skipcha Key baru: {RESET}").strip()
+            if new_api:
+                api_cfg['skipcha'] = new_api
+                save_api_cfg(api_cfg)
+                print(f"{GREEN}✅ Skipcha key diupdate!{RESET}")
+            else:
+                print(f"{RED}❌ Tidak boleh kosong!{RESET}")
+            time.sleep(1.5)
+
+        elif choice == '3':
+            new_api = input(f"{CYAN}🔑 Waryono Key baru: {RESET}").strip()
+            if new_api:
+                api_cfg['waryono'] = new_api
+                save_api_cfg(api_cfg)
+                print(f"{GREEN}✅ Waryono key diupdate!{RESET}")
+            else:
+                print(f"{RED}❌ Tidak boleh kosong!{RESET}")
+            time.sleep(1.5)
+
+        elif choice == '4':
+            print(f"\n{CYAN}Pilih solver:{RESET}")
+            print(f"  {GREEN}[1]{RESET} Skipcha")
+            print(f"  {GREEN}[2]{RESET} Waryono")
+            sc = input(f"{CYAN}Pilih (1/2): {RESET}").strip()
+            if sc == '1':
+                api_cfg['solver'] = 'skipcha'
+                save_api_cfg(api_cfg)
+                print(f"{GREEN}✅ Solver → SKIPCHA{RESET}")
+            elif sc == '2':
+                api_cfg['solver'] = 'waryono'
+                save_api_cfg(api_cfg)
+                print(f"{GREEN}✅ Solver → WARYONO{RESET}")
+            time.sleep(1.5)
+
+        elif choice == '0':
+            return
+
+# ==========================================
+#  SESSION & WEBSITE
 # ==========================================
 def create_session():
     session = requests.Session()
@@ -302,20 +506,15 @@ def get_balance(session):
     try:
         resp = session.get(f"{BASE_URL}/faucet", timeout=30)
         html = resp.text
-        match = re.search(r'new_balance"?\s*:\s*([0-9.]+)', html)
-        if match: return float(match.group(1))
-        match = re.search(r'>([0-9.]+)\s*Coins<', html)
-        if match: return float(match.group(1))
-        match = re.search(r'Balance\s*:\s*([0-9.]+)', html)
-        if match: return float(match.group(1))
-        
+        for pat in [r'new_balance"?\s*:\s*([0-9.]+)', r'>([0-9.]+)\s*Coins<', r'Balance\s*:\s*([0-9.]+)']:
+            m = re.search(pat, html)
+            if m: return float(m.group(1))
         resp = session.get(f"{BASE_URL}/dashboard", timeout=30)
         html = resp.text
-        match = re.search(r'new_balance"?\s*:\s*([0-9.]+)', html)
-        if match: return float(match.group(1))
-        match = re.search(r'>([0-9.]+)\s*Coins<', html)
-        if match: return float(match.group(1))
-    except Exception: pass
+        for pat in [r'new_balance"?\s*:\s*([0-9.]+)', r'>([0-9.]+)\s*Coins<']:
+            m = re.search(pat, html)
+            if m: return float(m.group(1))
+    except: pass
     return None
 
 def get_slider_info(session):
@@ -364,9 +563,9 @@ def countdown_timer(seconds):
         seconds -= 1
 
 # ==========================================
-#  LOGIKA UTAMA
+#  FAUCET
 # ==========================================
-def run_faucet(email, api_key):
+def run_faucet(email, solver, api_key):
     session = create_session()
     session.get(f"{BASE_URL}/faucet")
     result = login(session, email)
@@ -374,29 +573,40 @@ def run_faucet(email, api_key):
         dashboard.add_log(f"{RED}[-] Login gagal{RESET}"); return
 
     dashboard.add_log(f"{GREEN}[+] Login berhasil{RESET}")
-    
+
     initial_balance = get_balance(session)
     if initial_balance is not None:
         dashboard.update_status(balance=initial_balance)
         dashboard.add_log(f"{BLUE}[+] Balance awal: {initial_balance:.2f} Coins{RESET}")
 
-    claim_count = 0; total_earned = 0.0
+    claim_count = 0
+    total_earned = 0.0
     while True:
         claim_count += 1
-        dashboard.update_status(mode="🔥 Faucet Claim", claim_count=claim_count, total_earned=total_earned, last_action="Memulai...", next_action="")
+        dashboard.update_status(
+            mode="🔥 Faucet Claim",
+            claim_count=claim_count,
+            total_earned=total_earned,
+            last_action="Memulai...",
+            next_action="",
+            solver=solver
+        )
         slider_token, slider_target = get_slider_info(session)
         slider_pos = max(0, min(100, slider_target))
+
         while True:
             dashboard.update_status(last_action="Generate Captcha...")
             img_b64, n1_token, _ = generate_captcha(session)
             if not img_b64:
                 dashboard.add_log(f"{RED}[-] Gagal generate, coba lagi...{RESET}")
                 time.sleep(2); continue
-            dashboard.update_status(last_action="🧩 Solve Captcha (BAS)...")
-            cx, cy = solve_adcoins_captcha(api_key, img_b64)
+
+            dashboard.update_status(last_action=f"🧩 Solve ({solver})...")
+            cx, cy = solve_adcoins_captcha(solver, api_key, img_b64)
             if cx is None:
                 dashboard.add_log(f"{RED}[-] Solve captcha gagal, coba lagi...{RESET}")
                 time.sleep(1); continue
+
             dashboard.update_status(last_action="🔍 Verifikasi Captcha...")
             result = verify_captcha(session, n1_token, cx, cy)
             if not result.get('success'):
@@ -404,6 +614,7 @@ def run_faucet(email, api_key):
                 time.sleep(1); continue
             dashboard.add_log(f"{GREEN}[+] Captcha berhasil{RESET}")
             break
+
         dashboard.update_status(last_action="💰 Klaim Faucet...")
         claim_result = claim_faucet(session, slider_token, slider_pos, n1_token)
         if claim_result.get('success'):
@@ -411,12 +622,12 @@ def run_faucet(email, api_key):
             try: reward = float(reward)
             except: reward = 10.0
             total_earned += reward
-            
+
             current_balance = get_balance(session)
             if current_balance is not None:
                 dashboard.update_status(balance=current_balance)
                 dashboard.add_log(f"{BLUE}[+] Balance: {current_balance:.2f} Coins{RESET}")
-            
+
             dashboard.add_log(f"{GREEN}[+] Earned {reward:.2f} coins{RESET}")
             dashboard.update_status(total_earned=total_earned, last_action="✅ Klaim Sukses")
             countdown_timer(60)
@@ -425,120 +636,145 @@ def run_faucet(email, api_key):
             if 'wait' in msg.lower():
                 wait_match = re.search(r'(\d+):(\d+)', msg)
                 wait_time = 60
-                if wait_match: wait_time = int(wait_match.group(1)) * 60 + int(wait_match.group(2)) + 5
-                dashboard.add_log(f"{YELLOW}[-] Cooldown: Menunggu {wait_time}s...{RESET}")
+                if wait_match:
+                    wait_time = int(wait_match.group(1)) * 60 + int(wait_match.group(2)) + 5
+                dashboard.add_log(f"{YELLOW}[-] Cooldown: {wait_time}s...{RESET}")
                 countdown_timer(wait_time)
             else:
                 dashboard.add_log(f"{RED}[-] Klaim gagal: {msg}{RESET}")
                 time.sleep(5)
 
-def run_ptc(email, api_key):
+# ==========================================
+#  PTC
+# ==========================================
+def run_ptc(email, solver, api_key):
     session = create_session()
     result = login(session, email)
     if not result.get('success'):
         dashboard.add_log(f"{RED}[-] Login gagal{RESET}"); return
     dashboard.add_log(f"{GREEN}[+] Login berhasil{RESET}")
+
     initial_balance = get_balance(session)
-    if initial_balance is not None: dashboard.update_status(balance=initial_balance)
+    if initial_balance is not None:
+        dashboard.update_status(balance=initial_balance)
 
     dashboard.add_log(f"{BLUE}[*] Mengambil daftar iklan PTC...{RESET}")
     resp = session.get(f"{BASE_URL}/ptc")
     ads = parse_ptc_ads(resp.text)
     dashboard.add_log(f"{GREEN}[+] Ditemukan {len(ads)} iklan{RESET}")
     if not ads: return
+
     success = 0
     for i, ad in enumerate(ads, 1):
-        dashboard.update_status(mode="📢 Internal PTC Ads", claim_count=i, total_earned=success * 10.0, last_action=f"Memproses: {ad['title'][:20]}...", next_action=f"{ad['duration']}s")
+        dashboard.update_status(
+            mode="📢 Internal PTC Ads",
+            claim_count=i,
+            total_earned=success * 10.0,
+            last_action=f"Proses: {ad['title'][:20]}...",
+            next_action=f"{ad['duration']}s",
+            solver=solver
+        )
+
         view_result = create_ptc_view(session, ad['id'])
         if not view_result.get('success'):
             msg = view_result.get('message', '')
             if msg: dashboard.add_log(f"{RED}[-] {msg}{RESET}")
             continue
         view_id = view_result.get('view_id')
+
         dashboard.update_status(last_action=f"⏳ Menunggu {ad['duration']} detik...")
         time.sleep(ad['duration'] + 1)
-        dashboard.update_status(last_action="🔐 Menyelesaikan Turnstile...")
-        token = solve_turnstile(api_key)
+
+        dashboard.update_status(last_action=f"🔐 Turnstile ({solver})...")
+        token = solve_turnstile(solver, api_key)
         if not token:
             dashboard.add_log(f"{RED}[-] Turnstile gagal{RESET}")
             continue
+
         claim_result = claim_ptc_view(session, view_id, token)
         if claim_result.get('success'):
             success += 1
             dashboard.add_log(f"{GREEN}[+] Iklan {ad['title'][:20]} berhasil!{RESET}")
             current_balance = get_balance(session)
-            if current_balance is not None: dashboard.update_status(balance=current_balance)
+            if current_balance is not None:
+                dashboard.update_status(balance=current_balance)
             dashboard.update_status(total_earned=success * 10.0, last_action="✅ Iklan Sukses")
         else:
             msg = claim_result.get('message', 'Gagal')
             dashboard.add_log(f"{RED}[-] {msg}{RESET}")
         time.sleep(2)
-    dashboard.add_log(f"{GREEN}[+] PTC Selesai: {success}/{len(ads)} diklaim{RESET}")
+
+    dashboard.add_log(f"{GREEN}[+] PTC Selesai: {success}/{len(ads)}{RESET}")
 
 # ==========================================
-#  MENU UTAMA
+#  MAIN MENU
 # ==========================================
 def main_menu():
-    clear_screen()
-    w = 50
-    print(f"{CYAN}╭{'─' * w}╮{RESET}")
-    print(f"{CYAN}│{RESET}{MAGENTA}{BOLD}     ⚡  A D C O I N S   A U T O   B O T  ⚡{RESET}{' ' * (w - 48)}{CYAN}│{RESET}")
-    print(f"{CYAN}╰{'─' * w}╯{RESET}\n")
-    
-    print(f"{BLUE}┌{'─' * w}┐{RESET}")
-    print(f"{BLUE}│{RESET}{BOLD}{CYAN}  🌐 WEBSITE & FUNCTIONS{RESET}{' ' * (w - 26)}{BLUE}│{RESET}")
-    print(f"{BLUE}├{'─' * w}┤{RESET}")
-    def info_line(label, value):
-        text = f"  {label} : {value}"
-        print(f"{BLUE}│{RESET} {text}{' ' * (w - ansi_len(text) - 2)}{BLUE}│{RESET}")
-    info_line("Website", WHITE + WEBSITE_NAME)
-    info_line("Functions", WHITE + "🔥 FAUCET | 📢 PTC")
-    print(f"{BLUE}└{'─' * w}┘{RESET}\n")
-    
-    print(f"{GREEN}  1️⃣  {WHITE}🔥 Start Faucet Farming")
-    print(f"{GREEN}  2️⃣  {WHITE}📢 Claim PTC Ads")
-    print(f"{GREEN}  3️⃣  {WHITE}⚙️  Config Email & API Key")
-    print(f"{RED}  0️⃣  {WHITE}🚪 Exit")
-    print()
-    
-    email = get_email()
-    api_key = get_bas_api_key()
-    choice = input(f"{CYAN}👉 Pilih opsi (0-3): {RESET}").strip()
-    return choice, email, api_key
-
-# ==========================================
-#  MAIN
-# ==========================================
-def main():
     while True:
-        choice, email, api_key = main_menu()
+        clear_screen()
+        w = 50
+        print(f"{CYAN}╭{'─' * w}╮{RESET}")
+        print(f"{CYAN}│{RESET}{MAGENTA}{BOLD}     ⚡  A D C O I N S   A U T O   B O T  ⚡{RESET}{' ' * (w - 48)}{CYAN}│{RESET}")
+        print(f"{CYAN}╰{'─' * w}╯{RESET}\n")
+
+        api_cfg = load_api_cfg()
+        solver = api_cfg.get('solver', 'skipcha')
+
+        print(f"{BLUE}┌{'─' * w}┐{RESET}")
+        print(f"{BLUE}│{RESET}{BOLD}{CYAN}  🌐 WEBSITE & FUNCTIONS{RESET}{' ' * (w - 26)}{BLUE}│{RESET}")
+        print(f"{BLUE}├{'─' * w}┤{RESET}")
+        def info_line(label, value):
+            text = f"  {label} : {value}"
+            print(f"{BLUE}│{RESET} {text}{' ' * (w - ansi_len(text) - 2)}{BLUE}│{RESET}")
+        info_line("Website", WHITE + WEBSITE_NAME)
+        info_line("Functions", WHITE + "🔥 FAUCET | 📢 PTC")
+        info_line("Solver", GREEN + solver.upper())
+        print(f"{BLUE}└{'─' * w}┘{RESET}\n")
+
+        print(f"{GREEN}  1️⃣  {WHITE}🔥 Start Faucet Farming")
+        print(f"{GREEN}  2️⃣  {WHITE}📢 Claim PTC Ads")
+        print(f"{GREEN}  3️⃣  {WHITE}⚙️  Config Email & API Key")
+        print(f"{RED}  0️⃣  {WHITE}🚪 Exit")
+        print()
+
+        choice = input(f"{CYAN}👉 Pilih opsi (0-3): {RESET}").strip()
+
         if choice == '0':
             print(f"\n{GREEN}👋 Sampai jumpa!{RESET}")
             sys.exit(0)
-        elif choice == '1':
-            clear_screen()
-            dashboard.update_status(mode="🔥 Starting Faucet...")
-            try:
-                run_faucet(email, api_key)
-            except KeyboardInterrupt:
-                print('\033[?25h', end='')
-                safe_print(f"\n{YELLOW}[!] Dihentikan oleh pengguna.{RESET}")
-                sys.exit()
-            except Exception as e:
-                dashboard.add_log(f"{RED}[-] Error: {e}{RESET}")
-            input(f"\n{CYAN}⌨️  Press Enter untuk kembali ke menu...{RESET}")
-        elif choice == '2':
-            clear_screen()
-            dashboard.update_status(mode="📢 Starting PTC...")
-            try:
-                run_ptc(email, api_key)
-            except KeyboardInterrupt:
-                print('\033[?25h', end='')
-                safe_print(f"\n{YELLOW}[!] Dihentikan oleh pengguna.{RESET}")
-                sys.exit()
-            except Exception as e:
-                dashboard.add_log(f"{RED}[-] Error: {e}{RESET}")
-            input(f"\n{CYAN}⌨️  Press Enter untuk kembali ke menu...{RESET}")
+
+        elif choice in ('1', '2'):
+            email = get_email()
+            solver, api_key = get_active_api()
+            if not api_key:
+                print(f"{RED}❌ API key kosong untuk {solver.upper()}!{RESET}")
+                time.sleep(2); continue
+
+            if choice == '1':
+                clear_screen()
+                dashboard.update_status(mode="🔥 Starting Faucet...", solver=solver)
+                try:
+                    run_faucet(email, solver, api_key)
+                except KeyboardInterrupt:
+                    print('\033[?25h', end='')
+                    safe_print(f"\n{YELLOW}[!] Dihentikan.{RESET}")
+                    sys.exit()
+                except Exception as e:
+                    dashboard.add_log(f"{RED}[-] Error: {e}{RESET}")
+                input(f"\n{CYAN}⌨️  Press Enter...{RESET}")
+            else:
+                clear_screen()
+                dashboard.update_status(mode="📢 Starting PTC...", solver=solver)
+                try:
+                    run_ptc(email, solver, api_key)
+                except KeyboardInterrupt:
+                    print('\033[?25h', end='')
+                    safe_print(f"\n{YELLOW}[!] Dihentikan.{RESET}")
+                    sys.exit()
+                except Exception as e:
+                    dashboard.add_log(f"{RED}[-] Error: {e}{RESET}")
+                input(f"\n{CYAN}⌨️  Press Enter...{RESET}")
+
         elif choice == '3':
             config_menu()
         else:
@@ -550,6 +786,5 @@ if __name__ == '__main__':
         main()
     except KeyboardInterrupt:
         print('\033[?25h', end='')
-        safe_print(f"\n{YELLOW}[!] Bot dihentikan oleh pengguna.{RESET}")
+        safe_print(f"\n{YELLOW}[!] Bot dihentikan.{RESET}")
         sys.exit()
-
