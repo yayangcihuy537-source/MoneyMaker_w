@@ -249,8 +249,8 @@
           "runner": "python3"
         },
         "27": {
-          "label": "Coming Soon",
-          "file": "",
+          "label": "TReward 🟢",
+          "file": "tr.py",
           "runner": "python3"
         }
       }
