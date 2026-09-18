@@ -2,8 +2,8 @@
 
 error_reporting(0);
 date_default_timezone_set('Asia/Jakarta');
-$configFile = "makeyou1.json";
-$waryono = "makeyou1.txt";
+$configFile = "confi5g.json";
+$waryono = "cook5ies.txt";
 
 const hitam  = "\033[0;30m";
 const merah  = "\033[0;31m";
@@ -28,7 +28,7 @@ const host        = "https://makeyoutask.com";
 const in      = "https://api.waryono.my.id/in.php";
 
 function device_token_init() {
-    $file = "device_token1.txt";
+    $file = "device_token.txt";
     if (file_exists($file)) {
         $tok = trim(file_get_contents($file));
         if ($tok !== '') {
@@ -367,6 +367,36 @@ if (strpos($dash, "Dashboard | MakeYouTask.Com") !== false){
 	echo putih."user: ".cyan.$username.putih." balance: ".biru.$balance."\n";
 	echo putih."level: ".biru.$level.putih." (".biru.$current_exp.putih.")\n";
 
+	// Pilih jenis misi yang ingin dikerjakan.
+	menu_misi:
+	echo "\n";
+	echo cyan."╔══════════════════════════════════════════╗\n";
+	echo cyan."║     Mana yang pengen lu garap bujang     ║\n";
+	echo cyan."║                 enam?                   ║\n";
+	echo cyan."╠══════════════════════════════════════════╣\n";
+	echo putih."║ 1. Watch & Earn  (pilihan TOLOL)       ║\n";
+	echo putih."║ 2. Short Earn    (Token)               ║\n";
+	echo putih."║ 0. Mati aja lu   (exit)                ║\n";
+	echo cyan."╚══════════════════════════════════════════╝\n";
+	echo putih."Pilih [1/2/0] : ".kuning;
+	$pilihan = trim(fgets(STDIN));
+	if ($pilihan === '0') {
+		echo merah."Keluar...\n".reset;
+		exit;
+	}
+	if ($pilihan === '1') {
+		$mission_mode = 'watch';
+	} elseif ($pilihan === '2') {
+		$mission_mode = 'ptc';
+	} else {
+		echo merah."Pilihan tidak valid. Masukkan 1, 2, atau 0.\n".reset;
+	sleep(1);
+	goto menu_misi;
+	}
+
+	if ($mission_mode === 'ptc') {
+		goto ptc;
+	}
 
 	reload:
 	echo "\n";
@@ -763,4 +793,3 @@ allsuki($a,$b,$c,$d);
  }
 
 }
-
