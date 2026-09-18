@@ -24,7 +24,7 @@
           "runner": "python3"
         },
         "5": {
-          "label": "Aruble 🟢",
+          "label": "Aruble 🔴",
           "file": "aruble.php",
           "runner": "php"
         },
