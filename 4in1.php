@@ -392,12 +392,15 @@ function cp_claim_once(&$st) {
 }
 
 // ============================================================
-// APP 3: CoinFree (coinfree.app) - cf_
+// APP 3: CoinFree (coinfree.app) - cf_  [PATCHED]
 // ============================================================
 const CF_API     = "https://coinfree.app/api.php";
 const CF_SITEKEY = "0x4AAAAAAB6mAUIH75NUE5fq";
 const CF_DOMAIN  = "https://coinfree.app";
-const CF_MODES   = ["drop","coinflip","claw","plinko","target","box","card","wheel","roll"];
+// FIX: "roll" udah invalid, dihapus. 8 mode valid.
+const CF_MODES   = ["drop","coinflip","claw","plinko","target","box","card","wheel"];
+const CF_RATE_LIMIT_WAIT = 90;   // detik, kalau kena "Too many requests from this IP"
+const CF_MODE_LIMIT_WAIT = 3600; // detik, kalau mode limit harian
 
 $CF_HEADERS = [
     'content-type: application/json',
@@ -417,6 +420,21 @@ function cf_api($action, $extra = []) {
 function cf_blk($r) { if (is_blocked_resp($r)) { echo putih . "[CF] " . merah . ($r['message'] ?? 'blocked') . "\n"; return true; } return false; }
 function cf_exp($r) { return is_expired_resp($r) ? prompt_reprompt('cf', 'CoinFree', $r['message'] ?? 'expired') : false; }
 
+// helper: klasifikasi pesan error CF
+function cf_classify($msg) {
+    $m = strtolower(is_string($msg) ? $msg : '');
+    if ($m === '') return 'unknown';
+    if (strpos($m, 'too many requests') !== false || strpos($m, 'rate limit') !== false || strpos($m, 'slow down') !== false)
+        return 'ratelimit';
+    if (strpos($m, 'invalid faucet mode') !== false || strpos($m, 'unknown mode') !== false || strpos($m, 'mode not found') !== false || strpos($m, 'invalid mode') !== false)
+        return 'invalid_mode';
+    if (strpos($m, 'limit') !== false || strpos($m, 'exhaust') !== false || strpos($m, 'daily') !== false || strpos($m, 'cap') !== false)
+        return 'limited';
+    if (strpos($m, 'cooldown') !== false || strpos($m, 'wait') !== false)
+        return 'cooldown';
+    return 'unknown';
+}
+
 function cf_claim_once(&$st) {
     $u = cf_api("get_user_data");
     if (cf_blk($u)) return 'blocked';
@@ -424,6 +442,7 @@ function cf_claim_once(&$st) {
     if (($u['status'] ?? '') != 'success') { $st['ready_at'] = time()+30; return 'cooldown'; }
     $d = $u['data'] ?? $u;
 
+    // ===== first-time: daily, referral, coupon =====
     if (!empty($st['first'])) {
         $r = cf_api("claim_daily_streak");
         if (!cf_blk($r) && !cf_exp($r) && ($r['status'] ?? '') == 'success') {
@@ -446,57 +465,136 @@ function cf_claim_once(&$st) {
 
     echo putih . "[CF] bal " . biru . kfnum($d['balance'] ?? 0) . " " . strtoupper($d['preferred_coin'] ?? '') . "\n";
 
+    // ===== global cooldown =====
     $gl = intval($d['faucet_global_cooldown_remaining'] ?? 0);
     if ($gl > 0) { $st['ready_at'] = time() + $gl; return 'cooldown'; }
 
+    // ===== cari mode yang ready =====
+    $now = time();
     $picked = null;
+    $shortest = 999999;
+
     for ($i = 0; $i < count(CF_MODES); $i++) {
         $st['mode_idx'] = ($st['mode_idx'] + 1) % count(CF_MODES);
         $m = CF_MODES[$st['mode_idx']];
+
+        // FIX: skip kalau mode udah di-mark dead (invalid mode) atau notified (limit)
+        if (!empty($st['dead'][$m]))     continue;
         if (!empty($st['notified'][$m])) continue;
-        if (isset($st['ready_at_mode'][$m]) && $st['ready_at_mode'][$m] > time()) continue;
+
+        // FIX: cek ready_at_mode dulu sebelum query cooldown
+        if (isset($st['ready_at_mode'][$m]) && $st['ready_at_mode'][$m] > $now) {
+            $shortest = min($shortest, $st['ready_at_mode'][$m] - $now);
+            continue;
+        }
+
         $left = intval($d["faucet_cooldown_remaining_".$m] ?? 0);
-        if ($left > 0) { $st['ready_at_mode'][$m] = time() + $left; continue; }
-        $picked = $m; break;
-    }
-    if (!$picked) {
-        $minw = 999999; $now = time();
-        foreach ($st['ready_at_mode'] as $t) if ($t > $now && $t-$now < $minw) $minw = $t-$now;
-        if ($minw >= 999999) return 'limited';
-        $st['ready_at'] = $now + $minw;
-        return 'cooldown';
+        if ($left > 0) {
+            $st['ready_at_mode'][$m] = $now + $left;
+            $shortest = min($shortest, $left);
+            continue;
+        }
+        $picked = $m;
+        break;
     }
 
+    if (!$picked) {
+        if ($shortest < 999999) {
+            $st['ready_at'] = $now + $shortest;
+            return 'cooldown';
+        }
+        return 'limited';
+    }
+
+    // ===== get spin reward =====
     $spin = cf_api("get_faucet_spin_reward", ["mode"=>$picked]);
     if (cf_blk($spin)) return 'blocked';
     if (cf_exp($spin)) return 'expired';
+
     if (($spin['status'] ?? '') != 'success') {
         $m = $spin['message'] ?? '';
-        if (stripos($m,'limit') !== false || stripos($m,'exhaust') !== false) { $st['notified'][$picked] = true; return 'skip'; }
+        $cls = cf_classify($m);
+
+        if ($cls === 'ratelimit') {
+            // FIX: rate limit IP → tunggu lama, JANGAN retry cepat
+            echo putih . "[CF " . $picked . "] " . kuning . "rate-limit IP, tunggu " . CF_RATE_LIMIT_WAIT . "s\n";
+            $st['ready_at'] = time() + CF_RATE_LIMIT_WAIT;
+            return 'cooldown';
+        }
+        if ($cls === 'invalid_mode') {
+            // FIX: mode invalid → mark dead permanen
+            if (empty($st['notified'][$picked])) {
+                echo putih . "[CF " . $picked . "] " . kuning . "mode tidak tersedia, buang\n";
+                $st['notified'][$picked] = true;
+            }
+            $st['dead'][$picked] = true;
+            $st['ready_at'] = time() + 2;
+            return 'cooldown';
+        }
+        if ($cls === 'limited') {
+            if (empty($st['notified'][$picked])) {
+                echo putih . "[CF " . $picked . "] " . kuning . "limit tercapai\n";
+                $st['notified'][$picked] = true;
+            }
+            $st['ready_at_mode'][$picked] = time() + CF_MODE_LIMIT_WAIT;
+            $st['ready_at'] = time() + 2;
+            return 'cooldown';
+        }
+        if ($cls === 'cooldown') {
+            $rem = intval($spin["faucet_cooldown_remaining_".$picked] ?? $spin['cooldown_remaining'] ?? 0);
+            if ($rem > 0) { $st['ready_at'] = time() + $rem; return 'cooldown'; }
+        }
+
         $rem = intval($spin["faucet_cooldown_remaining_".$picked] ?? $spin['cooldown_remaining'] ?? 0);
         if ($rem > 0) { $st['ready_at'] = time() + $rem; return 'cooldown'; }
         echo putih . "[CF " . $picked . "] " . merah . $m . "\n";
-        $st['ready_at'] = time() + 10; return 'cooldown';
+        $st['ready_at'] = time() + 10;
+        return 'cooldown';
     }
 
+    // ===== solve captcha =====
     $tok = ksolve(cfg_apikey(), CF_DOMAIN, CF_SITEKEY, "faucet_claim");
     if (!$tok) { $st['ready_at'] = time() + 10; return 'cooldown'; }
 
+    // ===== claim =====
     $cf = cf_api("claim_faucet", ["mode"=>$picked, "captchaToken"=>$tok]);
     if (cf_blk($cf)) return 'blocked';
     if (cf_exp($cf)) return 'expired';
+
     if (($cf['status'] ?? '') != 'success') {
         $m = $cf['message'] ?? 'err';
-        if (stripos($m,'limit') !== false) { $st['notified'][$picked] = true; return 'skip'; }
+        $cls = cf_classify($m);
+
+        if ($cls === 'ratelimit') {
+            echo putih . "[CF " . $picked . "] " . kuning . "rate-limit IP, tunggu " . CF_RATE_LIMIT_WAIT . "s\n";
+            $st['ready_at'] = time() + CF_RATE_LIMIT_WAIT;
+            return 'cooldown';
+        }
+        if ($cls === 'invalid_mode') {
+            $st['dead'][$picked] = true;
+            $st['notified'][$picked] = true;
+            $st['ready_at'] = time() + 2;
+            return 'cooldown';
+        }
+        if ($cls === 'limited') {
+            $st['notified'][$picked] = true;
+            $st['ready_at_mode'][$picked] = time() + CF_MODE_LIMIT_WAIT;
+            $st['ready_at'] = time() + 2;
+            return 'cooldown';
+        }
+
         $rem = intval($cf["faucet_cooldown_remaining_".$picked] ?? 0);
         if ($rem > 0) { $st['ready_at'] = time() + $rem; return 'cooldown'; }
         echo putih . "[CF " . $picked . "] " . merah . $m . "\n";
-        $st['ready_at'] = time() + 10; return 'cooldown';
+        $st['ready_at'] = time() + 10;
+        return 'cooldown';
     }
+
+    // ===== sukses =====
     $dd = $cf['data'] ?? $cf;
     $amt = $dd['claimed_amount'] ?? $dd['reward_amount'] ?? '?';
     echo putih . "[CF] " . kuning . $picked . putih . " +" . hijau . kfnum($amt) . "\n";
-    $st['ready_at'] = time() + intval($dd['faucet_global_cooldown_seconds'] ?? 60);
+    $st['ready_at'] = time() + intval($dd['faucet_global_cooldown_seconds'] ?? 60) + mt_rand(2,5);
     return 'claimed';
 }
 
@@ -640,7 +738,16 @@ function run_rotasi($apps = ['fm','cp','cf','ff']) {
     $labels = ['fm'=>'FaucetMini','cp'=>'CoinPlay','cf'=>'CoinFree','ff'=>'FaucetFi'];
     $st = [];
     foreach ($apps as $a) {
-        $st[$a] = ['limited'=>false,'ready_at'=>0,'mode_idx'=>-1,'first'=>true,'notified'=>[],'ready_at_mode'=>[]];
+        // FIX: tambah 'dead' buat track mode yang invalid/mati
+        $st[$a] = [
+            'limited' => false,
+            'ready_at' => 0,
+            'mode_idx' => -1,
+            'first' => true,
+            'notified' => [],
+            'dead' => [],
+            'ready_at_mode' => []
+        ];
     }
 
     kclear();
@@ -803,7 +910,10 @@ function menu_main() {
             $s = trim(fgets(STDIN));
             $map = ['1'=>'fm','2'=>'cp','3'=>'cf','4'=>'ff'];
             if (isset($map[$s])) {
-                $st = ['limited'=>false,'ready_at'=>0,'mode_idx'=>-1,'first'=>true,'notified'=>[],'ready_at_mode'=>[]];
+                $st = [
+                    'limited' => false, 'ready_at' => 0, 'mode_idx' => -1,
+                    'first' => true, 'notified' => [], 'dead' => [], 'ready_at_mode' => []
+                ];
                 $fn = $map[$s] . '_claim_once';
                 echo putih . "\n--- single run ---\n";
                 $fn($st);
