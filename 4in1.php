@@ -877,7 +877,7 @@ function menu_main() {
             echo "\n";
         }
         echo putih . "------------------------------------------\n";
-        echo putih . "  1. " . cyan . "Start Rotasi ALL (FM -> CP -> CF -> FF)\n";
+        echo putih . "  1. " . cyan . "Start Rotasi ALL 4 (FM -> CP -> CF -> FF)\n";
         echo putih . "  2. " . cyan . "Start Rotasi custom\n";
         echo putih . "  3. " . cyan . "Run Single App\n";
         echo putih . "  4. " . cyan . "Reset Semua InitData\n";
