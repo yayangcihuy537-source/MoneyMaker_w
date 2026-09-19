@@ -2,8 +2,15 @@
 error_reporting(0);
 date_default_timezone_set('Asia/Jakarta');
 
-$CONFIG_FILE = "config.json";
+// ============================================================
+// GLOBAL CONFIG
+// ============================================================
+const CONFIG_FILE  = "faucet_4in1_config.json";
+const SOLVER_IN    = "https://api.waryono.my.id/in.php";
+const SOLVER_OUT   = "https://api.waryono.my.id/res.php";
+const FF_DEVID     = "0000000000000000000000000000000000000000000000000000000000000000";
 
+// ===== COLORS =====
 const hitam  = "\033[0;30m";
 const merah  = "\033[0;31m";
 const hijau  = "\033[0;32m";
@@ -13,10 +20,9 @@ const cyan   = "\033[0;36m";
 const putih  = "\033[0;37m";
 const reset  = "\033[0m";
 
-const SOLVER_IN  = "https://api.waryono.my.id/in.php";
-const SOLVER_OUT = "https://api.waryono.my.id/res.php";
-
-// ===== UTILS =====
+// ============================================================
+// UTILS
+// ============================================================
 function kclear() { (PHP_OS == "Linux") ? system('clear') : pclose(popen('cls', 'w')); }
 
 function ktimer($seconds, $prefix = "[!] wait") {
@@ -37,6 +43,8 @@ function ktimer($seconds, $prefix = "[!] wait") {
     echo "\r                                     \r";
 }
 
+function kfnum($n) { return rtrim(rtrim(number_format((float)$n, 8, '.', ''), '0'), '.'); }
+
 function khttp($url, $payload = null, $headers = [], $method = "POST") {
     while (true) {
         $ch = curl_init();
@@ -53,8 +61,6 @@ function khttp($url, $payload = null, $headers = [], $method = "POST") {
         echo putih . "\nretry...\n"; sleep(2);
     }
 }
-
-function kfnum($n) { return rtrim(rtrim(number_format((float)$n, 8, '.', ''), '0'), '.'); }
 
 function ksolve($apikey, $domain, $sitekey, $action = "") {
     while (true) {
@@ -80,54 +86,49 @@ function ksolve($apikey, $domain, $sitekey, $action = "") {
     }
 }
 
-// ===== CONFIG =====
+// ============================================================
+// CONFIG IO
+// ============================================================
 function cfg_load() {
-    global $CONFIG_FILE;
-    if (!file_exists($CONFIG_FILE)) {
-        $init = ["apikey"=>"","apps"=>[
-            "ff"=>["initData"=>"","coupon"=>""],
-            "cp"=>["initData"=>"","coupon"=>""],
-            "cf"=>["initData"=>"","coupon"=>""],
-            "fm"=>["initData"=>"","coupon"=>""]
-        ]];
-        file_put_contents($CONFIG_FILE, json_encode($init, JSON_PRETTY_PRINT));
-        return $init;
-    }
-    $d = json_decode(file_get_contents($CONFIG_FILE), true);
-    if (!is_array($d)) $d = [];
+    $f = CONFIG_FILE;
+    $empty = ["apikey"=>"","apps"=>[
+        "ff"=>["initData"=>"","coupon"=>""],
+        "cp"=>["initData"=>"","coupon"=>""],
+        "cf"=>["initData"=>"","coupon"=>""],
+        "fm"=>["initData"=>"","coupon"=>""]
+    ]];
+    if (!file_exists($f)) { file_put_contents($f, json_encode($empty, JSON_PRETTY_PRINT)); return $empty; }
+    $d = json_decode(file_get_contents($f), true);
+    if (!is_array($d)) $d = $empty;
     if (!isset($d['apikey'])) $d['apikey'] = "";
-    if (!isset($d['apps'])) $d['apps'] = [];
+    if (!isset($d['apps']) || !is_array($d['apps'])) $d['apps'] = [];
     foreach (["ff","cp","cf","fm"] as $k) {
         if (!isset($d['apps'][$k])) $d['apps'][$k] = ["initData"=>"","coupon"=>""];
+        if (!isset($d['apps'][$k]['initData'])) $d['apps'][$k]['initData'] = "";
+        if (!isset($d['apps'][$k]['coupon']))   $d['apps'][$k]['coupon']   = "";
     }
     return $d;
 }
-function cfg_save($d) { global $CONFIG_FILE; file_put_contents($CONFIG_FILE, json_encode($d, JSON_PRETTY_PRINT)); }
-function cfg_apikey() { return trim(cfg_load()['apikey']); }
-function cfg_init($k) { return trim(cfg_load()['apps'][$k]['initData'] ?? ''); }
-function cfg_coupon($k) { return trim(cfg_load()['apps'][$k]['coupon'] ?? ''); }
-function cfg_set_init($k, $v) { $d = cfg_load(); $d['apps'][$k]['initData'] = $v; cfg_save($d); }
-function cfg_set_coupon($k, $v) { $d = cfg_load(); $d['apps'][$k]['coupon'] = $v; cfg_save($d); }
+function cfg_save($d) { file_put_contents(CONFIG_FILE, json_encode($d, JSON_PRETTY_PRINT)); }
+function cfg_apikey()      { return trim(cfg_load()['apikey']); }
+function cfg_init($k)      { return trim(cfg_load()['apps'][$k]['initData'] ?? ''); }
+function cfg_coupon($k)    { return trim(cfg_load()['apps'][$k]['coupon'] ?? ''); }
+function cfg_set_init($k,$v)   { $d = cfg_load(); $d['apps'][$k]['initData'] = $v; cfg_save($d); }
+function cfg_set_coupon($k,$v) { $d = cfg_load(); $d['apps'][$k]['coupon']   = $v; cfg_save($d); }
 
-// ===== DETECTORS =====
-// BLOCKED: prioritas utama
+// ============================================================
+// SHARED DETECTORS
+// ============================================================
 function is_blocked_resp($j) {
     if (!is_array($j)) return false;
     $st  = strtolower($j['status'] ?? '');
     $msg = strtolower($j['message'] ?? '');
-    if ($st === 'blocked' || $st === 'banned' || $st === 'suspended' || $st === 'unauthorized') return true;
-    foreach ([
-        'under review','cannot use the faucet','cannot use','not allowed',
-        'banned','blocked','suspended','account disabled','account is disabled',
-        'forbidden','restricted','access denied','permanently','violation',
-        'unauthorized access','invalid initdata','invalid initdata.','initdata invalid'
-    ] as $kw) {
+    if (in_array($st, ['blocked','banned','suspended','unauthorized'])) return true;
+    foreach (['under review','cannot use the faucet','cannot use','not allowed','banned','blocked','suspended','account disabled','account is disabled','forbidden','restricted','access denied','permanently','violation','unauthorized access','invalid initdata','initdata invalid'] as $kw) {
         if (strpos($msg, $kw) !== false) return true;
     }
     return false;
 }
-
-// EXPIRED: cuma keyword spesifik
 function is_expired_resp($j) {
     if (!is_array($j)) return false;
     $st  = strtolower($j['status'] ?? '');
@@ -138,26 +139,23 @@ function is_expired_resp($j) {
     }
     return false;
 }
-
 function prompt_reprompt($key, $label, $msg = "initData expired") {
     echo putih . "\n[" . merah . $label . putih . "] " . kuning . $msg . "\n";
     echo putih . "Paste initData baru " . cyan . $label . putih . " (kosong=skip app ini): " . kuning;
     $v = trim(fgets(STDIN));
     if ($v === '') return false;
     cfg_set_init($key, $v);
-    echo hijau . "OK tersimpan\n" . reset;
-    sleep(1);
+    echo hijau . "OK tersimpan\n" . reset; sleep(1);
     return true;
 }
 
 // ============================================================
-// FaucetFi (mini.keran.co) - ff_
+// APP 1: FaucetFi (mini.keran.co) - ff_
 // ============================================================
 const FF_API     = "https://mini.keran.co/api.php";
 const FF_SITEKEY = "0x4AAAAAAACAEtFrYI5hvlhN";
 const FF_DOMAIN  = "https://mini.keran.co";
 const FF_MODES   = ["meteor","card","roll","wheel","box","target","scratch","chest"];
-const FF_DEVID   = "0000000000000000000000000000000000000000000000000000000000000000";
 
 $FF_HEADERS = [
     'sec-ch-ua: "Not=A?Brand";v="99", "Android WebView";v="151", "Chromium";v="151"',
@@ -177,14 +175,8 @@ function ff_api($action, $extra = []) {
     $res = khttp(FF_API, $payload, $FF_HEADERS);
     return json_decode($res, true) ?: ["status"=>"error","message"=>substr($res,0,200)];
 }
+function ff_blk($r) { if (is_blocked_resp($r)) { echo putih . "[FF] " . merah . ($r['message'] ?? 'blocked') . "\n"; return true; } return false; }
 function ff_exp($r) { return is_expired_resp($r) ? prompt_reprompt('ff', 'FaucetFi', $r['message'] ?? 'expired') : false; }
-function ff_blk($r) {
-    if (is_blocked_resp($r)) {
-        echo putih . "[FF] " . merah . ($r['message'] ?? 'blocked') . "\n";
-        return true;
-    }
-    return false;
-}
 
 function ff_claim_once(&$st) {
     $u = ff_api("get_user_data");
@@ -264,8 +256,7 @@ function ff_claim_once(&$st) {
         $m = $c['message'] ?? 'err';
         if (stripos($m,'limit') !== false) { $st['notified'][$mode] = true; return 'skip'; }
         echo putih . "[FF " . $mode . "] " . merah . $m . "\n";
-        $st['ready_at'] = time() + 15;
-        return 'cooldown';
+        $st['ready_at'] = time() + 15; return 'cooldown';
     }
     $mult = ($c['double_applied'] ?? false) ? ($c['double_reward_multiplier'] ?? 2) : 1;
     echo putih . "[FF] " . kuning . $mode . putih . " +" . hijau . ($c['claimed_amount'] ?? '?') . " " . ($c['coin'] ?? '') . " x" . $mult . "\n";
@@ -275,7 +266,7 @@ function ff_claim_once(&$st) {
 }
 
 // ============================================================
-// CoinPlay (tgapp.bagi.co.in) - cp_
+// APP 2: CoinPlay (tgapp.bagi.co.in) - cp_
 // ============================================================
 const CP_API     = "https://tgapp.bagi.co.in/api.php";
 const CP_SITEKEY = "0x4AAAAAAACDrb9H09S1fhrY";
@@ -301,14 +292,8 @@ function cp_api($action, $extra = []) {
     $res = khttp(CP_API, $payload, $CP_HEADERS);
     return json_decode($res, true) ?: ["status"=>"error","message"=>substr($res,0,200)];
 }
+function cp_blk($r) { if (is_blocked_resp($r)) { echo putih . "[CP] " . merah . ($r['message'] ?? 'blocked') . "\n"; return true; } return false; }
 function cp_exp($r) { return is_expired_resp($r) ? prompt_reprompt('cp', 'CoinPlay', $r['message'] ?? 'expired') : false; }
-function cp_blk($r) {
-    if (is_blocked_resp($r)) {
-        echo putih . "[CP] " . merah . ($r['message'] ?? 'blocked') . "\n";
-        return true;
-    }
-    return false;
-}
 
 function cp_claim_once(&$st) {
     $u = cp_api("get_user_data", ["gameType"=>"scratch"]);
@@ -361,7 +346,7 @@ function cp_claim_once(&$st) {
     }
     if (!$picked) {
         $minw = 999999; $now = time();
-        foreach ($st['ready_at_mode'] as $c=>$t) if ($t > $now && $t-$now < $minw) $minw = $t-$now;
+        foreach ($st['ready_at_mode'] as $t) if ($t > $now && $t-$now < $minw) $minw = $t-$now;
         if ($minw >= 999999) return 'limited';
         $st['ready_at'] = $now + $minw;
         return 'cooldown';
@@ -376,8 +361,7 @@ function cp_claim_once(&$st) {
         $rem = intval($spin['cooldown_remaining'] ?? 0);
         if ($rem > 0) { $st['ready_at'] = time() + $rem; return 'cooldown'; }
         echo putih . "[CP " . $picked . "] " . merah . $m . "\n";
-        $st['ready_at'] = time() + 10;
-        return 'cooldown';
+        $st['ready_at'] = time() + 10; return 'cooldown';
     }
 
     $needDbl = false;
@@ -398,8 +382,7 @@ function cp_claim_once(&$st) {
         $rem = intval($c['cooldown_remaining'] ?? 0);
         if ($rem > 0) { $st['ready_at'] = time() + $rem; return 'cooldown'; }
         echo putih . "[CP " . $picked . "] " . merah . $m . "\n";
-        $st['ready_at'] = time() + 10;
-        return 'cooldown';
+        $st['ready_at'] = time() + 10; return 'cooldown';
     }
     $credit = $c['credited_amount'] ?? $c['base_reward'] ?? '?';
     $mult = !empty($c['double_applied']) ? floatval($c['multiplier'] ?? 2) : 1;
@@ -409,7 +392,7 @@ function cp_claim_once(&$st) {
 }
 
 // ============================================================
-// CoinFree (coinfree.app) - cf_
+// APP 3: CoinFree (coinfree.app) - cf_
 // ============================================================
 const CF_API     = "https://coinfree.app/api.php";
 const CF_SITEKEY = "0x4AAAAAAB6mAUIH75NUE5fq";
@@ -431,14 +414,8 @@ function cf_api($action, $extra = []) {
     $res = khttp(CF_API, $payload, $CF_HEADERS);
     return json_decode($res, true) ?: ["status"=>"error","message"=>substr($res,0,200)];
 }
+function cf_blk($r) { if (is_blocked_resp($r)) { echo putih . "[CF] " . merah . ($r['message'] ?? 'blocked') . "\n"; return true; } return false; }
 function cf_exp($r) { return is_expired_resp($r) ? prompt_reprompt('cf', 'CoinFree', $r['message'] ?? 'expired') : false; }
-function cf_blk($r) {
-    if (is_blocked_resp($r)) {
-        echo putih . "[CF] " . merah . ($r['message'] ?? 'blocked') . "\n";
-        return true;
-    }
-    return false;
-}
 
 function cf_claim_once(&$st) {
     $u = cf_api("get_user_data");
@@ -484,7 +461,7 @@ function cf_claim_once(&$st) {
     }
     if (!$picked) {
         $minw = 999999; $now = time();
-        foreach ($st['ready_at_mode'] as $c=>$t) if ($t > $now && $t-$now < $minw) $minw = $t-$now;
+        foreach ($st['ready_at_mode'] as $t) if ($t > $now && $t-$now < $minw) $minw = $t-$now;
         if ($minw >= 999999) return 'limited';
         $st['ready_at'] = $now + $minw;
         return 'cooldown';
@@ -499,8 +476,7 @@ function cf_claim_once(&$st) {
         $rem = intval($spin["faucet_cooldown_remaining_".$picked] ?? $spin['cooldown_remaining'] ?? 0);
         if ($rem > 0) { $st['ready_at'] = time() + $rem; return 'cooldown'; }
         echo putih . "[CF " . $picked . "] " . merah . $m . "\n";
-        $st['ready_at'] = time() + 10;
-        return 'cooldown';
+        $st['ready_at'] = time() + 10; return 'cooldown';
     }
 
     $tok = ksolve(cfg_apikey(), CF_DOMAIN, CF_SITEKEY, "faucet_claim");
@@ -515,8 +491,7 @@ function cf_claim_once(&$st) {
         $rem = intval($cf["faucet_cooldown_remaining_".$picked] ?? 0);
         if ($rem > 0) { $st['ready_at'] = time() + $rem; return 'cooldown'; }
         echo putih . "[CF " . $picked . "] " . merah . $m . "\n";
-        $st['ready_at'] = time() + 10;
-        return 'cooldown';
+        $st['ready_at'] = time() + 10; return 'cooldown';
     }
     $dd = $cf['data'] ?? $cf;
     $amt = $dd['claimed_amount'] ?? $dd['reward_amount'] ?? '?';
@@ -526,7 +501,7 @@ function cf_claim_once(&$st) {
 }
 
 // ============================================================
-// FaucetMini (faucetmini.app) - fm_
+// APP 4: FaucetMini (faucetmini.app) - fm_
 // ============================================================
 const FM_API     = "https://faucetmini.app/api.php";
 const FM_SITEKEY = "0x4AAAAAABuBae9KLy3ELiTP";
@@ -563,14 +538,8 @@ function fm_cdw($j, $def = 60) {
     }
     return $def;
 }
+function fm_blk($r) { if (is_blocked_resp($r)) { echo putih . "[FM] " . merah . ($r['message'] ?? 'blocked') . "\n"; return true; } return false; }
 function fm_exp($r) { return is_expired_resp($r) ? prompt_reprompt('fm', 'FaucetMini', $r['message'] ?? 'expired') : false; }
-function fm_blk($r) {
-    if (is_blocked_resp($r)) {
-        echo putih . "[FM] " . merah . ($r['message'] ?? 'blocked') . "\n";
-        return true;
-    }
-    return false;
-}
 
 function fm_claim_once(&$st) {
     $u = fm_api("get_user_data");
@@ -639,8 +608,7 @@ function fm_claim_once(&$st) {
         $rem = intval($spin['cooldown_remaining'] ?? 0);
         if ($rem > 0) { $st['ready_at'] = time() + $rem; return 'cooldown'; }
         echo putih . "[FM " . $picked . "] " . merah . $m . "\n";
-        $st['ready_at'] = time() + 10;
-        return 'cooldown';
+        $st['ready_at'] = time() + 10; return 'cooldown';
     }
 
     $tok = ksolve(cfg_apikey(), FM_DOMAIN, FM_SITEKEY, "faucet_claim");
@@ -655,8 +623,7 @@ function fm_claim_once(&$st) {
         $rem = intval($cf['cooldown_remaining'] ?? 0);
         if ($rem > 0) { $st['ready_at'] = time() + $rem; return 'cooldown'; }
         echo putih . "[FM " . $picked . "] " . merah . $m . "\n";
-        $st['ready_at'] = time() + 10;
-        return 'cooldown';
+        $st['ready_at'] = time() + 10; return 'cooldown';
     }
     $dd = $cf['data'] ?? $cf;
     $amt = $dd['credited_amount'] ?? $dd['claimed_amount'] ?? $dd['base_reward'] ?? '?';
@@ -667,32 +634,23 @@ function fm_claim_once(&$st) {
 }
 
 // ============================================================
-// MASTER ROTASI
+// ROTASI MASTER (FM -> CP -> CF -> FF)
 // ============================================================
-function run_rotasi() {
-    $order = ['fm', 'cp', 'cf', 'ff'];
+function run_rotasi($apps = ['fm','cp','cf','ff']) {
     $labels = ['fm'=>'FaucetMini','cp'=>'CoinPlay','cf'=>'CoinFree','ff'=>'FaucetFi'];
-
     $st = [];
-    foreach ($order as $a) {
-        $st[$a] = [
-            'limited' => false,
-            'ready_at' => 0,
-            'mode_idx' => -1,
-            'first' => true,
-            'notified' => [],
-            'ready_at_mode' => [],
-        ];
+    foreach ($apps as $a) {
+        $st[$a] = ['limited'=>false,'ready_at'=>0,'mode_idx'=>-1,'first'=>true,'notified'=>[],'ready_at_mode'=>[]];
     }
 
     kclear();
-    echo putih . "=== ROTASI: FM -> CP -> CF -> FF ===\n";
+    echo putih . "=== ROTASI: " . strtoupper(implode(" -> ", $apps)) . " ===\n";
     echo putih . "per-app 1x claim, abis itu ganti. limit/blocked -> stop app\n";
     echo putih . "------------------------------------------\n";
 
     while (true) {
         $alive = [];
-        foreach ($order as $a) if (!$st[$a]['limited']) $alive[] = $a;
+        foreach ($apps as $a) if (!$st[$a]['limited']) $alive[] = $a;
         if (empty($alive)) {
             echo putih . "\n" . hijau . "Semua app limit/blocked. Selesai.\n";
             return;
@@ -742,7 +700,9 @@ function run_rotasi() {
     }
 }
 
-// ===== MENU =====
+// ============================================================
+// MENU
+// ============================================================
 function menu_set_init($key, $label) {
     kclear();
     $cur = cfg_init($key);
@@ -798,7 +758,7 @@ function menu_main() {
         kclear();
         $cfg = cfg_load();
         echo putih . "==========================================\n";
-        echo putih . "   MULTI FAUCET BOT (ROTASI)\n";
+        echo putih . "   MULTI FAUCET 4IN1 (ROTASI)\n";
         echo putih . "==========================================\n";
         echo putih . "apikey : " . (empty($cfg['apikey']) ? merah . "(belum diset)" : hijau . substr($cfg['apikey'],0,10) . "...") . "\n";
         echo putih . "initData:\n";
@@ -810,41 +770,68 @@ function menu_main() {
             echo "\n";
         }
         echo putih . "------------------------------------------\n";
-        echo putih . "  1. " . cyan . "Start Rotasi (FM -> CP -> CF -> FF)\n";
-        echo putih . "  2. " . cyan . "Reset Semua InitData\n";
-        echo putih . "  3. " . cyan . "Config Apikey\n";
-        echo putih . "  4. " . cyan . "Config FaucetMini\n";
-        echo putih . "  5. " . cyan . "Config CoinPlay\n";
-        echo putih . "  6. " . cyan . "Config CoinFree\n";
-        echo putih . "  7. " . cyan . "Config FaucetFi\n";
+        echo putih . "  1. " . cyan . "Start Rotasi ALL (FM -> CP -> CF -> FF)\n";
+        echo putih . "  2. " . cyan . "Start Rotasi custom\n";
+        echo putih . "  3. " . cyan . "Run Single App\n";
+        echo putih . "  4. " . cyan . "Reset Semua InitData\n";
+        echo putih . "  5. " . cyan . "Config Apikey\n";
+        echo putih . "  6. " . cyan . "Config FaucetMini\n";
+        echo putih . "  7. " . cyan . "Config CoinPlay\n";
+        echo putih . "  8. " . cyan . "Config CoinFree\n";
+        echo putih . "  9. " . cyan . "Config FaucetFi\n";
         echo putih . "  0. " . merah . "Exit\n";
         echo putih . "pilih: " . kuning;
         $opt = trim(fgets(STDIN));
 
-        if ($opt == '1') { run_rotasi(); echo putih . "\nenter..."; fgets(STDIN); }
+        if ($opt == '1') { run_rotasi(['fm','cp','cf','ff']); echo putih . "\nenter..."; fgets(STDIN); }
         elseif ($opt == '2') {
-            $d = cfg_load();
-            foreach (["ff","cp","cf","fm"] as $k) {
-                $d['apps'][$k]['initData'] = "";
-                $d['apps'][$k]['coupon'] = "";
+            kclear();
+            echo putih . "Pilih app (pisah spasi, contoh: fm cf ff): " . kuning;
+            $line = trim(fgets(STDIN));
+            $picked = preg_split('/[\s,]+/', strtolower($line));
+            $valid = [];
+            foreach ($picked as $p) if (in_array($p, ['fm','cp','cf','ff'])) $valid[] = $p;
+            if (empty($valid)) { echo merah . "nggak ada yang valid.\n" . reset; sleep(2); continue; }
+            run_rotasi($valid);
+            echo putih . "\nenter..."; fgets(STDIN);
+        }
+        elseif ($opt == '3') {
+            kclear();
+            echo putih . "Pilih app:\n";
+            echo putih . "  1. FaucetMini\n  2. CoinPlay\n  3. CoinFree\n  4. FaucetFi\n";
+            echo putih . "pilih: " . kuning;
+            $s = trim(fgets(STDIN));
+            $map = ['1'=>'fm','2'=>'cp','3'=>'cf','4'=>'ff'];
+            if (isset($map[$s])) {
+                $st = ['limited'=>false,'ready_at'=>0,'mode_idx'=>-1,'first'=>true,'notified'=>[],'ready_at_mode'=>[]];
+                $fn = $map[$s] . '_claim_once';
+                echo putih . "\n--- single run ---\n";
+                $fn($st);
+                echo putih . "\nenter..."; fgets(STDIN);
             }
+        }
+        elseif ($opt == '4') {
+            $d = cfg_load();
+            foreach (["ff","cp","cf","fm"] as $k) { $d['apps'][$k]['initData'] = ""; $d['apps'][$k]['coupon'] = ""; }
             cfg_save($d);
             echo hijau . "Semua initData & coupon dihapus\n" . reset; sleep(1);
         }
-        elseif ($opt == '3') {
+        elseif ($opt == '5') {
             kclear();
             echo putih . "Apikey sekarang: " . kuning . (empty($cfg['apikey']) ? "(kosong)" : substr($cfg['apikey'],0,20).'...') . "\n\n";
             echo putih . "Apikey baru: " . kuning;
             $k = trim(fgets(STDIN));
             if ($k !== '') { $d = cfg_load(); $d['apikey'] = $k; cfg_save($d); echo hijau . "OK\n" . reset; sleep(1); }
         }
-        elseif ($opt == '4') menu_config_app('fm', 'FaucetMini');
-        elseif ($opt == '5') menu_config_app('cp', 'CoinPlay');
-        elseif ($opt == '6') menu_config_app('cf', 'CoinFree');
-        elseif ($opt == '7') menu_config_app('ff', 'FaucetFi');
+        elseif ($opt == '6') menu_config_app('fm', 'FaucetMini');
+        elseif ($opt == '7') menu_config_app('cp', 'CoinPlay');
+        elseif ($opt == '8') menu_config_app('cf', 'CoinFree');
+        elseif ($opt == '9') menu_config_app('ff', 'FaucetFi');
         elseif ($opt == '0') exit;
     }
 }
 
+// ============================================================
+// BOOT
+// ============================================================
 menu_main();
-
