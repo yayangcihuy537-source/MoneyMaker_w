@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 """
 LiteBits.io Telegram Mini App Auto Claim Bot (@litebits_faucet_bot)
-- Telethon Auth + Referral A7F2K9
+- Telethon Auth + Persistent Session (auto-refresh init_data)
+- Referral A7F2K9
 - Auto-stop 6 jam + Session Report
 - Animated UI + Sparkline + Success Rate
 """
@@ -166,7 +167,7 @@ class Anim:
         banner_lines = [
             f"{Col.NEON_C}=============================================================={Col.R}",
             f"{Col.NEON_Y}                    ⚡ {Col.NEON_G}LITEBITS{Col.NEON_Y} ⚡{Col.R}",
-            f"{Col.NEON_C}                 {Col.WHT}AUTO CLAIM SYSTEM v2.5{Col.R}",
+            f"{Col.NEON_C}                 {Col.WHT}AUTO CLAIM SYSTEM v2.6{Col.R}",
             f"{Col.NEON_C}=============================================================={Col.R}",
             f"{Col.NEON_V} ScriptMaker : {Col.WHT}MoneyMaker_w{Col.R}",
             f"{Col.NEON_V} Bot         : {Col.NEON_C}@litebits_faucet_bot{Col.R}",
@@ -187,7 +188,7 @@ def render_banner():
     return f"""
 {Col.NEON_C}=============================================================={Col.R}
 {Col.NEON_Y}                    ⚡ {Col.NEON_G}LITEBITS{Col.NEON_Y} ⚡{Col.R}
-{Col.NEON_C}                 {Col.WHT}AUTO CLAIM SYSTEM v2.5{Col.R}
+{Col.NEON_C}                 {Col.WHT}AUTO CLAIM SYSTEM v2.6{Col.R}
 {Col.NEON_C}=============================================================={Col.R}
 {Col.NEON_V} ScriptMaker : {Col.WHT}MoneyMaker_w{Col.R}
 {Col.NEON_V} Bot         : {Col.NEON_C}@litebits_faucet_bot{Col.R}
@@ -204,6 +205,7 @@ API_ID        = 35898257
 DEFAULT_BOT   = 'litebits_faucet_bot'
 REFERRAL_CODE = 'A7F2K9'
 CONFIG_FILE   = 'litebits.json'
+SESSION_FILE  = 'session_auth'      # Telethon session basename
 BASE_URL      = 'https://mini.litebits.io'
 
 HOLD_DURATION    = 5
@@ -245,6 +247,27 @@ class LiteBitsTeleBot:
         self.earned_history   = deque(maxlen=30)
         self.last_claim_time  = None
         self.streak           = 0
+
+        # absolute path Telethon session file
+        self.tg_session_path = os.path.join(self.base_dir, SESSION_FILE)
+
+    # ---------- SESSION FILE HELPERS ----------
+    def has_telethon_session(self) -> bool:
+        """Cek apakah file .session Telethon ada dan gak kosong."""
+        path = self.tg_session_path + '.session'
+        if os.path.exists(path) and os.path.getsize(path) > 0:
+            return True
+        return False
+
+    def delete_telethon_session(self):
+        """Hapus session file (buat re-login dari nol)."""
+        for suffix in ['', '.session', '.session-journal']:
+            p = self.tg_session_path + suffix
+            if os.path.exists(p):
+                try:
+                    os.remove(p)
+                except Exception:
+                    pass
 
     # ---------- SPARKLINE ----------
     def sparkline(self, values, width=30):
@@ -322,7 +345,6 @@ class LiteBitsTeleBot:
         total_cyc = self.cycles + self.cycles_failed
         rate = (self.cycles / total_cyc * 100) if total_cyc > 0 else 100.0
 
-        # Runtime & remaining
         elapsed = int(time.time() - self.start_time)
         remaining = max(0, MAX_RUNTIME - elapsed)
         eh, er = divmod(elapsed, 3600); em, es = divmod(er, 60)
@@ -542,77 +564,109 @@ class LiteBitsTeleBot:
         except Exception:
             return 0
 
-    # ---------- TELEGRAM LOGIN ----------
-    async def extract_init_data_async(self):
+    # ---------- TELEGRAM (PERSISTENT SESSION) ----------
+    async def extract_init_data_async(self, interactive: bool = True):
+        """
+        interactive=True  → tampilkan UI login lengkap (phone/OTP/2FA)
+        interactive=False → pakai session file yang ada, gak prompt apa-apa
+                            (kalau session file gak ada / invalid → return None)
+        """
         if not HAS_TELETHON:
-            print(f"\n {Col.RED}✗ Telethon library not found. Install: pip install telethon{Col.R}\n")
+            if interactive:
+                print(f"\n {Col.RED}✗ Telethon library not found. Install: pip install telethon{Col.R}\n")
             return None
 
-        session_path = os.path.join(self.base_dir, 'session_auth')
-        client = TelegramClient(session_path, API_ID, API_HASH)
+        client = TelegramClient(self.tg_session_path, API_ID, API_HASH)
 
-        clear()
-        print()
-        Anim.typewriter(f"{Col.NEON_C}╔════════════════════════════════════════════════════════════╗", 0.001)
-        Anim.typewriter(f"{Col.NEON_C}║{Col.R}          ⚡ {Col.NEON_Y}LITEBITS SECURE LOGIN v2.5{Col.NEON_Y} ⚡{Col.R}          {Col.NEON_C}║", 0.001)
-        Anim.typewriter(f"{Col.NEON_C}║{Col.R}              {Col.DIM_C}Telegram Authentication Portal{Col.R}             {Col.NEON_C}║", 0.001)
-        Anim.typewriter(f"{Col.NEON_C}╚════════════════════════════════════════════════════════════╝", 0.001)
-        print()
-
-        Anim.scan("Scanning secure environment", 1.5)
-        Anim.progress("Loading Telegram API", 1.0)
-        print()
-
-        def get_phone():
-            print(f"{Col.NEON_C}──────────────────────────────────────────────────────────────{Col.R}")
-            print(f"{Col.NEON_Y}  📱 STEP 1/3 · TELEGRAM PHONE{Col.R}")
-            print(f"{Col.DIM_C}  Format: +628xxxxxxxxxx (international){Col.R}")
-            print(f"{Col.NEON_C}──────────────────────────────────────────────────────────────{Col.R}\n")
-            p = input(f" {Col.NEON_G}➜{Col.R} {Col.WHT}Phone Number {Col.NEON_C}»{Col.R} ").strip()
+        if interactive:
+            clear()
             print()
-            Anim.dots("Sending login code to Telegram", 1.5)
+            Anim.typewriter(f"{Col.NEON_C}╔════════════════════════════════════════════════════════════╗", 0.001)
+            Anim.typewriter(f"{Col.NEON_C}║{Col.R}          ⚡ {Col.NEON_Y}LITEBITS SECURE LOGIN v2.6{Col.NEON_Y} ⚡{Col.R}          {Col.NEON_C}║", 0.001)
+            Anim.typewriter(f"{Col.NEON_C}║{Col.R}              {Col.DIM_C}Telegram Authentication Portal{Col.R}             {Col.NEON_C}║", 0.001)
+            Anim.typewriter(f"{Col.NEON_C}╚════════════════════════════════════════════════════════════╝", 0.001)
             print()
-            return p
 
-        def get_code():
-            print(f"{Col.NEON_C}──────────────────────────────────────────────────────────────{Col.R}")
-            print(f"{Col.NEON_Y}  🔐 STEP 2/3 · OTP CODE{Col.R}")
-            print(f"{Col.DIM_C}  Check your Telegram app for the 5-digit code{Col.R}")
-            print(f"{Col.NEON_C}──────────────────────────────────────────────────────────────{Col.R}\n")
-            c = input(f" {Col.NEON_G}➜{Col.R} {Col.WHT}OTP Code    {Col.NEON_C}»{Col.R} ").strip()
+            Anim.scan("Scanning secure environment", 1.5)
+            Anim.progress("Loading Telegram API", 1.0)
             print()
-            Anim.dots("Verifying OTP code", 1.5)
-            print()
-            return c
 
-        def get_password():
-            print(f"{Col.NEON_C}──────────────────────────────────────────────────────────────{Col.R}")
-            print(f"{Col.NEON_Y}  🔒 STEP 3/3 · 2FA PASSWORD{Col.R}")
-            print(f"{Col.DIM_C}  Two-Step Verification password (if enabled){Col.R}")
-            print(f"{Col.NEON_C}──────────────────────────────────────────────────────────────{Col.R}\n")
-            pw = input(f" {Col.NEON_G}➜{Col.R} {Col.WHT}2FA Password{Col.NEON_C} »{Col.R} ").strip()
-            print()
-            Anim.dots("Authenticating 2FA", 1.5)
-            print()
-            return pw
+            def get_phone():
+                print(f"{Col.NEON_C}──────────────────────────────────────────────────────────────{Col.R}")
+                print(f"{Col.NEON_Y}  📱 STEP 1/3 · TELEGRAM PHONE{Col.R}")
+                print(f"{Col.DIM_C}  Format: +628xxxxxxxxxx (international){Col.R}")
+                print(f"{Col.NEON_C}──────────────────────────────────────────────────────────────{Col.R}\n")
+                p = input(f" {Col.NEON_G}➜{Col.R} {Col.WHT}Phone Number {Col.NEON_C}»{Col.R} ").strip()
+                print()
+                Anim.dots("Sending login code to Telegram", 1.5)
+                print()
+                return p
 
-        await client.start(phone=get_phone, code_callback=get_code, password=get_password)
+            def get_code():
+                print(f"{Col.NEON_C}──────────────────────────────────────────────────────────────{Col.R}")
+                print(f"{Col.NEON_Y}  🔐 STEP 2/3 · OTP CODE{Col.R}")
+                print(f"{Col.DIM_C}  Check your Telegram app for the 5-digit code{Col.R}")
+                print(f"{Col.NEON_C}──────────────────────────────────────────────────────────────{Col.R}\n")
+                c = input(f" {Col.NEON_G}➜{Col.R} {Col.WHT}OTP Code    {Col.NEON_C}»{Col.R} ").strip()
+                print()
+                Anim.dots("Verifying OTP code", 1.5)
+                print()
+                return c
 
-        print()
-        Anim.progress("Establishing session with Telegram", 1.5)
-        Anim.scan(f"Connecting to @{self.bot_username}", 1.5)
-        print()
+            def get_password():
+                print(f"{Col.NEON_C}──────────────────────────────────────────────────────────────{Col.R}")
+                print(f"{Col.NEON_Y}  🔒 STEP 3/3 · 2FA PASSWORD{Col.R}")
+                print(f"{Col.DIM_C}  Two-Step Verification password (if enabled){Col.R}")
+                print(f"{Col.NEON_C}──────────────────────────────────────────────────────────────{Col.R}\n")
+                pw = input(f" {Col.NEON_G}➜{Col.R} {Col.WHT}2FA Password{Col.NEON_C} »{Col.R} ").strip()
+                print()
+                Anim.dots("Authenticating 2FA", 1.5)
+                print()
+                return pw
+
+            try:
+                await client.start(phone=get_phone, code_callback=get_code, password=get_password)
+            except Exception as e:
+                print(f" {Col.RED}✗ Login error: {e}{Col.R}")
+                try:
+                    await client.disconnect()
+                except Exception:
+                    pass
+                return None
+        else:
+            # Silent mode — pakai session file existing, gak prompt apapun
+            try:
+                await client.connect()
+                if not await client.is_user_authorized():
+                    await client.disconnect()
+                    return None
+            except Exception:
+                try:
+                    await client.disconnect()
+                except Exception:
+                    pass
+                return None
+
+        if interactive:
+            print()
+            Anim.progress("Establishing session with Telegram", 1.5)
+            Anim.scan(f"Connecting to @{self.bot_username}", 1.5)
+            print()
+        else:
+            print(f" {Col.NEON_C}•{Col.R} {Col.WHT}Refreshing init_data via saved session...{Col.R}")
 
         init_data = None
         try:
             bot = await client.get_input_entity(self.bot_username)
 
-            try:
-                await client.send_message(bot, f'/start {REFERRAL_CODE}')
-            except Exception:
-                pass
+            if interactive:
+                try:
+                    await client.send_message(bot, f'/start {REFERRAL_CODE}')
+                except Exception:
+                    pass
 
-            Anim.dots("Method 1: RequestAppWebView", 1.0)
+            if interactive:
+                Anim.dots("Method 1: RequestAppWebView", 1.0)
             try:
                 res_app = await client(functions.messages.RequestAppWebViewRequest(
                     peer=bot,
@@ -629,7 +683,8 @@ class LiteBitsTeleBot:
                 pass
 
             if not init_data:
-                Anim.dots("Method 2: Menu button fallback", 1.0)
+                if interactive:
+                    Anim.dots("Method 2: Menu button fallback", 1.0)
                 full_user = await client(functions.users.GetFullUserRequest(id=bot))
                 bot_info = full_user.full_user.bot_info
                 menu_url = (
@@ -647,34 +702,44 @@ class LiteBitsTeleBot:
                     init_data = params.get('tgWebAppData', [None])[0]
 
             if init_data:
-                Anim.progress("Extracting tgWebAppData token", 1.2)
-                Anim.progress("Verifying token integrity", 1.0)
-                print(f"\n {Col.NEON_G}✓{Col.R} {Col.WHT}Session token acquired!{Col.R}")
-                print(f" {Col.DIM_C}  Token length: {len(init_data)} chars{Col.R}")
-                print(f" {Col.DIM_C}  Referral code: {REFERRAL_CODE}{Col.R}\n")
+                if interactive:
+                    Anim.progress("Extracting tgWebAppData token", 1.2)
+                    Anim.progress("Verifying token integrity", 1.0)
+                    print(f"\n {Col.NEON_G}✓{Col.R} {Col.WHT}Session token acquired!{Col.R}")
+                    print(f" {Col.DIM_C}  Token length: {len(init_data)} chars{Col.R}")
+                    print(f" {Col.DIM_C}  Referral code: {REFERRAL_CODE}{Col.R}\n")
+                else:
+                    print(f" {Col.NEON_G}✓{Col.R} {Col.WHT}init_data refreshed ({len(init_data)} chars){Col.R}")
             else:
-                print(f"\n {Col.RED}✗{Col.R} Failed to extract token\n")
+                if interactive:
+                    print(f"\n {Col.RED}✗{Col.R} Failed to extract token\n")
 
             return init_data
 
         except Exception as e:
-            print(f" {Col.RED}✗ Error: {e}{Col.R}")
+            if interactive:
+                print(f" {Col.RED}✗ Error: {e}{Col.R}")
             return None
         finally:
-            await client.disconnect()
+            try:
+                await client.disconnect()
+            except Exception:
+                pass
 
-    def do_telegram_login(self):
+    def do_telegram_login(self, interactive: bool = True):
         try:
-            token = asyncio.run(self.extract_init_data_async())
+            token = asyncio.run(self.extract_init_data_async(interactive=interactive))
             if token:
                 self.init_data = token
                 self.save_config()
-                Anim.spinner("Saving session to config", 1.0)
-                time.sleep(0.5)
+                if interactive:
+                    Anim.spinner("Saving session to config", 1.0)
+                    time.sleep(0.5)
                 return True
             return False
         except Exception as e:
-            print(f" {Col.RED}✗ Telegram login error: {e}{Col.R}")
+            if interactive:
+                print(f" {Col.RED}✗ Telegram login error: {e}{Col.R}")
             return False
 
     # ---------- SETUP ----------
@@ -684,34 +749,60 @@ class LiteBitsTeleBot:
         self.fetch_app_settings()
 
         valid_auth = False
+
+        # === STEP 1: coba pakai init_data yang ada ===
         if self.init_data:
-            Anim.scan("Validating saved session", 1.5)
+            Anim.scan("Validating saved init_data", 1.5)
             if self.validate_telegram_auth():
                 valid_auth = True
-                name = self.user_info.get('telegramUsername') or self.user_info.get('username') or 'User'
-                try:
-                    bal_val = float(str(self.user_info.get('balance', 0)))
-                    bal_str = f"{bal_val:.2f}"
-                except Exception:
-                    bal_str = str(self.user_info.get('balance', '0.00'))
-                print()
-                print(f" {Col.NEON_G}✓{Col.R} {Col.WHT}Active session:{Col.R} {Col.NEON_C}@{name}{Col.R}")
-                print(f" {Col.NEON_Y}💰{Col.R} {Col.WHT}Balance:{Col.R} {Col.NEON_Y}{bal_str} Coins{Col.R}")
-                print()
 
+        # === STEP 2: kalau gagal, coba refresh via Telethon session file ===
+        if not valid_auth and self.has_telethon_session():
+            print()
+            print(f" {Col.NEON_Y}!{Col.R} {Col.WHT}Saved init_data expired. Trying to refresh via Telethon session...{Col.R}")
+            print(f" {Col.DIM_C}  Session file: {self.tg_session_path}.session{Col.R}\n")
+            if self.do_telegram_login(interactive=False):
+                if self.validate_telegram_auth():
+                    valid_auth = True
+                    print(f" {Col.NEON_G}✓{Col.R} {Col.WHT}Auto-refreshed! No phone/OTP needed.{Col.R}\n")
+
+        # === STEP 3: tampilkan info user kalau valid ===
         if valid_auth:
+            name = self.user_info.get('telegramUsername') or self.user_info.get('username') or 'User'
+            try:
+                bal_val = float(str(self.user_info.get('balance', 0)))
+                bal_str = f"{bal_val:.2f}"
+            except Exception:
+                bal_str = str(self.user_info.get('balance', '0.00'))
+            print()
+            print(f" {Col.NEON_G}✓{Col.R} {Col.WHT}Active session:{Col.R} {Col.NEON_C}@{name}{Col.R}")
+            print(f" {Col.NEON_Y}💰{Col.R} {Col.WHT}Balance:{Col.R} {Col.NEON_Y}{bal_str} Coins{Col.R}")
+            print()
+
+        # === STEP 4: menu ===
+        if valid_auth:
+            has_sess = self.has_telethon_session()
+            sess_status = f"{Col.NEON_G}present{Col.R}" if has_sess else f"{Col.NEON_R}missing{Col.R}"
             print(f"{Col.NEON_C}┌─ {Col.NEON_Y}SELECT MODE{Col.NEON_C} " + "─" * 46 + f"┐{Col.R}")
             print(f"{Col.NEON_C}│{Col.R}  {Col.NEON_G}[1]{Col.R} {Col.WHT}Start Auto Claim {Col.DIM_C}(default){Col.R}              {Col.NEON_C}│{Col.R}")
             print(f"{Col.NEON_C}│{Col.R}  {Col.NEON_C}[2]{Col.R} {Col.WHT}Re-login with Telegram Phone{Col.R}              {Col.NEON_C}│{Col.R}")
             print(f"{Col.NEON_C}│{Col.R}  {Col.NEON_Y}[3]{Col.R} {Col.WHT}Paste init_data manually{Col.R}                  {Col.NEON_C}│{Col.R}")
+            print(f"{Col.NEON_C}│{Col.R}  {Col.NEON_V}[4]{Col.R} {Col.WHT}Force refresh init_data from session{Col.R}      {Col.NEON_C}│{Col.R}")
+            print(f"{Col.NEON_C}│{Col.R}  {Col.DIM_C}Telethon session: {sess_status}{Col.R}                    {Col.NEON_C}│{Col.R}")
             print(f"{Col.NEON_C}└" + "─" * 60 + f"┘{Col.R}")
             choice = input(f"\n{Col.WHT} ➜ Select option {Col.DIM_C}(default 1){Col.WHT}: {Col.NEON_G}").strip()
             print(Col.R, end='')
         else:
+            # belum punya auth apapun → paksa login
+            print()
+            if self.has_telethon_session():
+                print(f" {Col.NEON_Y}!{Col.R} {Col.WHT}Session file ada tapi gagal refresh. Coba re-login.{Col.R}\n")
+            else:
+                print(f" {Col.NEON_Y}!{Col.R} {Col.WHT}First time setup — login required.{Col.R}\n")
             choice = '2'
 
         if choice == '2':
-            if not self.do_telegram_login():
+            if not self.do_telegram_login(interactive=True):
                 return False
             self.validate_telegram_auth()
         elif choice == '3':
@@ -723,6 +814,20 @@ class LiteBitsTeleBot:
                     user_in = urllib.parse.unquote(user_in.split('tgWebAppData=')[1].split('&')[0])
                 self.init_data = user_in
                 self.validate_telegram_auth()
+        elif choice == '4':
+            print()
+            if not self.has_telethon_session():
+                print(f" {Col.NEON_R}✗{Col.R} {Col.WHT}Session file gak ada. Pilih [2] untuk login manual.{Col.R}\n")
+                return False
+            print(f" {Col.NEON_C}•{Col.R} {Col.WHT}Force refreshing init_data...{Col.R}\n")
+            if self.do_telegram_login(interactive=False):
+                if self.validate_telegram_auth():
+                    print(f" {Col.NEON_G}✓{Col.R} {Col.WHT}Refresh sukses!{Col.R}\n")
+                else:
+                    print(f" {Col.NEON_R}✗{Col.R} {Col.WHT}Refresh sukses tapi validate gagal.{Col.R}\n")
+            else:
+                print(f" {Col.NEON_R}✗{Col.R} {Col.WHT}Refresh gagal — session mungkin expired. Pilih [2].{Col.R}\n")
+                return False
 
         return True
 
@@ -1038,4 +1143,3 @@ class LiteBitsTeleBot:
 if __name__ == '__main__':
     bot = LiteBitsTeleBot()
     bot.run()
-
