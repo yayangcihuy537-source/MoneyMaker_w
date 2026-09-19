@@ -159,96 +159,81 @@
           "runner": "python3"
         },
         "9": {
-          "label": "DataMiner 🟢",
-          "file": "data.py",
-          "runner": "python3"
-        },
-        "10": {
           "label": "ATFMiner 🟢",
           "file": "atf.py",
           "runner": "python3"
         },
-        "11": {
+        "10": {
           "label": "AuctionAstrabot 🟢",
           "file": "AuctionAstra.py",
           "runner": "python3"
         },
-        "12": {
+        "11": {
           "label": "LtcMiner 🟢",
           "file": "LtcMiner.py",
           "runner": "python3"
         },
-        "13": {
+        "12": {
           "label": "Faucet BTC 🟢",
           "file": "btc.py",
           "runner": "python3"
         },
-        "14": {
+        "13": {
           "label": "MusicMiningMB 🟢",
           "file": "Music.py",
           "runner": "python3"
         },
-        "15": {
+        "14": {
           "label": "GramBux 🟢",
           "file": "Gramads.py",
           "runner": "python3"
         },
-        "16": {
+        "15": {
           "label": "BabyDogeRush 🟢",
           "file": "baby.py",
           "runner": "python3"
         },
-        "17": {
-          "label": "PepeMiner 🟢",
-          "file": "PepeTap.py",
-          "runner": "python3"
-        },
-        "18": {
-          "label": "SHIBAInuTapbot 🟢",
-          "file": "SHIBAInuTapbot.py",
-          "runner": "python3"
-        },
-        "19": {
+        "16": {
           "label": "TonSpark 🟢",
           "file": "TonSpark.py",
           "runner": "python3"
         },
-        "20": {
+        "17": {
           "label": "MineSlpy 🟢",
           "file": "fruit.py",
           "runner": "python3"
         },
-        "21": {
+        "18": {
           "label": "FarmingMatesBot 🟢",
           "file": "FarmingMatesBot.py",
           "runner": "python3"
         },
-        "22": {
+        "19": {
           "label": "LiteBitsFaucet 🟢",
           "file": "Litebits.py",
           "runner": "python3"
         },
-        "23": {
+        "20": {
           "label": "MangoCash 🟢",
           "file": "Mango.py",
           "runner": "python3"
         },
-        "24": {
+        "21": {
           "label": "DogeMinerVip 🟢",
           "file": "Dogevip.py",
           "runner": "python3"
         },
-        "25": {
+        "22": {
           "label": "ARTMiner 🟢",
           "file": "art.py",
           "runner": "python3"
         },
-        "26": {
+        "23": {
           "label": "Prism1bot 🟢",
           "file": "Prism1bot.py",
           "runner": "python3"
         },
-        "27": {
+        "24": {
           "label": "TReward 🟢",
           "file": "tr.py",
           "runner": "python3"
