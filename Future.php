@@ -16,8 +16,8 @@ const LOGIN  = SITE . "/auth/login";
 const EARN   = SITE . "/faucet/earn";
 const DASH   = SITE . "/dashboard";
 
-const COOKIE = "cookies.txt";
-const CFG    = "config.json";
+const COOKIE = "cryptofuture.txt";
+const CFG    = "cryptofuture.json";
 
 const SOLVER_IN  = "https://api.waryono.my.id/in.php";
 const SOLVER_RES = "https://api.waryono.my.id/res.php";
