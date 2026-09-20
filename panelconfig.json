@@ -119,9 +119,9 @@
           "runner": "php"
         },
         "14": {
-          "label": "Coming Soon 🔒",
-          "file": "comingsoon.php",
-          "runner": "php"
+          "label": "Pitasks 🟢",
+          "file": "Pitasks.py",
+          "runner": "python3"
         },
         "15": {
           "label": "Coming Soon 🔒",
