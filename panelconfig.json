@@ -114,8 +114,8 @@
           "runner": "python3"
         },
         "13": {
-          "label": "Coming Soon 🔒",
-          "file": "comingsoon.php",
+          "label": "SatVoy 🟢",
+          "file": "Satvoy.php",
           "runner": "php"
         },
         "14": {
