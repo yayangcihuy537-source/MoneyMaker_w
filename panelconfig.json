@@ -44,9 +44,9 @@
           "runner": "php"
         },
         "9": {
-          "label": "Coming Soon",
-          "file": "",
-          "runner": "python3"
+          "label": "CryptoFuture 🟢",
+          "file": "Future.php",
+          "runner": "php"
         }
       }
     },
