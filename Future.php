@@ -1,337 +1,356 @@
 <?php
+/**
+ * CryptoFuture Auto Claim — Endless Loop (Email Only)
+ * - Only asks for wallet email.
+ * - cf_clearance asked ONLY if CF challenge appears.
+ * - No solver, no cap, no daily limit stop.
+ * - No file I/O. In-memory cookies only.
+ */
 
-error_reporting(0);
-date_default_timezone_set('Asia/Jakarta');
-$configFile = "config.json";
-$tod = "cookies.txt";
+define("RED","\033[0;31m"); define("GRN","\033[0;32m");
+define("YEL","\033[0;33m"); define("BLU","\033[0;34m");
+define("MAG","\033[0;35m"); define("CYN","\033[0;36m");
+define("WHT","\033[0;37m"); define("RST","\033[0m");
+define("BOLD","\033[1m");
 
-const hitam  = "\033[0;30m";
-const merah  = "\033[0;31m";
-const hijau  = "\033[0;32m";
-const kuning = "\033[0;33m";
-const biru   = "\033[0;34m";
-const cyan   = "\033[0;36m";
-const putih  = "\033[0;37m";
-const reset  = "\033[0m";
+const SITE  = "https://cryptofuture.co.in";
+const HOME  = SITE . "/";
+const LOGIN = SITE . "/auth/login";
+const EARN  = SITE . "/faucet/earn";
+const DASH  = SITE . "/dashboard";
 
-const bg_hitam  = "\033[40m";
-const bg_merah  = "\033[41m";
-const bg_hijau  = "\033[42m";
-const bg_kuning = "\033[43m";
-const bg_biru   = "\033[44m";
-const bg_ungu   = "\033[45m";
-const bg_cyan   = "\033[46m";
-const bg_putih  = "\033[47m";
+const UA = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36";
 
-const script_name = "limefaucet.com";
-const host        = "https://limefaucet.com";
-const ref_code    = "TN04h4nLzInrMZ0R";
-const api_in      = "https://api.waryono.my.id/in.php";
-const api_out     = "https://api.waryono.my.id/res.php";
+const LOOP_SLEEP_STEP = 5;
 
-function clear() {
-    (PHP_OS == "Linux") ? system('clear') : pclose(popen('cls', 'w'));
+/* ═══════════ IN-MEMORY COOKIE JAR ═══════════ */
+$COOKIES = [];
+function cookie_str(){
+    global $COOKIES;
+    if (!$COOKIES) return '';
+    $p = [];
+    foreach ($COOKIES as $k => $v) $p[] = "$k=$v";
+    return implode('; ', $p);
+}
+function cookie_absorb($headers){
+    global $COOKIES;
+    if (preg_match_all('/^set-cookie:\s*([^=]+)=([^;]+)/mi', $headers, $m, PREG_SET_ORDER)) {
+        foreach ($m as $c) $COOKIES[trim($c[1])] = trim($c[2]);
+    }
+}
+function cookie_seed($name, $value){
+    global $COOKIES;
+    if ($value !== '') $COOKIES[$name] = $value;
 }
 
-function uf() {
-    return md5(uniqid(mt_rand(), true));
-}
+/* ═══════════ UI ═══════════ */
+function vlen($s){ return strlen(preg_replace('/\x1b\[[0-9;]*m/','',$s)); }
+function pad($s,$w){ return $s . str_repeat(' ', max(0, $w - vlen($s))); }
+function line($c,$w=54){ return CYN.'│'.RST.pad('  '.$c,$w).CYN.'│'.RST; }
+function mid($w=54){ return CYN.'├'.str_repeat('─',$w+2).'┤'.RST; }
+function bot($w=54){ return CYN.'╰'.str_repeat('─',$w+2).'╯'.RST; }
+function top_plain($w=54){ return CYN.'╭'.str_repeat('─',$w+2).'╮'.RST; }
 
-function skibidixxx($url, $method = 'GET', $data = [], $headers = []) {
+function log_line($msg, $tag='i'){
+    $ic = ['i'=>CYN.'›'.RST, 'ok'=>GRN.'✓'.RST, 'er'=>RED.'✗'.RST, 'wr'=>YEL.'!'.RST, 'in'=>BLU.'●'.RST];
+    echo WHT.'['.date('H:i:s').']'.RST.' '.($ic[$tag]??'›').' '.$msg."\n"; flush();
+}
+function ask($p){ echo WHT.$p.RST; return trim(fgets(STDIN)); }
+function fmt($s){
+    $s=(int)$s; if($s<=0)return '0s';
+    if($s>=3600) return floor($s/3600).'h'.floor(($s%3600)/60).'m';
+    if($s>=60)   return floor($s/60).'m'.($s%60).'s';
+    return $s.'s';
+}
+function clear_screen(){ echo (strtoupper(substr(PHP_OS,0,3))==='WIN') ? system('cls') : system('clear'); }
+
+/* ═══════════ HTTP ═══════════ */
+function req($url, $method='GET', $data=null, $headers=[]){
     $ch = curl_init();
-    $final_headers = [];
-    foreach ($headers as $header) {
-        $final_headers[] = $header;
-    }
-    $options = [
-        CURLOPT_URL            => $url,
+    $def = [
+        "User-Agent: ".UA,
+        "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language: id-ID,id;q=0.9,en;q=0.8",
+        "Upgrade-Insecure-Requests: 1",
+        "Referer: ".HOME,
+    ];
+    if ($method === 'POST') $def[] = "Content-Type: application/x-www-form-urlencoded";
+    $cs = cookie_str();
+    if ($cs !== '') $def[] = "Cookie: ".$cs;
+
+    curl_setopt_array($ch, [
+        CURLOPT_URL => $url,
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HEADER         => true,
+        CURLOPT_HEADER => true,
         CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_SSL_VERIFYHOST => 1,
-        CURLOPT_SSL_VERIFYPEER => true,
-        CURLOPT_HTTPHEADER     => $final_headers,
-        CURLOPT_CONNECTTIMEOUT => 999,
-        CURLOPT_TIMEOUT        => 999,
-        CURLOPT_COOKIEFILE     => 'cookies.txt',
-        CURLOPT_COOKIEJAR      => 'cookies.txt'
-    ];
-    if (strtoupper($method) === 'POST') {
-        $options[CURLOPT_POST] = true;
-        $options[CURLOPT_POSTFIELDS] = $data;
-    }
-    curl_setopt_array($ch, $options);
-    $response = curl_exec($ch);
-    if ($response) {
-        $header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-        $body = substr($response, $header_size);
-        curl_close($ch);
-        return $body;
-    } else {
-        curl_close($ch);
-        echo "\33[1;" . rand(30, 37) . "mwiwok detok";
-        return "ERROR_SIGNAL";
-    }
-}
-
-function timer($seconds, $prefix = "[!] please wait") {
-    $wait_time = (int)$seconds;
-    if ($wait_time <= 0) { $wait_time = 1; }
-    $frames = ['⣾', '⣽', '⣻', '⢿', '⡿', '⣟', '⣯', '⣷'];
-    $frame_count = count($frames);
-    $current_frame = 0;
-    $frame_delay = 0.1;
-    while ($wait_time > 0) {
-        $start_time = microtime(true);
-        while ((microtime(true) - $start_time) < 1) {
-            $hours = floor($wait_time / 3600);
-            $minutes = floor(($wait_time % 3600) / 60);
-            $seconds_left = $wait_time % 60;
-            $time_formatted = sprintf('%02d:%02d:%02d', $hours, $minutes, $seconds_left);
-            $spinner = $frames[$current_frame];
-            echo putih . $prefix . hijau . " $time_formatted " . putih . $spinner . "\r";
-            usleep($frame_delay * 1000000);
-            $current_frame = ($current_frame + 1) % $frame_count;
-            if ((microtime(true) - $start_time) >= 1) break;
-        }
-        $wait_time--;
-    }
-    echo "\r                                        \r";
-}
-
-function lime($apikey, $gambar) {
-    $headers = ["Content-Type: application/json"];
-    $body = json_encode([
-        "apikey"  => $apikey,
-        "methods" => "moonptc",
-        "base64"  => $gambar,
-        "json"    => 1
+        CURLOPT_MAXREDIRS => 5,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_USERAGENT => UA,
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_CONNECTTIMEOUT => 15,
+        CURLOPT_ENCODING => "",
+        CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_2TLS,
+        CURLOPT_HTTPHEADER => array_merge($def, $headers),
     ]);
-    $request = skibidixxx(api_in, "POST", $body, $headers);
-    if (strpos($request, "ERROR_WRONG_METHOD") !== false) { echo putih."Error: ".merah."ERROR_WRONG_METHOD\n"; exit; }
-    if (strpos($request, "ERROR_KEY_DOES_NOT_EXIST") !== false) { echo putih."Error: ".merah."ERROR_KEY_DOES_NOT_EXIST\n"; exit; }
-    if (strpos($request, "ERROR_METHOD_NOT_SPECIFIED") !== false) { echo putih."Error: ".merah."ERROR_METHOD_NOT_SPECIFIED\n"; exit; }
-    if (strpos($request, "ERROR_NO_SUCH_METHOD") !== false) { echo putih."Error: ".merah."ERROR_NO_SUCH_METHOD\n"; exit; }
-    if (strpos($request, "ERROR_DATABASE_CONNECTION_FAILED") !== false) { echo putih."Error: ".merah."ERROR_DATABASE_CONNECTION_FAILED\n"; exit; }
-    if (strpos($request, "ERROR_TOO_MANY_REQUESTS") !== false) { echo putih."Error: ".merah."ERROR_TOO_MANY_REQUESTS"; sleep(1.8); echo "\r                                               \r"; return "ERROR_TOO_MANY_REQUESTS"; }
-    if (strpos($request, "ERROR_WRONG_USER_KEY") !== false) { echo putih."Error: ".merah."ERROR_WRONG_USER_KEY\n"; exit; }
-    if (strpos($request, "ERROR_ZERO_BALANCE") !== false) { echo putih."Error: ".merah."ERROR_ZERO_BALANCE\n"; exit; }
-    if (strpos($request, "ERROR_BAD_PARAMETERS") !== false) { echo putih."Error: ".merah."ERROR_BAD_PARAMETERS\n"; exit; }
-    if (strpos($request, "ERROR_EMPTY_IMAGE") !== false) { echo putih."Error: ".merah."ERROR_EMPTY_IMAGE\n"; exit; }
-    if (strpos($request, "ERROR_UNKNOWN") !== false) { echo putih."Error: ".merah."ERROR_UNKNOWN\n"; exit; }
-    $json = json_decode($request, true);
-    if (!isset($json["request"])) {
-        echo putih."Error: ".merah."Response tidak dikenal: ".$request."\n"; exit;
-    }
-    $id = $json["request"];
-    reload:
-    timer(2, "  captcha..");
-    $url = api_out . "?apikey=".$apikey."&action=get&id=".$id."&json=1";
-    $result = skibidixxx($url, "GET", []);
-    if (strpos($result, "ERROR_BAD_PARAMETERS") !== false) { echo putih."Error: ".merah."ERROR_BAD_PARAMETERS\n"; exit; }
-    if (strpos($result, "Database connection failed") !== false) { echo putih."Error: ".merah."Database connection failed\n"; exit; }
-    if (strpos($result, "WRONG_CAPTCHA_ID") !== false) { echo putih."Error: ".merah."WRONG_CAPTCHA_ID"; sleep(1.8); echo "\r                                               \r"; return "WRONG_CAPTCHA_ID"; }
-    if (strpos($result, "ERROR_SOLVE_PENDING") !== false) { echo putih."Error: ".merah."ERROR_SOLVE_PENDING"; sleep(1.8); echo "\r                                               \r"; return "ERROR_SOLVE_PENDING"; }
-    if (strpos($result, "CAPCHA_NOT_READY") !== false) { echo putih."Error: ".merah."CAPCHA_NOT_READY"; sleep(1.8); echo "\r                                               \r"; goto reload; }
-    if (strpos($result, "ERROR_CAPTCHA_UNSOLVABLE") !== false) { echo putih."Error: ".merah."ERROR_CAPTCHA_UNSOLVABLE"; sleep(1.8); echo "\r                                               \r"; return "ERROR_CAPTCHA_UNSOLVABLE"; }
-    if (strpos($result, "ERROR_BAD_REQUEST") !== false) { echo "Error: ".merah."ERROR_BAD_REQUEST\n"; exit; }
-    if (strpos($result, "INTENAL_SERVER_ERROR") !== false) { echo "Errro: ".merah."INTENAL_SERVER_ERROR"; sleep(1.8); echo "\r                                               \r"; return "INTENAL_SERVER_ERROR"; }
-    $json = json_decode($result, true);
-    $res = $json["request"] ?? '';
-    $arr = explode(':', $res);
-    $clean_res = end($arr);
-    if (!is_numeric(trim($clean_res))) {
-        echo putih."Error: ".merah."Jawaban tidak valid: ".$res."\n";
-        return "BAD_ANSWER";
-    }
-    return ["captcha" => trim($clean_res)];
-}
-
-function getConfig($configFile) {
-    if (!file_exists($configFile)) {
-        echo putih . "API Key: " . kuning;
-        $apikey = trim(fgets(STDIN));
-        echo putih . "Email: " . kuning;
-        $email = trim(fgets(STDIN));
-        $data = [
-            "apikey"   => $apikey,
-            "email"    => $email
-        ];
-        file_put_contents($configFile, json_encode($data, JSON_PRETTY_PRINT));
-        echo hijau . "disimpan ke $configFile\n\n" . reset;
-        sleep(3);
-        return $data;
-    }
-    return json_decode(file_get_contents($configFile), true);
-}
-
-function banner() {
-    echo putih  . "---------------------------------------------------\n";
-    echo putih. "Script Name : " . hijau . script_name."\n";
-    echo putih  . "---------------------------------------------------\n";
-}
-
-function suki(&$a, &$b, &$c) {
-    $a = [
-        "host: limefaucet.com",
-        "user-agent: Mozilla/5.0 (Linux; Android 16; 23076RN4BI Build/BP4A.251205.006) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.7977.88 Mobile Safari/537.36",
-        "content-type: application/json",
-        "origin: https://limefaucet.com",
-        "accept: */*",
-        "x-requested-with: Banna.com",
-        "referer: https://limefaucet.com/faucet"
-    ];
-
-    $b = [
-        "host: limefaucet.com",
-        "user-agent: Mozilla/5.0 (Linux; Android 16; 23076RN4BI Build/BP4A.251205.006) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.7977.88 Mobile Safari/537.36",
-        "accept: */*",
-        "x-requested-with: Banna.com",
-        "referer: https://limefaucet.com/dashboard"
-    ];
-
-    $c = [
-        "host: limefaucet.com",
-        "user-agent: Mozilla/5.0 (Linux; Android 16; 23076RN4BI Build/BP4A.251205.006) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.7977.88 Mobile Safari/537.36",
-        "content-type: application/json",
-        "origin: https://limefaucet.com",
-        "accept: */*",
-        "x-requested-with: Banna.com",
-        "referer: https://limefaucet.com/faucet"
-    ];
-}
-
-home:
-clear();
-banner();
-
-$config   = getConfig($configFile);
-$apikey   = $config['apikey'];
-$email    = $config['email'];
-
-clear();
-banner();
-
-suki($a, $b, $c);
-
-$home = skibidixxx(host."/api/auth/me", "GET", [], $b);
-if (strpos($home, "email") !== false) {
-    $q = json_decode($home, true);
-    $uid = $q["user"]["id"] ?? ($q["id"] ?? '?');
-    $uemail = $q["user"]["email"] ?? ($q["email"] ?? $email);
-    $ubal = $q["user"]["balance_usd"] ?? ($q["balance_usd"] ?? '0');
-
-    echo putih . "ID       " . biru . $uid . "\n";
-    echo putih . "Email    " . biru . $uemail . "\n";
-
-    asu:
-    $info = skibidixxx(host."/api/faucet/info", "GET", [], $b);
-    $i = json_decode($info, true);
-
-    $remaining = (int)($i['time_remaining_seconds'] ?? 0);
-    if ($remaining > 0) {
-        timer($remaining, "  wait..");
-        goto asu;
+    if ($method === 'POST') {
+        curl_setopt($ch, CURLOPT_POST, true);
+        if ($data !== null) curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
     }
 
-    $generate = skibidixxx(host."/api/faucet/ac-captcha/challenge", "POST", "{}", $a);
-    $d = json_decode($generate, true);
+    $resp = curl_exec($ch);
+    if ($resp === false) return ['body'=>'', 'code'=>0, 'headers'=>'', 'error'=>curl_error($ch)];
+    $info = curl_getinfo($ch);
+    $hs = $info['header_size'];
+    $rawHeaders = substr($resp, 0, $hs);
+    $body = substr($resp, $hs);
+    cookie_absorb($rawHeaders);
+    return ['body'=>$body, 'code'=>$info['http_code'], 'headers'=>$rawHeaders, 'error'=>''];
+}
 
-    if (isset($d['session_id']) && isset($d['challenge']['image'])) {
-        $sid    = $d['session_id'];
-        $gambar = $d['challenge']['image'];
+/* ═══════════ CF DETECT ═══════════ */
+function is_cf_challenge($html){
+    return stripos($html, 'Just a moment') !== false
+        || stripos($html, 'cf-challenge') !== false
+        || stripos($html, 'Checking your browser') !== false
+        || stripos($html, 'cf_chl_opt') !== false;
+}
 
-        if (strpos($gambar, "data:image/gif;base64,") === false) {
-            timer(5, "  retry..");
-            goto asu;
+/* ═══════════ LOGIN ═══════════ */
+function login($wallet){
+    log_line("login ".$wallet, 'in');
+    $r = req(LOGIN);
+    if ($r['code'] !== 200) return ['ok'=>false, 'msg'=>"GET login HTTP {$r['code']}", 'cf'=>false];
+    $html = $r['body'];
+
+    if (is_cf_challenge($html)) return ['ok'=>false, 'msg'=>'CF challenge', 'cf'=>true];
+
+    $csrf = '';
+    foreach ([
+        '/name=["\']?csrf_token_name["\']?[^>]*value=["\']([^"\']+)["\']/i',
+        '/value=["\']([^"\']+)["\'][^>]*name=["\']?csrf_token_name["\']?/i',
+    ] as $p) {
+        if (preg_match($p, $html, $m)) { $csrf = $m[1]; break; }
+    }
+    if ($csrf === '') return ['ok'=>false, 'msg'=>'CSRF not found', 'cf'=>false];
+
+    $device = "dev_".substr(md5(uniqid(mt_rand(), true)), 0, 20);
+    $post = http_build_query([
+        'wallet' => $wallet,
+        'csrf_token_name' => $csrf,
+        'device_token' => $device,
+    ]);
+
+    $r2 = req(LOGIN, 'POST', $post, ['Origin: '.SITE, 'Referer: '.LOGIN]);
+    if ($r2['code'] >= 500) return ['ok'=>false, 'msg'=>"login POST HTTP {$r2['code']}", 'cf'=>false];
+
+    $r3 = req(DASH);
+    if (stripos($r3['body'], 'auth/logout') !== false || stripos($r3['body'], 'Logout') !== false)
+        return ['ok'=>true, 'msg'=>'login ok', 'cf'=>false];
+    return ['ok'=>false, 'msg'=>'cookie not accepted', 'cf'=>false];
+}
+
+/* ═══════════ PARSER ═══════════ */
+function parse_earn($html){
+    $o = ['csrf'=>'','token'=>'','ticket'=>'','wallet'=>'','wait'=>0,'balance'=>null,'has_form'=>false];
+
+    if (preg_match('/<form[^>]+id="fauform"[^>]*>(.*?)<\/form>/si', $html, $fm)) {
+        $o['has_form'] = true;
+        $in = $fm[1];
+        if (preg_match('/name="csrf_token_name"[^>]*value="([^"]*)"/i', $in, $m)) $o['csrf'] = $m[1];
+        if (preg_match('/name="token"[^>]*value="([^"]*)"/i', $in, $m)) $o['token'] = $m[1];
+        if (preg_match('/name="earn_ticket"[^>]*value="([^"]*)"/i', $in, $m)) $o['ticket'] = $m[1];
+        if (preg_match('/name="wallet"[^>]*value="([^"]*)"/i', $in, $m)) $o['wallet'] = html_entity_decode($m[1]);
+    }
+    if (preg_match('/let\s+wait\s*=\s*(\d+)/i', $html, $m)) $o['wait'] = (int)$m[1];
+    if (preg_match('/balance-amount[^>]*>\s*([0-9.,]+)/i', $html, $m)) $o['balance'] = (float)str_replace(',', '', $m[1]);
+    elseif (preg_match('/TOTAL BALANCE.*?([0-9.]+)\s*Coins/si', $html, $m)) $o['balance'] = (float)$m[1];
+
+    return $o;
+}
+
+/* ═══════════ BALANCE ═══════════ */
+function fetch_balance(){
+    $r = req(EARN);
+    return parse_earn($r['body'])['balance'];
+}
+
+/* ═══════════ CF PROMPT ═══════════ */
+function prompt_cf(){
+    echo "\n".YEL."  ⚠ Cloudflare challenge detected.".RST."\n";
+    echo "  Grab fresh cf_clearance from browser DevTools → Application → Cookies → cryptofuture.co.in\n";
+    $cf = ask("  cf_clearance   : ");
+    cookie_seed('cf_clearance', $cf);
+    return $cf !== '';
+}
+
+/* ═══════════ MAIN ═══════════ */
+clear_screen();
+echo top_plain(54)."\n";
+echo CYN.'│'.RST.pad(MAG.BOLD.'  ⚡ CryptoFuture — ENDLESS LOOP ⚡'.RST, 56).CYN.'│'.RST."\n";
+echo mid(54)."\n";
+echo line(YEL.'◆'.RST.' Input : '.WHT.'Email only')."\n";
+echo line(YEL.'◆'.RST.' Mode  : '.WHT.'Loop forever (Ctrl+C to stop)')."\n";
+echo line(YEL.'◆'.RST.' Save  : '.GRN.'nothing (memory only)')."\n";
+echo bot(54)."\n\n";
+
+$wallet = ask("  Wallet email   : ");
+if (!$wallet) { echo RED."wallet kosong\n"; exit(1); }
+
+echo "\n";
+log_line("probing /faucet/earn...", 'in');
+$r = req(EARN);
+$html = $r['body'];
+
+if (is_cf_challenge($html)) {
+    if (!prompt_cf()) { echo RED."  no cf_clearance, exit\n"; exit(1); }
+    $r = req(EARN);
+    $html = $r['body'];
+    if (is_cf_challenge($html)) { echo RED."  still CF, exit\n"; exit(1); }
+}
+
+if (strpos($html, 'id="fauform"') === false) {
+    $lr = login($wallet);
+    if (!$lr['ok']) {
+        if (!empty($lr['cf'])) {
+            if (!prompt_cf()) { echo RED."  exit\n"; exit(1); }
+            $lr = login($wallet);
         }
-
-        $anti = lime($apikey, $gambar);
-        if (is_array($anti)) {
-            $asw = (int)$anti["captcha"];
-
-            $payload = json_encode([
-                "session_id" => $sid,
-                "candidate_index" => $asw
-            ]);
-
-            $veri = skibidixxx(host."/api/faucet/ac-captcha/verify", "POST", $payload, $a);
-            $v = json_decode($veri, true);
-
-            if (($v['ok'] ?? false) === true && isset($v['token'])) {
-                $verifiedToken = $v['token'];
-                $data = json_encode(["captcha_token" => $verifiedToken]);
-                $claim = skibidixxx(host."/api/faucet/claim", "POST", $data, $a);
-                $cl = json_decode($claim, true);
-
-                if (isset($cl['roll_number'])) {
-                    echo putih . "[SUCCESS] " . hijau . "roll ".$cl['roll_number'].putih." reward ".hijau."$".$cl['reward_usd']."\n";
-                    timer(180, "  next claim");
-                    goto asu;
-                } else {
-                    timer(5, "  retry..");
-                    goto asu;
-                }
-
-            } elseif (($v['error'] ?? '') === 'too_fast') {
-                $retry_ms = $v['retry_after_ms'] ?? 250;
-                sleep(ceil($retry_ms / 1000));
-                goto asu;
-            } elseif (($v['error'] ?? '') === 'wrong') {
-                timer(2, "  new challenge..");
-                goto asu;
-            } elseif (($v['error'] ?? '') === 'blocked' || isset($v['locked_until'])) {
-                $until = (float)($v['locked_until'] ?? 0);
-                $secs = ceil(($until - round(microtime(true) * 1000)) / 1000);
-                if ($secs < 1) $secs = 60;
-                timer(min($secs, 900), "  blocked wait..");
-                goto asu;
-            } else {
-                timer(5, "  retry..");
-                goto asu;
-            }
-
-        } elseif (is_string($anti) && in_array($anti, ["WRONG_CAPTCHA_ID", "ERROR_CAPTCHA_UNSOLVABLE", "ERROR_TOO_MANY_REQUESTS", "ERROR_SOLVE_PENDING", "INTENAL_SERVER_ERROR", "BAD_ANSWER"])) {
-            timer(3, "  retry..");
-            goto asu;
-        } else {
-            timer(5, "  retry..");
-            goto asu;
-        }
-
-    } elseif (isset($d['error']) && $d['error'] === 'blocked') {
-        timer(60, "  blocked wait..");
-        goto asu;
-    } elseif (isset($d['locked_until'])) {
-        $until = (float)$d['locked_until'];
-        $secs = ceil(($until - round(microtime(true) * 1000)) / 1000);
-        if ($secs < 1) $secs = 60;
-        timer(min($secs, 900), "  locked wait..");
-        goto asu;
-    } else {
-        timer(5, "  retry..");
-        goto asu;
+        if (!$lr['ok']) { log_line("login gagal: ".$lr['msg'], 'er'); exit(1); }
     }
-
-} else {
-    @unlink($tod);
-    echo putih . "login required!...\n";
-
-    $data = json_encode(["email" => $email, "referral_code" => ref_code]);
-    $p = skibidixxx(host."/api/auth/login", "POST", $data, $a);
-
-    if (strpos($p, "email") !== false) {
-        $j = json_decode($p, true);
-        $uid = $j["user"]["id"] ?? '?';
-        $uemail = $j["user"]["email"] ?? $email;
-        echo putih . "login success.. > ID: " . hijau . $uid . putih . " | " . hijau . $uemail . "\n";
-        sleep(3);
-        goto home;
-    } else {
-        echo kuning . "Login Failed!, try again.. or check web!\n";
-        @unlink($tod);
-        @unlink($configFile);
-        exit;
-    }
+    log_line("login ok", 'ok');
 }
 
+/* Stats */
+$sessionStart = time();
+$earned = 0.0;
+$claims = 0;
+$fails  = 0;
+$balNow = null;
+
+/* ═══════════ LOOP ═══════════ */
+$round = 0;
+while (true) {
+    $round++;
+    echo "\n".MAG."  ┌─ Round #".$round." ─────────────────────────────".RST."\n";
+
+    $r = req(EARN);
+    $html = $r['body'];
+
+    /* CF mid-run */
+    if (is_cf_challenge($html)) {
+        log_line("CF challenge — butuh cf_clearance baru", 'wr');
+        if (!prompt_cf()) { log_line("abort", 'er'); break; }
+        continue;
+    }
+
+    /* Session drop */
+    if (strpos($html, 'id="fauform"') === false
+        && (stripos($html, 'auth/login') !== false || stripos($html, 'Sign in') !== false)) {
+        log_line("session drop — re-login", 'wr');
+        $lr = login($wallet);
+        if (!$lr['ok']) {
+            log_line("re-login gagal: ".$lr['msg']." — tunggu 60s", 'er');
+            sleep(60);
+            continue;
+        }
+        log_line("re-login ok", 'ok');
+        continue;
+    }
+
+    $info = parse_earn($html);
+    if ($info['balance'] !== null) $balNow = $info['balance'];
+
+    /* Cooldown */
+    if ($info['wait'] > 0) {
+        $w = $info['wait'];
+        log_line("cooldown ".fmt($w)." (bal: ".number_format((float)$balNow, 4).")", 'wr');
+        echo CYN."  ⏳ waiting".RST;
+        while ($w > 0) { $c = min($w, LOOP_SLEEP_STEP); sleep($c); $w -= $c; echo CYN.".".RST; flush(); }
+        echo "\n";
+        continue;
+    }
+
+    /* No form & no wait */
+    if (!$info['has_form']) {
+        log_line("no form & no wait — unknown", 'er');
+        $fails++;
+        sleep(15);
+        continue;
+    }
+
+    /* POST */
+    sleep(rand(2, 4));
+    $smart = base64_encode(json_encode([
+        'ts' => (int)(microtime(true) * 1000),
+        'cpu' => 8, 'mem' => 8, 'w' => 384, 'h' => 832,
+        'touch' => 5, 'moves' => rand(0, 3),
+    ]));
+    $fp = hash('sha256', UA.'384x832');
+    $post = http_build_query([
+        'csrf_token_name' => $info['csrf'],
+        'token'           => $info['token'],
+        'earn_ticket'     => $info['ticket'],
+        'fp_hash'         => $fp,
+        'confirm_wallet'  => '',
+        'wallet'          => $info['wallet'],
+        'smart_token'     => $smart,
+        'captcha'         => 'smartcaptcha',
+    ]);
+
+    $r2 = req(EARN, 'POST', $post, ['Origin: '.SITE, 'Referer: '.EARN]);
+    $respHtml = $r2['body'];
+
+    $success = false;
+    $amount  = 0.0;
+
+    if ($r2['code'] === 200) {
+        if (preg_match("/Swal\.fire\(\{[^}]*html:\s*'([^']+)'/i", $respHtml, $m)) {
+            $msg = strip_tags($m[1]);
+            if (preg_match('/([0-9.]+)\s+Coins/i', $msg, $am)) { $amount = (float)$am[1]; $success = true; }
+            if (stripos($msg, 'success') !== false) $success = true;
+        }
+        if (!$success && preg_match('/Success!.*?([0-9.]+)\s+Coins/i', $respHtml, $m)) {
+            $amount = (float)$m[1]; $success = true;
+        }
+    }
+
+    /* 500 / DB error → re-check balance */
+    if (!$success && ($r2['code'] === 500 || stripos($respHtml, 'Database Error') !== false)) {
+        log_line("HTTP 500 / DB err — re-check balance", 'wr');
+        sleep(2);
+        $balAfter = fetch_balance();
+        $delta = (float)$balAfter - (float)$balNow;
+        if ($delta > 0) { $success = true; $amount = $delta; $balNow = $balAfter; }
+    }
+
+    if ($success) {
+        $claims++;
+        $earned += $amount;
+        if ($balNow !== null) $balNow += $amount;
+        log_line("✓ +".number_format($amount, 4)." | total: ".number_format($earned, 4)." | bal: ".number_format((float)$balNow, 4), 'ok');
+    } else {
+        $fails++;
+        log_line("✗ fail (HTTP ".$r2['code'].")", 'er');
+    }
+
+    $cd = $success ? 65 : rand(20, 40);
+    echo CYN."  ⏳ next in ".fmt($cd).RST;
+    $w = $cd;
+    while ($w > 0) { $c = min($w, LOOP_SLEEP_STEP); sleep($c); $w -= $c; echo CYN.".".RST; flush(); }
+    echo "\n";
+}
+
+/* ═══════════ SUMMARY ═══════════ */
+$uptime = time() - $sessionStart;
+echo "\n".CYN.'╭'.str_repeat('─',56).'╮'.RST."\n";
+echo CYN.'│'.RST.pad(MAG.BOLD.'  FINAL SUMMARY'.RST, 56).CYN.'│'.RST."\n";
+echo mid(54)."\n";
+echo line('Claims  : '.GRN.BOLD.$claims.RST.'    Failed : '.RED.$fails)."\n";
+echo line('Earned  : '.GRN.BOLD.'+'.number_format($earned, 4).' Coins'.RST)."\n";
+if ($balNow !== null) echo line('Balance : '.GRN.number_format((float)$balNow, 4).' Coins')."\n";
+echo line('Uptime  : '.fmt($uptime))."\n";
+echo bot(54)."\n\n";
+
+echo WHT.'  ~ session flushed from memory'.RST."\n";
+exit(0);
