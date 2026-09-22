@@ -42,6 +42,16 @@
           "label": "CryptoFuture 🟢",
           "file": "Future.php",
           "runner": "php"
+        },
+        "9": {
+          "label": "RapidGame 🟢",
+          "file": "Rapid.php",
+          "runner": "php"
+        },
+        "10": {
+          "label": "Coming Soon 🔒",
+          "file": "comingsoon.php",
+          "runner": "php"
         }
       }
     },
@@ -119,6 +129,21 @@
           "runner": "php"
         },
         "15": {
+          "label": "Coming Soon 🔒",
+          "file": "comingsoon.php",
+          "runner": "php"
+        },
+        "16": {
+          "label": "Coming Soon 🔒",
+          "file": "comingsoon.php",
+          "runner": "php"
+        },
+        "17": {
+          "label": "Coming Soon 🔒",
+          "file": "comingsoon.php",
+          "runner": "php"
+        },
+        "18": {
           "label": "Coming Soon 🔒",
           "file": "comingsoon.php",
           "runner": "php"
