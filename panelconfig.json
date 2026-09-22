@@ -45,8 +45,8 @@
         },
         "9": {
           "label": "RapidGame 🟢",
-          "file": "Rapid.php",
-          "runner": "php"
+          "file": "Rapid.python",
+          "runner": "python3"
         },
         "10": {
           "label": "Coming Soon 🔒",
