@@ -45,7 +45,7 @@
         },
         "9": {
           "label": "RapidGame 🟢",
-          "file": "Rapid.python",
+          "file": "Rapid.py",
           "runner": "python3"
         },
         "10": {
