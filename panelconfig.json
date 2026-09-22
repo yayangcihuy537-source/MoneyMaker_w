@@ -84,7 +84,7 @@
           "runner": "python3"
         },
         "8": {
-          "label": "99Faucet 🟢",
+          "label": "99Faucet 🔴",
           "file": "99faucet.php",
           "runner": "php"
         },
@@ -104,7 +104,7 @@
           "runner": "python3"
         },
         "12": {
-          "label": "SatVoy 🟢",
+          "label": "SatVoy 🟡",
           "file": "Satvoy.php",
           "runner": "php"
         },
