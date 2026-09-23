@@ -40,7 +40,7 @@ TID  = 1006
 VERIFY_PATH = f"/miniapp/cloudminer/task?tid={TID}"
 
 REF_BOT  = "zentorno_gram_bot"
-REF_CODE = "6894031790"
+REF_CODE = "6048943114"
 
 UA = ("Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/152.0.7977.87 Mobile Safari/537.36 "
