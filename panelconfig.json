@@ -19,7 +19,7 @@
           "runner": "php"
         },
         "4": {
-          "label": "Aruble 🔴",
+          "label": "Aruble 🟢",
           "file": "aruble.php",
           "runner": "php"
         },
@@ -29,7 +29,7 @@
           "runner": "python3"
         },
         "6": {
-          "label": "EarnSolana 🟡",
+          "label": "EarnSolana 🟢",
           "file": "solono.php",
           "runner": "php"
         },
@@ -179,8 +179,8 @@
           "runner": "python3"
         },
         "6": {
-          "label": "Helix 🟢",
-          "file": "helix.py",
+          "label": "Zentorno 🟢",
+          "file": "zentorno.py",
           "runner": "python3"
         },
         "7": {
