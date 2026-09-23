@@ -12,8 +12,8 @@ except ImportError:
     sys.exit(1)
 
 HOST              = "https://btcadspace.com"
-SKIPCHA_IN        = "https://skipcha.online/in.php"
-SKIPCHA_RES       = "https://skipcha.online/res.php"
+TERTUYUL_IN       = "http://api.tertuyul.my.id/in.php"
+TERTUYUL_RES      = "http://api.tertuyul.my.id/res.php"
 TURNSTILE_SITEKEY = "0x4AAAAAAAB-TZt_lwYtViEL"
 AVISO_API         = "https://aviso.bz/api/v1"
 AVISO_API_KEY     = "ak_87e52f3d03d99fbb11505fc3ec24b881dddfb42e"
@@ -24,6 +24,7 @@ DEBUG_HTML_DIR    = "debug_html"
 
 MAX_RETRY         = 3
 FARM_COOLDOWN     = 300
+FAUCET_COOLDOWN   = 5
 
 DEF_UA = ("Mozilla/5.0 (Linux; Android 15; CPH2505 Build/UKQ1.230924.001) "
           "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.199 "
@@ -33,6 +34,18 @@ BLK="\033[0;30m"; RED="\033[0;31m"; GRN="\033[0;32m"; YEL="\033[0;33m"
 BLU="\033[0;34m"; MAG="\033[0;35m"; CYN="\033[0;36m"; WHT="\033[0;37m"
 RST="\033[0m"; BOLD="\033[1m"
 CLR = "\r\033[2K"
+
+_HARD_ERR = object()
+
+LIMITED_FAUCET = {}
+
+
+def _mark_faucet_limited(username):
+    LIMITED_FAUCET[username] = True
+
+
+def _is_faucet_limited(username):
+    return LIMITED_FAUCET.get(username, False)
 
 
 def clear():
@@ -205,6 +218,7 @@ def safe_request(sess, url, method='GET', data=None, headers=None,
 
 
 def dump_debug_html(username, tag, html):
+    return
     try:
         os.makedirs(DEBUG_HTML_DIR, exist_ok=True)
         h = hashlib.md5(username.lower().strip().encode()).hexdigest()[:8]
@@ -242,10 +256,10 @@ def _clear_line():
     sys.stdout.write(CLR); sys.stdout.flush()
 
 
-SKIPCHA_ERRORS = {
+TERTUYUL_ERRORS = {
     "ERROR_WRONG_USER_KEY":        "API key salah",
-    "ERROR_BANNED":                "Akun Skipcha diblokir",
-    "ERROR_ZERO_BALANCE":          "Saldo Skipcha habis",
+    "ERROR_BANNED":                "Akun diblokir",
+    "ERROR_ZERO_BALANCE":          "Saldo habis",
     "ERROR_METHOD_DOES_NOT_EXIST": "Method tidak dikenal",
     "ERROR_BAD_DATA":              "Parameter tidak valid (refunded)",
     "ERROR_SOLVER_FAILED":         "Solver gagal solve (refunded)",
@@ -255,26 +269,37 @@ SKIPCHA_ERRORS = {
     "CAPCHA_NOT_READY":            "Masih solving — poll lagi",
 }
 
+_TRANSIENT_ERR_KEYS = ("UNSOLVABLE", "TIMEOUT", "CAPCHA_NOT_READY", "NO_SLOT")
 
-def _classify_skipcha_error(msg: str) -> str:
+
+def _is_transient_err(msg: str) -> bool:
+    if not msg:
+        return False
+    up = msg.upper()
+    return any(k in up for k in _TRANSIENT_ERR_KEYS)
+
+
+def _classify_tertuyul_error(msg: str) -> str:
     if not msg:
         return ""
     m = msg.upper()
-    for code, desc in SKIPCHA_ERRORS.items():
+    for code, desc in TERTUYUL_ERRORS.items():
         if code in m:
             return f"{code} ({desc})"
     return ""
 
 
-def _solve_skipcha_common(apikey, label, submit_fn, parse_fn,
-                          timeout=180, poll_interval=2.5):
+def _solve_tertuyul_common(apikey, label, submit_fn, parse_fn,
+                           timeout=180, poll_interval=2.5):
     task_id = submit_fn()
     if not task_id:
         return None
     if task_id.upper().startswith("ERROR"):
-        err_desc = _classify_skipcha_error(task_id)
-        log(f"Skipcha submit: {err_desc or task_id}", "er")
-        return None
+        if _is_transient_err(task_id):
+            return None
+        err_desc = _classify_tertuyul_error(task_id)
+        log(f"Solver submit: {err_desc or task_id}", "er")
+        return _HARD_ERR
 
     state = {"data": None, "done": True}
     stop_flag = {"stop": False}
@@ -282,10 +307,10 @@ def _solve_skipcha_common(apikey, label, submit_fn, parse_fn,
     def bg_poll():
         while not stop_flag["stop"]:
             try:
-                pr = requests.get(
-                    SKIPCHA_RES,
-                    params={"key": apikey, "action": "get",
-                            "id": task_id, "json": 1},
+                pr = requests.post(
+                    TERTUYUL_RES,
+                    data={"key": apikey, "action": "get",
+                          "id": task_id, "json": 1},
                     impersonate="chrome110", timeout=10)
                 state["data"] = pr.json()
             except Exception:
@@ -323,10 +348,12 @@ def _solve_skipcha_common(apikey, label, submit_fn, parse_fn,
         log(f"Solved ({result[2]}s)", "ok")
         return result[1]
     if result and result[0] == "err":
-        err_desc = _classify_skipcha_error(result[1])
-        log(f"Skipcha: {err_desc or result[1]}", "er")
-        return None
-    log("Skipcha timeout", "er")
+        err_msg = result[1] or ""
+        if _is_transient_err(err_msg):
+            return None
+        err_desc = _classify_tertuyul_error(err_msg)
+        log(f"Solver: {err_desc or err_msg}", "er")
+        return _HARD_ERR
     return None
 
 
@@ -339,7 +366,7 @@ def _parse_turnstile_resp(d):
             return ("ok", tok)
     msg = str(d.get("request", ""))
     if msg and "CAPCHA_NOT_READY" not in msg.upper():
-        err = _classify_skipcha_error(msg)
+        err = _classify_tertuyul_error(msg)
         if err:
             return ("err", msg)
     return ("wait", None)
@@ -354,7 +381,7 @@ def _parse_antibot_resp(d):
             return ("ok", ans)
     msg = str(d.get("request", ""))
     if msg and "CAPCHA_NOT_READY" not in msg.upper():
-        err = _classify_skipcha_error(msg)
+        err = _classify_tertuyul_error(msg)
         if err:
             return ("err", msg)
     return ("wait", None)
@@ -363,7 +390,7 @@ def _parse_antibot_resp(d):
 def solve_turnstile(apikey, sitekey, pageurl, label="[CAPTCHA]"):
     def submit():
         try:
-            r = requests.get(SKIPCHA_IN, params={
+            r = requests.post(TERTUYUL_IN, data={
                 "key": apikey, "method": "turnstile",
                 "sitekey": sitekey, "pageurl": pageurl, "json": 1},
                 impersonate="chrome110", timeout=20)
@@ -373,48 +400,65 @@ def solve_turnstile(apikey, sitekey, pageurl, label="[CAPTCHA]"):
         if not isinstance(d, dict) or d.get("status") != 1:
             return None
         return str(d.get("request", "")) or None
-    for _ in range(MAX_RETRY):
-        token = _solve_skipcha_common(apikey, f"{label} Solve",
-                                      submit, _parse_turnstile_resp)
+
+    while True:
+        token = _solve_tertuyul_common(apikey, f"{label} Solve",
+                                       submit, _parse_turnstile_resp)
+        if token is _HARD_ERR:
+            return _HARD_ERR
         if token:
             return token
-    return None
+        time.sleep(1)
+
+
+def _submit_antibot(apikey, main_b64, options_b64, method="antibot"):
+    try:
+        payload = {
+            "key": apikey,
+            "method": method,
+            "main": main_b64,
+            "json": 1,
+        }
+        for i, opt in enumerate(options_b64[:4], 1):
+            payload[str(i)] = opt
+
+        r = requests.post(TERTUYUL_IN, data=payload,
+                          impersonate="chrome110", timeout=20)
+        d = r.json()
+    except Exception:
+        return None
+    if not isinstance(d, dict) or d.get("status") != 1:
+        return None
+    return str(d.get("request", "")) or None
 
 
 def solve_antibot(apikey, main_b64, options_b64, label="[ANTIBOT]"):
     if not main_b64 or not options_b64:
         return None
-    def submit():
-        try:
-            r = requests.post(SKIPCHA_IN,
-                params={"key": apikey, "method": "antibot", "json": 1},
-                json={"main": main_b64, "options": options_b64},
-                impersonate="chrome110", timeout=20)
-            d = r.json()
-        except Exception:
-            return None
-        if not isinstance(d, dict) or d.get("status") != 1:
-            return None
-        return str(d.get("request", "")) or None
-    for _ in range(MAX_RETRY):
-        ans = _solve_skipcha_common(apikey, f"{label} Solve",
-                                    submit, _parse_antibot_resp)
+
+    main_b64 = re.sub(r'\s+', '', main_b64)
+    options_b64 = [re.sub(r'\s+', '', o) for o in options_b64]
+
+    while True:
+        ans = _solve_tertuyul_common(
+            apikey, f"{label} Solve",
+            lambda: _submit_antibot(apikey, main_b64, options_b64, "antibot"),
+            _parse_antibot_resp)
+        if ans is _HARD_ERR:
+            log(f"{label} fallback ke antibotv2...", "wr")
+            while True:
+                ans2 = _solve_tertuyul_common(
+                    apikey, f"{label}v2 Solve",
+                    lambda: _submit_antibot(apikey, main_b64, options_b64, "antibotv2"),
+                    _parse_antibot_resp)
+                if ans2 is _HARD_ERR:
+                    return _HARD_ERR
+                if ans2:
+                    return ans2
+                time.sleep(1)
         if ans:
             return ans
-    return None
-
-
-def skipcha_balance(apikey):
-    try:
-        r = requests.get(SKIPCHA_RES,
-            params={"key": apikey, "action": "getbalance", "json": 1},
-            impersonate="chrome110", timeout=10)
-        d = r.json()
-        if isinstance(d, dict) and "balance" in d:
-            return float(d["balance"])
-    except Exception:
-        pass
-    return None
+        time.sleep(1)
 
 
 def parse_csrf(html):
@@ -504,25 +548,36 @@ def parse_ablinks(html):
         html, re.DOTALL)
     if m:
         main_b64 = m.group(1)
+
     m = re.search(r'var\s+ablinks\s*=\s*(\[.*?\])\s*;', html, re.DOTALL)
     if not m:
-        m = re.search(r'var\s+ablinks\s*=\s*(\[.*?\])', html, re.DOTALL)
-    if not m:
         return main_b64, [], []
+
     js = m.group(1).replace('\\"', '"').replace('\\/', '/')
+
     entries = re.findall(
-        r'rel="(\d+)"[^>]*>\s*<img\s+src="data:image/[^;]+;base64,([^"]+)"',
+        r'rel="(\d+)"[^>]*>.*?<img\s+src="data:image/[^;]+;base64,([^"]+)"',
         js, re.DOTALL)
+
     if not entries:
         entries = re.findall(
-            r'rel="(\d+)"[^>]*data:image/[^;]+;base64,([^"]+)',
+            r'rel="(\d+)"[^>]*?src="data:image/[^;]+;base64,([^"]+)"',
             js, re.DOTALL)
+
     if not entries:
         rels = re.findall(r'rel="(\d+)"', js)
-        b64s = re.findall(r'data:image/[^;]+;base64,([^"]+)', js)
-        if rels and len(rels) == len(b64s):
+        b64s = re.findall(r'src="data:image/[^;]+;base64,([^"]+)"', js)
+        if not b64s:
+            b64s = re.findall(r'data:image/[^;]+;base64,([^"]+)', js)
+        if len(rels) == len(b64s) and len(rels) > 0:
             entries = list(zip(rels, b64s))
-    return main_b64, [e[1] for e in entries], [e[0] for e in entries]
+
+    if not entries:
+        return main_b64, [], []
+
+    rel_ids = [e[0] for e in entries]
+    options = [e[1] for e in entries]
+    return main_b64, options, rel_ids
 
 
 def parse_surf_ads(html):
@@ -632,6 +687,8 @@ def do_login(sess, apikey, username, password):
             time.sleep(3); continue
         sitekey = parse_sitekey(html) or TURNSTILE_SITEKEY
         token = solve_turnstile(apikey, sitekey, f"{HOST}/login", "[LOGIN]")
+        if token is _HARD_ERR:
+            return False
         if not token:
             time.sleep(3); continue
         post_hdr = {"content-type": "application/x-www-form-urlencoded",
@@ -705,6 +762,8 @@ def do_faucet(sess, apikey, username=None):
 
     log(f"[FAUCET] {GRN}{len(options)}{RST} pilihan antibot", "in")
     ans = solve_antibot(apikey, main_b64, options, "[FAUCET-AB]")
+    if ans is _HARD_ERR:
+        return -3
     if not ans:
         log("[FAUCET] antibot gagal", "er")
         return 0
@@ -719,17 +778,23 @@ def do_faucet(sess, apikey, username=None):
             idx = int(t)
         except ValueError:
             continue
-        if 0 <= idx < len(options):
-            selected_rels.append(rel_ids[idx] if idx < len(rel_ids) else str(idx + 1))
+        if 1 <= idx <= len(options):
+            selected_rels.append(rel_ids[idx - 1])
+        elif 0 <= idx < len(options):
+            selected_rels.append(rel_ids[idx])
         else:
             log(f"[FAUCET] index {idx} out of range", "wr")
+
     if not selected_rels:
         log(f"[FAUCET] antibot index tidak valid: {ans}", "er")
         return 0
-    antibotlinks = " " + " ".join(selected_rels)
+
+    antibotlinks = " ".join(selected_rels)
     log(f"[FAUCET] antibot → {antibotlinks.strip()}", "in")
 
     token = solve_turnstile(apikey, sitekey, f"{HOST}/faucet", "[FAUCET-CF]")
+    if token is _HARD_ERR:
+        return -3
     if not token:
         log("[FAUCET] captcha gagal", "er")
         return 0
@@ -748,8 +813,10 @@ def do_faucet(sess, apikey, username=None):
     ntype, nmsg = parse_notyf(resp)
     if ntype:
         msg_l = nmsg.lower()
-        if "maximum daily" in msg_l or "reached the maximum" in msg_l:
-            log(f"[FAUCET] {nmsg}", "wr")
+        if ("maximum daily" in msg_l or "reached the maximum" in msg_l
+                or "reached maximum" in msg_l or "daily limit" in msg_l
+                or "limit reached" in msg_l):
+            log("[FAUCET] ⚠ Limit harian tercapai, skip akun", "wr")
             return -2
         if ntype == "success" or "added to your balance" in msg_l:
             log(f"[FAUCET] {nmsg}", "ok")
@@ -760,7 +827,15 @@ def do_faucet(sess, apikey, username=None):
     body_l = resp.lower()
     if "has been added to your balance" in body_l:
         return 1
-    for kw in ("maximum daily", "too early", "invalid", "error", "captcha failed"):
+
+    limit_kws = ("maximum daily", "reached the maximum", "reached maximum",
+                 "daily limit", "limit reached")
+    for kw in limit_kws:
+        if kw in body_l:
+            log("[FAUCET] ⚠ Limit harian tercapai, skip akun", "wr")
+            return -2
+
+    for kw in ("too early", "invalid", "error", "captcha failed"):
         if kw in body_l:
             log(f"[FAUCET] {kw}", "wr")
             return 0
@@ -815,6 +890,8 @@ def claim_one_surf(sess, apikey, ad):
     csrf = parse_csrf(html) or csrf
     sitekey = parse_sitekey(html) or TURNSTILE_SITEKEY
     token = solve_turnstile(apikey, sitekey, f"{HOST}/surf/{uid}", "[SURF-CF]")
+    if token is _HARD_ERR:
+        return False
     if not token:
         log("[SURF] captcha gagal", "er")
         return False
@@ -1242,7 +1319,7 @@ def print_success_banner(reward_text, new_bal, diff, unit="coins"):
             line2 = f"New Balance : {new_bal} {unit}"
     else:
         line2 = None
-    ansi = re.compile(r'\033\[[0-9;]*m')
+    ansi = re.compile(r'\033[0-9;]*m')
     w1 = len(ansi.sub('', line1))
     w2 = len(ansi.sub('', line2)) if line2 else 0
     inner = max(w1, w2) + 2
@@ -1258,7 +1335,7 @@ def load_config():
         clear(); banner_main()
         print(f"{WHT}  ⚙  BTCadspace Configuration Setup{RST}")
         print(f"{WHT}  ─────────────────────────────{RST}")
-        print(f"{WHT}  Skipcha API Key: {RST}", end="")
+        print(f"{WHT}  Tertuyul API Key: {RST}", end="")
         apikey = input().strip()
         cfg = {"apikey": apikey, "accounts": []}
         save_config(cfg)
@@ -1394,6 +1471,534 @@ def check_balance_all(cfg):
     input()
 
 
+def run_faucet_loop(cfg, selected):
+    clear(); banner_main()
+    print(f"{WHT}Mode      : {CYN}Faucet Only{RST}")
+    print(f"{WHT}Total Akun: {GRN}{len(selected)}{RST}")
+    print(f"{WHT}───────────────────────────────────────────────{RST}")
+
+    LIMITED_FAUCET.clear()
+    single_account = (len(selected) == 1)
+
+    try:
+        while True:
+            for idx, acc in enumerate(selected):
+                username = acc["username"]
+                banner_account(idx, username,
+                               proxy_raw=acc.get("proxy") or None, show_ip=True)
+
+                if _is_faucet_limited(username):
+                    log(f"[FAUCET] {mask_email(username)} limit harian, skip", "wr")
+                    time.sleep(1)
+                    continue
+
+                try:
+                    sess = load_session(username, acc.get("proxy") or None)
+                except Exception as e:
+                    log(f"Proxy error: {e}", "er")
+                    time.sleep(2)
+                    continue
+
+                if not ensure_logged_in(sess, cfg["apikey"], username, acc["password"]):
+                    log("Login gagal, skip", "er")
+                    time.sleep(2)
+                    continue
+
+                old_bal = get_balance(sess)
+                if old_bal is not None:
+                    log(f"Balance: {old_bal} coins", "bi")
+
+                print(f"\n{WHT}  ── FAUCET ──{RST}")
+                for attempt in range(1, MAX_RETRY + 1):
+                    try:
+                        r = do_faucet(sess, cfg["apikey"], username=username)
+                    except Exception as e:
+                        log(f"[FAUCET] err: {e}", "er"); r = 0
+                    if r == -1:
+                        if ensure_logged_in(sess, cfg["apikey"], username, acc["password"]):
+                            continue
+                        break
+                    if r == -2:
+                        _mark_faucet_limited(username)
+                        break
+                    if r == -3:
+                        break
+                    if r == 1:
+                        time.sleep(2)
+                        new_bal = get_balance(sess)
+                        diff = (new_bal - old_bal) if (new_bal is not None and old_bal is not None) else None
+                        if new_bal == old_bal and old_bal is not None:
+                            log(f"[FAUCET] ⚠ Balance gak berubah (masih {old_bal})", "wr")
+                        print_success_banner("Faucet Claim!", new_bal, diff)
+                        if new_bal is not None:
+                            old_bal = new_bal
+                        break
+                    if attempt < MAX_RETRY:
+                        log(f"[FAUCET] retry {attempt}/{MAX_RETRY}...", "wr")
+                    time.sleep(2)
+
+                if single_account and _is_faucet_limited(username):
+                    log("Akun ini limit harian, stop loop.", "wr")
+                    print(f"\n{WHT}Tekan Enter buat balik ke menu...{RST}", end="")
+                    input()
+                    return
+
+                time.sleep(2)
+
+            if all(_is_faucet_limited(a["username"]) for a in selected):
+                log("Semua akun limit harian, stop loop.", "wr")
+                print(f"\n{WHT}Tekan Enter buat balik ke menu...{RST}", end="")
+                input()
+                return
+
+            print(f"\n{WHT}[LOOP] Cooldown {FAUCET_COOLDOWN}s...{RST}")
+            tmr(FAUCET_COOLDOWN, "Cooldown")
+    except KeyboardInterrupt:
+        print(f"\n{YEL}Dihentikan user.{RST}"); time.sleep(1)
+
+
+def run_ptc_loop(cfg, selected):
+    clear(); banner_main()
+    print(f"{WHT}Mode      : {CYN}PTC (Surf Ads){RST}")
+    print(f"{WHT}Total Akun: {GRN}{len(selected)}{RST}")
+    print(f"{WHT}───────────────────────────────────────────────{RST}")
+
+    for idx, acc in enumerate(selected):
+        username = acc["username"]
+        banner_account(idx, username,
+                       proxy_raw=acc.get("proxy") or None, show_ip=True)
+
+        try:
+            sess = load_session(username, acc.get("proxy") or None)
+        except Exception as e:
+            log(f"Proxy error: {e}", "er")
+            time.sleep(2)
+            continue
+
+        if not ensure_logged_in(sess, cfg["apikey"], username, acc["password"]):
+            log("Login gagal, skip", "er")
+            time.sleep(2)
+            continue
+
+        old_bal = get_balance(sess)
+        if old_bal is not None:
+            log(f"Balance: {old_bal} coins", "bi")
+
+        try:
+            ads = get_surf_ads(sess)
+        except Exception:
+            ads = []
+
+        if not ads:
+            log(f"[SURF] {GRN}0{RST} tersedia", "wr")
+            time.sleep(2)
+            continue
+
+        print(f"\n{WHT}  ── SURF ADS ──{RST}")
+        log(f"[SURF] {GRN}{len(ads)}{RST} tersedia", "in")
+        total_ok = 0
+        for i, ad in enumerate(ads, 1):
+            log(f"[SURF] [{i}/{len(ads)}] {ad['title'][:30]} | "
+                f"{YEL}{ad['coins']}c{RST} | {ad['duration']}s", "in")
+            try:
+                r = claim_one_surf(sess, cfg["apikey"], ad)
+            except Exception as e:
+                log(f"[SURF] err: {e}", "er"); r = False
+
+            if r is None:
+                if ensure_logged_in(sess, cfg["apikey"], username, acc["password"]):
+                    try:
+                        r = claim_one_surf(sess, cfg["apikey"], ad)
+                    except Exception:
+                        r = False
+                else:
+                    r = False
+
+            if r:
+                time.sleep(1)
+                new_bal = get_balance(sess)
+                diff = (new_bal - old_bal) if (new_bal is not None and old_bal is not None) else None
+                print_success_banner(f"Surf +{ad['coins']}c", new_bal, diff)
+                if new_bal is not None:
+                    old_bal = new_bal
+                total_ok += 1
+            else:
+                log(f"[SURF] ✗ gagal: {ad['title'][:30]}", "er")
+            time.sleep(2)
+
+        log(f"[SURF] Selesai: {GRN}{total_ok}{RST}/{len(ads)} ok",
+            "ok" if total_ok else "wr")
+        time.sleep(2)
+
+    print(f"\n{WHT}Tekan Enter buat balik ke menu...{RST}", end="")
+    input()
+
+
+def run_video_loop(cfg, selected):
+    clear(); banner_main()
+    print(f"{WHT}Mode      : {CYN}YouTube Videos{RST}")
+    print(f"{WHT}Total Akun: {GRN}{len(selected)}{RST}")
+    print(f"{WHT}───────────────────────────────────────────────{RST}")
+
+    for idx, acc in enumerate(selected):
+        username = acc["username"]
+        banner_account(idx, username,
+                       proxy_raw=acc.get("proxy") or None, show_ip=True)
+
+        try:
+            sess = load_session(username, acc.get("proxy") or None)
+        except Exception as e:
+            log(f"Proxy error: {e}", "er")
+            time.sleep(2)
+            continue
+
+        if not ensure_logged_in(sess, cfg["apikey"], username, acc["password"]):
+            log("Login gagal, skip", "er")
+            time.sleep(2)
+            continue
+
+        old_bal = get_balance(sess)
+        if old_bal is not None:
+            log(f"Balance: {old_bal} coins", "bi")
+
+        print(f"\n{WHT}  ── YOUTUBE VIDEOS ──{RST}")
+        try:
+            yt_html, _, _ = safe_request(sess, f"{HOST}/ytvideos",
+                                         headers={"user-agent": DEF_UA})
+            user_hash = parse_user_hash(yt_html)
+        except Exception:
+            user_hash = None
+
+        if not user_hash:
+            log("[VIDEO] user_hash gak ketemu, skip", "wr")
+            time.sleep(2)
+            continue
+
+        aviso_id = aviso_identify(sess, user_hash)
+        if not aviso_id:
+            log("[VIDEO] aviso identify gagal", "wr")
+            time.sleep(2)
+            continue
+
+        data = aviso_tasks_page(user_hash, 0, 100)
+        if not data:
+            log("[VIDEO] gak ada tasks", "wr")
+            time.sleep(2)
+            continue
+
+        all_tasks = []
+        for t in ("ads", "like", "sub"):
+            for task in data.get(t, []):
+                if task.get("inProgress"):
+                    continue
+                task["type"] = t
+                all_tasks.append(task)
+
+        if not all_tasks:
+            log("[VIDEO] 0 task tersedia", "wr")
+            time.sleep(2)
+            continue
+
+        log(f"[VIDEO] {GRN}{len(all_tasks)}{RST} task tersedia", "in")
+        total_ok = 0
+        for i, task in enumerate(all_tasks, 1):
+            log(f"[VIDEO] [{i}/{len(all_tasks)}] [{task['type']}] "
+                f"{task.get('title', '-')[:30]}", "in")
+            try:
+                r = claim_one_video(sess, user_hash, task)
+            except Exception as e:
+                log(f"[VIDEO] err: {e}", "er"); r = False
+
+            if r:
+                time.sleep(1)
+                new_bal = get_balance(sess)
+                diff = (new_bal - old_bal) if (new_bal is not None and old_bal is not None) else None
+                print_success_banner(f"Video [{task['type']}]", new_bal, diff)
+                if new_bal is not None:
+                    old_bal = new_bal
+                total_ok += 1
+            else:
+                log(f"[VIDEO] ✗ gagal: {task['type']}", "er")
+            time.sleep(2)
+
+        log(f"[VIDEO] Selesai: {GRN}{total_ok}{RST}/{len(all_tasks)} ok",
+            "ok" if total_ok else "wr")
+        time.sleep(2)
+
+    print(f"\n{WHT}Tekan Enter buat balik ke menu...{RST}", end="")
+    input()
+
+
+STATS = {"faucet": 0, "surf": 0, "video": 0, "coins": 0}
+PER_ACCOUNT_STATS = {}
+
+
+def reset_stats():
+    STATS["faucet"] = 0
+    STATS["surf"] = 0
+    STATS["video"] = 0
+    PER_ACCOUNT_STATS.clear()
+
+
+def _ensure_acc_stats(username, start_bal=None):
+    if username not in PER_ACCOUNT_STATS:
+        PER_ACCOUNT_STATS[username] = {
+            "faucet": 0, "surf": 0, "video": 0,
+            "start_bal": start_bal, "end_bal": start_bal,
+            "claims_faucet": 0, "claims_surf": 0, "claims_video": 0,
+            "status": "running",
+        }
+    return PER_ACCOUNT_STATS[username]
+
+
+def _track_earned(username, category, amount):
+    s = _ensure_acc_stats(username)
+    s[category] = s.get(category, 0) + amount
+    s[f"claims_{category}"] = s.get(f"claims_{category}", 0) + 1
+
+
+def _set_end_bal(username, end_bal):
+    s = _ensure_acc_stats(username)
+    s["end_bal"] = end_bal
+
+
+def print_account_summary():
+    if not PER_ACCOUNT_STATS:
+        return
+
+    print(f"\n{WHT}═══════════════════════════════════════════════{RST}")
+    print(f"{WHT}  {BOLD}📊 PER-ACCOUNT EARNINGS{RST}")
+    print(f"{WHT}═══════════════════════════════════════════════{RST}")
+
+    total_faucet = total_surf = total_video = 0
+
+    for username, s in PER_ACCOUNT_STATS.items():
+        earned_total = s["faucet"] + s["surf"] + s["video"]
+        total_faucet += s["faucet"]
+        total_surf += s["surf"]
+        total_video += s["video"]
+
+        status = s.get("status", "?")
+        if status == "ok":
+            status_icon = f"{GRN}✓{RST}"
+        elif status == "partial":
+            status_icon = f"{YEL}◐{RST}"
+        elif status == "login_fail":
+            status_icon = f"{RED}✗{RST}"
+        else:
+            status_icon = f"{CYN}▶{RST}"
+
+        start_b = s.get("start_bal")
+        end_b = s.get("end_bal")
+        start_str = f"{start_b}" if start_b is not None else "?"
+        end_str   = f"{end_b}"   if end_b   is not None else "?"
+
+        print(f"\n  {status_icon} {CYN}{mask_email(username)}{RST}")
+        print(f"     Balance  : {YEL}{start_str}{RST} → {YEL}{end_str}{RST}  "
+              f"{WHT}(net {GRN}+{earned_total}{RST})")
+        print(f"     Faucet   : {GRN}+{s['faucet']:<5}{RST} "
+              f"({s.get('claims_faucet', 0)}x)  "
+              f"{WHT}|{RST}  "
+              f"Surf : {GRN}+{s['surf']:<5}{RST} ({s.get('claims_surf', 0)}x)  "
+              f"{WHT}|{RST}  "
+              f"Video: {GRN}+{s['video']:<5}{RST} ({s.get('claims_video', 0)}x)")
+
+    print(f"\n{WHT}───────────────────────────────────────────────{RST}")
+    print(f"  {BOLD}GRAND TOTAL ({len(PER_ACCOUNT_STATS)} akun){RST}")
+    print(f"  Faucet : {GRN}+{total_faucet}{RST}  "
+          f"|  Surf : {GRN}+{total_surf}{RST}  "
+          f"|  Video : {GRN}+{total_video}{RST}")
+    grand = total_faucet + total_surf + total_video
+    print(f"  {BOLD}{GRN}💎 TOTAL EARNED : +{grand} coins{RST}")
+    print(f"{WHT}═══════════════════════════════════════════════{RST}")
+
+
+def farm_one_account(cfg, acc, idx):
+    sess = load_session(acc["username"], acc.get("proxy") or None)
+    username = acc["username"]
+
+    if not ensure_logged_in(sess, cfg["apikey"], username, acc["password"]):
+        log("Login gagal, skip akun", "er")
+        _ensure_acc_stats(username)
+        PER_ACCOUNT_STATS[username]["status"] = "login_fail"
+        return
+
+    old_bal = get_balance(sess)
+    if old_bal is not None:
+        log(f"Balance: {old_bal} coins", "bi")
+
+    _ensure_acc_stats(username, start_bal=old_bal)
+    PER_ACCOUNT_STATS[username]["start_bal"] = old_bal
+    PER_ACCOUNT_STATS[username]["status"] = "running"
+
+    try:
+        ads = get_surf_ads(sess)
+    except Exception:
+        ads = []
+
+    if not ads:
+        log(f"[SURF] {GRN}0{RST} tersedia", "wr")
+    else:
+        print(f"\n{WHT}  ── SURF ADS (PTC) ──{RST}")
+        log(f"[SURF] {GRN}{len(ads)}{RST} tersedia", "in")
+        for i, ad in enumerate(ads, 1):
+            log(f"[SURF] [{i}/{len(ads)}] {ad['title'][:30]} | "
+                f"{YEL}{ad['coins']}c{RST} | {ad['duration']}s", "in")
+            done = False
+            for attempt in range(1, MAX_RETRY + 1):
+                try:
+                    r = claim_one_surf(sess, cfg["apikey"], ad)
+                except Exception as e:
+                    log(f"[SURF] err: {e}", "er"); r = False
+                if r is None:
+                    if not ensure_logged_in(sess, cfg["apikey"],
+                                            username, acc["password"]):
+                        break
+                    continue
+                if r:
+                    time.sleep(1)
+                    new_bal = get_balance(sess)
+                    diff = (new_bal - old_bal) if (new_bal is not None and old_bal is not None) else None
+                    print_success_banner(f"Surf +{ad['coins']}c", new_bal, diff)
+                    STATS["surf"] += 1
+                    if diff and diff > 0:
+                        _track_earned(username, "surf", diff)
+                    else:
+                        _track_earned(username, "surf", ad["coins"])
+                    if new_bal is not None:
+                        old_bal = new_bal
+                    done = True
+                    break
+                break
+            if not done:
+                log(f"[SURF] ✗ gagal: {ad['title'][:30]}", "er")
+            time.sleep(2)
+
+    print(f"\n{WHT}  ── FAUCET ──{RST}")
+    if _is_faucet_limited(username):
+        log(f"[FAUCET] limit harian, skip ke video", "wr")
+    else:
+        for attempt in range(1, MAX_RETRY + 1):
+            try:
+                r = do_faucet(sess, cfg["apikey"], username=username)
+            except Exception as e:
+                log(f"[FAUCET] err: {e}", "er"); r = 0
+            if r == -1:
+                if ensure_logged_in(sess, cfg["apikey"], username, acc["password"]):
+                    continue
+                break
+            if r == -2:
+                _mark_faucet_limited(username)
+                break
+            if r == -3:
+                break
+            if r == 1:
+                time.sleep(2)
+                new_bal = get_balance(sess)
+                diff = (new_bal - old_bal) if (new_bal is not None and old_bal is not None) else None
+                if new_bal == old_bal and old_bal is not None:
+                    log(f"[FAUCET] ⚠ Balance gak berubah (masih {old_bal})", "wr")
+                print_success_banner("Faucet Claim!", new_bal, diff)
+                STATS["faucet"] += 1
+                if diff and diff > 0:
+                    _track_earned(username, "faucet", diff)
+                else:
+                    _track_earned(username, "faucet", 5)
+                if new_bal is not None:
+                    old_bal = new_bal
+                break
+            if attempt < MAX_RETRY:
+                log(f"[FAUCET] retry {attempt}/{MAX_RETRY}...", "wr")
+            time.sleep(2)
+
+    print(f"\n{WHT}  ── YOUTUBE VIDEOS ──{RST}")
+    try:
+        yt_html, _, _ = safe_request(sess, f"{HOST}/ytvideos",
+                                     headers={"user-agent": DEF_UA})
+        user_hash = parse_user_hash(yt_html)
+    except Exception:
+        user_hash = None
+
+    if not user_hash:
+        log("[VIDEO] user_hash gak ketemu, skip", "wr")
+    else:
+        aviso_id = aviso_identify(sess, user_hash)
+        if not aviso_id:
+            log("[VIDEO] aviso identify gagal", "wr")
+        else:
+            data = aviso_tasks_page(user_hash, 0, 100)
+            if not data:
+                log("[VIDEO] gak ada tasks", "wr")
+            else:
+                all_tasks = []
+                for t in ("ads", "like", "sub"):
+                    for task in data.get(t, []):
+                        if task.get("inProgress"):
+                            continue
+                        task["type"] = t
+                        all_tasks.append(task)
+                log(f"[VIDEO] {GRN}{len(all_tasks)}{RST} task tersedia", "in")
+                for i, task in enumerate(all_tasks, 1):
+                    log(f"[VIDEO] [{i}/{len(all_tasks)}] [{task['type']}] "
+                        f"{task.get('title', '-')[:30]}", "in")
+                    try:
+                        r = claim_one_video(sess, user_hash, task)
+                    except Exception as e:
+                        log(f"[VIDEO] err: {e}", "er"); r = False
+                    if r:
+                        time.sleep(1)
+                        new_bal = get_balance(sess)
+                        diff = (new_bal - old_bal) if (new_bal is not None and old_bal is not None) else None
+                        print_success_banner(f"Video [{task['type']}]", new_bal, diff)
+                        STATS["video"] += 1
+                        if diff and diff > 0:
+                            _track_earned(username, "video", diff)
+                        if new_bal is not None:
+                            old_bal = new_bal
+                    else:
+                        log(f"[VIDEO] ✗ gagal: {task['type']}", "er")
+                    time.sleep(2)
+
+    if old_bal is not None:
+        STATS["coins"] = old_bal
+        _set_end_bal(username, old_bal)
+
+    total_earned = (PER_ACCOUNT_STATS[username]["faucet"] +
+                    PER_ACCOUNT_STATS[username]["surf"] +
+                    PER_ACCOUNT_STATS[username]["video"])
+    if total_earned > 0:
+        PER_ACCOUNT_STATS[username]["status"] = "ok"
+    else:
+        PER_ACCOUNT_STATS[username]["status"] = "partial"
+
+
+def run_farm_all(cfg, selected):
+    clear(); banner_main()
+    print(f"{WHT}Mode      : {CYN}Farm All (PTC + Faucet + Videos){RST}")
+    print(f"{WHT}Total Akun: {GRN}{len(selected)}{RST}")
+    print(f"{WHT}───────────────────────────────────────────────{RST}")
+
+    LIMITED_FAUCET.clear()
+    reset_stats()
+    try:
+        while True:
+            for idx, acc in enumerate(selected):
+                banner_account(idx, acc["username"],
+                               proxy_raw=acc.get("proxy") or None, show_ip=True)
+                try:
+                    farm_one_account(cfg, acc, idx)
+                except Exception as e:
+                    log(f"Err akun: {type(e).__name__}: {e}", "er")
+                    time.sleep(3)
+
+            print_account_summary()
+
+            print(f"\n{WHT}[LOOP] Cooldown {FARM_COOLDOWN}s...{RST}")
+            tmr(FARM_COOLDOWN, "Cooldown")
+    except KeyboardInterrupt:
+        print(f"\n{YEL}Farming dihentikan.{RST}"); time.sleep(1)
+
+
 def withdraw_menu(cfg):
     accounts = cfg["accounts"]
     if not accounts:
@@ -1524,293 +2129,24 @@ def history_menu(cfg):
     input()
 
 
-STATS = {"faucet": 0, "surf": 0, "video": 0, "coins": 0}
-PER_ACCOUNT_STATS = {}
-
-
-def reset_stats():
-    STATS["faucet"] = 0
-    STATS["surf"] = 0
-    STATS["video"] = 0
-    PER_ACCOUNT_STATS.clear()
-
-
-def _ensure_acc_stats(username, start_bal=None):
-    if username not in PER_ACCOUNT_STATS:
-        PER_ACCOUNT_STATS[username] = {
-            "faucet": 0, "surf": 0, "video": 0,
-            "start_bal": start_bal, "end_bal": start_bal,
-            "claims_faucet": 0, "claims_surf": 0, "claims_video": 0,
-            "status": "running",
-        }
-    return PER_ACCOUNT_STATS[username]
-
-
-def _track_earned(username, category, amount):
-    s = _ensure_acc_stats(username)
-    s[category] = s.get(category, 0) + amount
-    s[f"claims_{category}"] = s.get(f"claims_{category}", 0) + 1
-
-
-def _set_end_bal(username, end_bal):
-    s = _ensure_acc_stats(username)
-    s["end_bal"] = end_bal
-
-
-def print_account_summary():
-    if not PER_ACCOUNT_STATS:
-        return
-
-    print(f"\n{WHT}═══════════════════════════════════════════════{RST}")
-    print(f"{WHT}  {BOLD}📊 PER-ACCOUNT EARNINGS{RST}")
-    print(f"{WHT}═══════════════════════════════════════════════{RST}")
-
-    total_faucet = total_surf = total_video = 0
-
-    for username, s in PER_ACCOUNT_STATS.items():
-        earned_total = s["faucet"] + s["surf"] + s["video"]
-        total_faucet += s["faucet"]
-        total_surf += s["surf"]
-        total_video += s["video"]
-
-        status = s.get("status", "?")
-        if status == "ok":
-            status_icon = f"{GRN}✓{RST}"
-        elif status == "partial":
-            status_icon = f"{YEL}◐{RST}"
-        elif status == "login_fail":
-            status_icon = f"{RED}✗{RST}"
-        else:
-            status_icon = f"{CYN}▶{RST}"
-
-        start_b = s.get("start_bal")
-        end_b = s.get("end_bal")
-        start_str = f"{start_b}" if start_b is not None else "?"
-        end_str   = f"{end_b}"   if end_b   is not None else "?"
-
-        print(f"\n  {status_icon} {CYN}{mask_email(username)}{RST}")
-        print(f"     Balance  : {YEL}{start_str}{RST} → {YEL}{end_str}{RST}  "
-              f"{WHT}(net {GRN}+{earned_total}{RST})")
-        print(f"     Faucet   : {GRN}+{s['faucet']:<5}{RST} "
-              f"({s.get('claims_faucet', 0)}x)  "
-              f"{WHT}|{RST}  "
-              f"Surf : {GRN}+{s['surf']:<5}{RST} ({s.get('claims_surf', 0)}x)  "
-              f"{WHT}|{RST}  "
-              f"Video: {GRN}+{s['video']:<5}{RST} ({s.get('claims_video', 0)}x)")
-
-    print(f"\n{WHT}───────────────────────────────────────────────{RST}")
-    print(f"  {BOLD}GRAND TOTAL ({len(PER_ACCOUNT_STATS)} akun){RST}")
-    print(f"  Faucet : {GRN}+{total_faucet}{RST}  "
-          f"|  Surf : {GRN}+{total_surf}{RST}  "
-          f"|  Video : {GRN}+{total_video}{RST}")
-    grand = total_faucet + total_surf + total_video
-    print(f"  {BOLD}{GRN}💎 TOTAL EARNED : +{grand} coins{RST}")
-    print(f"{WHT}═══════════════════════════════════════════════{RST}")
-
-
-def farm_one_account(cfg, acc, idx):
-    sess = load_session(acc["username"], acc.get("proxy") or None)
-    username = acc["username"]
-
-    if not ensure_logged_in(sess, cfg["apikey"], username, acc["password"]):
-        log("Login gagal, skip akun", "er")
-        _ensure_acc_stats(username)
-        PER_ACCOUNT_STATS[username]["status"] = "login_fail"
-        return
-
-    old_bal = get_balance(sess)
-    if old_bal is not None:
-        log(f"Balance: {old_bal} coins", "bi")
-
-    _ensure_acc_stats(username, start_bal=old_bal)
-    PER_ACCOUNT_STATS[username]["start_bal"] = old_bal
-    PER_ACCOUNT_STATS[username]["status"] = "running"
-
-    print(f"\n{WHT}  ── FAUCET ──{RST}")
-    for attempt in range(1, MAX_RETRY + 1):
-        try:
-            r = do_faucet(sess, cfg["apikey"], username=username)
-        except Exception as e:
-            log(f"[FAUCET] err: {e}", "er"); r = 0
-        if r == -1:
-            if ensure_logged_in(sess, cfg["apikey"], username, acc["password"]):
-                continue
-            break
-        if r == -2:
-            break
-        if r == 1:
-            time.sleep(2)
-            new_bal = get_balance(sess)
-            diff = (new_bal - old_bal) if (new_bal is not None and old_bal is not None) else None
-            if new_bal == old_bal and old_bal is not None:
-                log(f"[FAUCET] ⚠ Balance gak berubah (masih {old_bal})", "wr")
-            print_success_banner("Faucet Claim!", new_bal, diff)
-            STATS["faucet"] += 1
-            if diff and diff > 0:
-                _track_earned(username, "faucet", diff)
-            else:
-                _track_earned(username, "faucet", 5)
-            if new_bal is not None:
-                old_bal = new_bal
-            break
-        if attempt < MAX_RETRY:
-            log(f"[FAUCET] retry {attempt}/{MAX_RETRY}...", "wr")
-        time.sleep(2)
-
-    try:
-        ads = get_surf_ads(sess)
-    except Exception:
-        ads = []
-
-    if not ads:
-        log(f"[SURF] {GRN}0{RST} tersedia", "wr")
-    else:
-        print(f"\n{WHT}  ── SURF ADS ──{RST}")
-        log(f"[SURF] {GRN}{len(ads)}{RST} tersedia", "in")
-        for i, ad in enumerate(ads, 1):
-            log(f"[SURF] [{i}/{len(ads)}] {ad['title'][:30]} | "
-                f"{YEL}{ad['coins']}c{RST} | {ad['duration']}s", "in")
-            done = False
-            for attempt in range(1, MAX_RETRY + 1):
-                try:
-                    r = claim_one_surf(sess, cfg["apikey"], ad)
-                except Exception as e:
-                    log(f"[SURF] err: {e}", "er"); r = False
-                if r is None:
-                    if not ensure_logged_in(sess, cfg["apikey"],
-                                            username, acc["password"]):
-                        break
-                    continue
-                if r:
-                    time.sleep(1)
-                    new_bal = get_balance(sess)
-                    diff = (new_bal - old_bal) if (new_bal is not None and old_bal is not None) else None
-                    print_success_banner(f"Surf +{ad['coins']}c", new_bal, diff)
-                    STATS["surf"] += 1
-                    if diff and diff > 0:
-                        _track_earned(username, "surf", diff)
-                    else:
-                        _track_earned(username, "surf", ad["coins"])
-                    if new_bal is not None:
-                        old_bal = new_bal
-                    done = True
-                    break
-                if attempt < MAX_RETRY:
-                    log(f"[SURF] retry {attempt}/{MAX_RETRY}...", "wr")
-                time.sleep(2)
-            if not done:
-                log(f"[SURF] ✗ gagal: {ad['title'][:30]}", "er")
-            time.sleep(2)
-
-    print(f"\n{WHT}  ── YOUTUBE VIDEOS ──{RST}")
-    try:
-        yt_html, _, _ = safe_request(sess, f"{HOST}/ytvideos",
-                                     headers={"user-agent": DEF_UA})
-        user_hash = parse_user_hash(yt_html)
-    except Exception:
-        user_hash = None
-
-    if not user_hash:
-        log("[VIDEO] user_hash gak ketemu, skip", "wr")
-    else:
-        aviso_id = aviso_identify(sess, user_hash)
-        if not aviso_id:
-            log("[VIDEO] aviso identify gagal", "wr")
-        else:
-            data = aviso_tasks_page(user_hash, 0, 100)
-            if not data:
-                log("[VIDEO] gak ada tasks", "wr")
-            else:
-                all_tasks = []
-                for t in ("ads", "like", "sub"):
-                    for task in data.get(t, []):
-                        if task.get("inProgress"):
-                            continue
-                        task["type"] = t
-                        all_tasks.append(task)
-                log(f"[VIDEO] {GRN}{len(all_tasks)}{RST} task tersedia", "in")
-                for i, task in enumerate(all_tasks, 1):
-                    log(f"[VIDEO] [{i}/{len(all_tasks)}] [{task['type']}] "
-                        f"{task.get('title', '-')[:30]}", "in")
-                    try:
-                        r = claim_one_video(sess, user_hash, task)
-                    except Exception as e:
-                        log(f"[VIDEO] err: {e}", "er"); r = False
-                    if r:
-                        time.sleep(1)
-                        new_bal = get_balance(sess)
-                        diff = (new_bal - old_bal) if (new_bal is not None and old_bal is not None) else None
-                        print_success_banner(f"Video [{task['type']}]", new_bal, diff)
-                        STATS["video"] += 1
-                        if diff and diff > 0:
-                            _track_earned(username, "video", diff)
-                        if new_bal is not None:
-                            old_bal = new_bal
-                    else:
-                        log(f"[VIDEO] ✗ gagal: {task['type']}", "er")
-                    time.sleep(2)
-
-    if old_bal is not None:
-        STATS["coins"] = old_bal
-        _set_end_bal(username, old_bal)
-
-    total_earned = (PER_ACCOUNT_STATS[username]["faucet"] +
-                    PER_ACCOUNT_STATS[username]["surf"] +
-                    PER_ACCOUNT_STATS[username]["video"])
-    if total_earned > 0:
-        PER_ACCOUNT_STATS[username]["status"] = "ok"
-    else:
-        PER_ACCOUNT_STATS[username]["status"] = "partial"
-
-
-def run_farm_all(cfg, selected):
-    clear(); banner_main()
-    print(f"{WHT}Mode      : {CYN}Farming (Faucet + Surf + Videos){RST}")
-    print(f"{WHT}Total Akun: {GRN}{len(selected)}{RST}")
-    print(f"{WHT}───────────────────────────────────────────────{RST}")
-
-    bal = skipcha_balance(cfg["apikey"])
-    if bal is not None:
-        print(f"{WHT}Skipcha Balance: {GRN}{bal:.2f} tokens{RST}")
-    else:
-        print(f"{WHT}Skipcha Balance: {RED}?{RST}")
-    print()
-
-    reset_stats()
-    try:
-        while True:
-            for idx, acc in enumerate(selected):
-                banner_account(idx, acc["username"],
-                               proxy_raw=acc.get("proxy") or None, show_ip=True)
-                try:
-                    farm_one_account(cfg, acc, idx)
-                except Exception as e:
-                    log(f"Err akun: {type(e).__name__}: {e}", "er")
-                    time.sleep(3)
-
-            print_account_summary()
-
-            print(f"\n{WHT}[LOOP] Cooldown {FARM_COOLDOWN}s...{RST}")
-            tmr(FARM_COOLDOWN, "Cooldown")
-    except KeyboardInterrupt:
-        print(f"\n{YEL}Farming dihentikan.{RST}"); time.sleep(1)
-
-
 def main():
     cfg = load_config()
     while True:
         clear(); banner_main()
         accounts = cfg["accounts"]
         apikey = cfg.get("apikey") or ""
-        print(f"{WHT}Total Akun : {GRN}{len(accounts)}{RST}")
-        print(f"{WHT}Skipcha Key: {YEL}{('*' * 8) if apikey else 'empty'}{RST}")
+        print(f"{WHT}Total Akun   : {GRN}{len(accounts)}{RST}")
+        print(f"{WHT}Tertuyul Key : {YEL}{('*' * 8) if apikey else 'empty'}{RST}")
         print(f"{WHT}───────────────────────────────────────────────{RST}")
-        print(f"{CYN}[1]{WHT} Start Farming (All Accounts){RST}")
-        print(f"{CYN}[2]{WHT} Cek Balance{RST}")
-        print(f"{CYN}[3]{WHT} Withdrawal{RST}")
-        print(f"{CYN}[4]{WHT} History WD{RST}")
-        print(f"{CYN}[5]{GRN} Tambah Akun{RST}")
-        print(f"{CYN}[6]{RED} Hapus Akun{RST}")
+        print(f"{CYN}[1]{WHT} Faucet{RST}")
+        print(f"{CYN}[2]{WHT} PTC (Surf Ads){RST}")
+        print(f"{CYN}[3]{WHT} YouTube Videos{RST}")
+        print(f"{CYN}[4]{WHT} Farm All (PTC + Faucet + Video){RST}")
+        print(f"{CYN}[5]{WHT} Withdrawal{RST}")
+        print(f"{CYN}[6]{WHT} Cek Balance{RST}")
+        print(f"{CYN}[7]{WHT} History WD{RST}")
+        print(f"{CYN}[8]{GRN} Tambah Akun{RST}")
+        print(f"{CYN}[9]{RED} Hapus Akun{RST}")
         print(f"{CYN}[0]{WHT} Keluar{RST}")
         print(f"{WHT}───────────────────────────────────────────────{RST}")
         print(f"{WHT}Pilih: {RST}", end="")
@@ -1818,26 +2154,38 @@ def main():
 
         if c == '0':
             print(f"{WHT}Bye!{RST}"); return
-        elif c == '5': add_account(cfg)
-        elif c == '6': delete_account(cfg)
-        elif c == '2':
+        elif c == '8':
+            add_account(cfg)
+        elif c == '9':
+            delete_account(cfg)
+        elif c == '6':
             if not accounts:
                 print(f"{RED}Tidak ada akun.{RST}"); time.sleep(2); continue
             check_balance_all(cfg)
-        elif c in ('3', '4'):
+        elif c == '7':
             if not accounts:
                 print(f"{RED}Tidak ada akun.{RST}"); time.sleep(2); continue
-            if c == '3': withdraw_menu(cfg)
-            else: history_menu(cfg)
-        elif c == '1':
+            history_menu(cfg)
+        elif c == '5':
+            if not accounts:
+                print(f"{RED}Tidak ada akun.{RST}"); time.sleep(2); continue
+            withdraw_menu(cfg)
+        elif c in ('1', '2', '3', '4'):
             if not accounts:
                 print(f"{RED}Tidak ada akun.{RST}"); time.sleep(2); continue
             if not apikey:
-                print(f"{RED}Skipcha API key belum diset (edit config.json).{RST}")
+                print(f"{RED}Tertuyul API key belum diset (edit config.json).{RST}")
                 time.sleep(2); continue
             start, end = get_range(len(accounts))
             sel = accounts[start:end + 1]
-            run_farm_all(cfg, sel)
+            if c == '1':
+                run_faucet_loop(cfg, sel)
+            elif c == '2':
+                run_ptc_loop(cfg, sel)
+            elif c == '3':
+                run_video_loop(cfg, sel)
+            else:
+                run_farm_all(cfg, sel)
 
 
 if __name__ == "__main__":
