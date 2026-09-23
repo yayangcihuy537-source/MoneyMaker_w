@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """
-RapidGame AutoFaucet - USDT Only (Dashboard + Banner)
+RapidGame AutoFaucet + Manual Collect (Mode Tabel, Email Asli)
 """
 
 import os
 import re
 import time
 import threading
-from datetime import datetime
 from typing import Optional, Dict, Any, List, Tuple
 
 import requests
@@ -23,13 +22,12 @@ from rich.align import Align
 BASE_URL = "https://www.rapidgame.fun"
 REQUEST_TIMEOUT = 20
 USER_AGENT = (
-    "Mozilla/5.0 (Linux; Android 10; K) "
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/127.0.0.0 Mobile Safari/537.36"
+    "Chrome/120.0.0.0 Safari/537.36"
 )
 
-# Cooldown USDT = 12s dari HTML + buffer
-COOLDOWN_USDT = 15
+COOLDOWN = {"auto": 13, "manual": 12}
 console = Console()
 
 BANNER = r"""
@@ -54,7 +52,7 @@ def clear_screen():
 
 
 def get_user_input() -> str:
-    console.print(Panel.fit("[bold cyan]RapidGame AutoFaucet — USDT[/bold cyan]"))
+    console.print(Panel.fit("[bold cyan]RapidGame AutoFaucet + Manual[/bold cyan]"))
     while True:
         email = console.input("[bold]Masukkan email FaucetPay: [/bold]").strip()
         if "@" in email and "." in email:
@@ -62,10 +60,9 @@ def get_user_input() -> str:
         console.print("[red]Email tidak valid.[/red]")
 
 
-class RenderCoins:
+class Bot:
     def __init__(self, email: str):
         self.email = email
-        self.currency = "usdt"
         self.session = requests.Session()
         self.session.headers.update({
             "User-Agent": USER_AGENT,
@@ -78,18 +75,24 @@ class RenderCoins:
         self.total_claims = 0
         self.history: List[str] = []
         self.stats = {
-            "balance": "-",
-            "claims_left": "-",
-            "cooldown": COOLDOWN_USDT,
-            "next": 0,
-            "total_claims": 0,
-            "total_reward": 0.0,
-            "next_claim_time": 0,
-            "last_status": "idle",
+            "auto": {
+                "balance": "-",
+                "cooldown": COOLDOWN["auto"],
+                "next": 0,
+                "total_claims": 0,
+                "total_reward": 0.0,
+                "next_claim_time": 0,
+            },
+            "manual": {
+                "balance": "-",
+                "cooldown": COOLDOWN["manual"],
+                "next": 0,
+                "total_claims": 0,
+                "total_reward": 0.0,
+                "next_claim_time": 0,
+            },
         }
-        self.lock = threading.Lock()
 
-    # ─── LOGIN ───
     def login(self) -> bool:
         url = f"{BASE_URL}/auth/login"
         try:
@@ -100,20 +103,17 @@ class RenderCoins:
             if not csrf_input:
                 return False
             csrf = csrf_input.get("value")
-
             data = {"wallet": self.email, "csrf_token_name": csrf}
             r = self.session.post(url, data=data, timeout=REQUEST_TIMEOUT, allow_redirects=True)
             r.raise_for_status()
-
-            if "logout" in r.text.lower() or "dashboard" in r.url.lower() or "MultiCoin" in r.text:
+            if "logout" in r.text.lower() or "dashboard" in r.url.lower() or "FaucetCoins" in r.text:
                 self.logged_in = True
                 return True
             return False
         except Exception:
             return False
 
-    # ─── GET ───
-    def _get_page(self, url: str) -> Tuple[Optional[BeautifulSoup], str]:
+    def _get_page(self, url: str) -> Optional[Tuple[BeautifulSoup, str]]:
         try:
             r = self.session.get(url, timeout=REQUEST_TIMEOUT)
             if r.status_code == 403:
@@ -124,7 +124,6 @@ class RenderCoins:
         except Exception:
             return None, ""
 
-    # ─── POST ───
     def _post_form(self, url: str, data: Dict[str, Any], referer: str = "") -> Tuple[bool, str, int]:
         headers = {
             "X-Requested-With": "XMLHttpRequest",
@@ -136,157 +135,147 @@ class RenderCoins:
             "Sec-Fetch-Site": "same-origin",
         }
         try:
-            r = self.session.post(url, data=data, timeout=REQUEST_TIMEOUT,
-                                  allow_redirects=True, headers=headers)
+            r = self.session.post(url, data=data, timeout=REQUEST_TIMEOUT, allow_redirects=True, headers=headers)
             return True, r.text, r.status_code
         except Exception:
             return False, "", 0
 
-    # ─── PARSERS ───
-    def _extract_swal(self, html: str) -> Tuple[Optional[str], Optional[str]]:
-        """Return (icon, message). icon: 'success' / 'error' / None"""
-        pattern = r"Swal\.fire\(\{[^}]*?(?:icon:\s*'([^']+)'[^}]*?)?html:\s*'([^']+)'"
+    def _extract_swal_error(self, html: str) -> Optional[str]:
+        pattern = r"Swal\.fire\(\{[^}]*icon:\s*'error'[^}]*html:\s*'([^']+)'"
         match = re.search(pattern, html, re.DOTALL)
         if match:
-            return match.group(1), match.group(2)
+            return match.group(1)
+        pattern2 = r"Swal\.fire\(\{[^}]*html:\s*'([^']+)'"
+        match2 = re.search(pattern2, html, re.DOTALL)
+        if match2:
+            return match2.group(1)
+        return None
 
-        m = re.search(r'([\d.]+)\s+([A-Z]+)\s+has been sent', html)
-        if m:
-            return "success", f"{m.group(1)} {m.group(2)} has been sent"
-
-        m2 = re.search(r"icon:\s*'error'[^}]*html:\s*'([^']+)'", html, re.DOTALL)
-        if m2:
-            return "error", m2.group(1)
-
-        return None, None
-
-    def _extract_amount(self, html: str) -> float:
-        cur = self.currency.upper()
-        m = re.search(r'([\d.]+)\s+' + cur + r'\s+has been sent', html)
-        if m:
-            return float(m.group(1))
-        m = re.search(r'Claim\s+<strong>([\d.]+)\s+' + cur, html)
+    def _extract_amount(self, html: str, currency: str) -> float:
+        m = re.search(r'([\d.]+)\s*' + currency.upper(), html)
         if m:
             return float(m.group(1))
         return 0.0
 
-    def _extract_balance(self, html: str) -> str:
-        cur = self.currency.upper()
-        m = re.search(r'Claim\s+<strong>([\d.]+)\s+' + cur, html)
+    def _extract_balance(self, html: str, currency: str) -> str:
+        m = re.search(r'Claim\s*<strong>([\d.]+)\s*' + currency.upper(), html)
         if m:
-            return f"{m.group(1)} {cur}"
+            return f"+{m.group(1)} {currency.upper()}"
+        m2 = re.search(r'Manual Collect:\s*([\d.]+)\s*' + currency.upper(), html)
+        if m2:
+            return f"+{m2.group(1)} {currency.upper()}"
         return "-"
 
-    def _extract_claims_left(self, html: str) -> str:
-        m = re.search(r'(\d+)\s*/\s*(\d+)\s*claims', html, re.IGNORECASE)
+    def _extract_cooldown(self, html: str) -> int:
+        m = re.search(r'var\s+wait\s*=\s*(\d+)', html)
         if m:
-            return f"{m.group(1)}/{m.group(2)}"
-        m = re.search(r'var\s+wait\s*=\s*Math\.max\(0,\s*Number\((\d+)\)\)', html)
-        if m:
-            return f"{m.group(1)}s wait"
-        return "-"
+            return int(m.group(1))
+        return COOLDOWN["auto"]
 
-    def _add_history(self, amount_str: str):
-        with self.lock:
-            line = f"{datetime.now().strftime('%H:%M:%S')}  {amount_str}"
-            self.history.append(line)
-            if len(self.history) > 10:
-                self.history.pop(0)
+    def _add_history(self, amount: float):
+        line = f"claim {amount:.8f} USDT send to faucetpay"
+        self.history.append(line)
+        if len(self.history) > 10:
+            self.history.pop(0)
 
-    # ─── LOAD TOKEN ───
-    def _load_token(self) -> Optional[Dict[str, str]]:
-        url = f"{BASE_URL}/faucet/currency/{self.currency}"
+    def claim_auto(self):
+        url = f"{BASE_URL}/faucet/currency/usdt"
         soup, html = self._get_page(url)
-        if not soup or not html:
-            return None
-
-        with self.lock:
-            self.stats["balance"] = self._extract_balance(html)
-            self.stats["claims_left"] = self._extract_claims_left(html)
+        if not soup:
+            time.sleep(10)
+            return
 
         auto_token = soup.find("input", {"name": "auto_faucet_token"})
         token = soup.find("input", {"name": "token"})
         csrf = soup.find("input", {"name": "csrf_token_name"})
         if not (auto_token and token and csrf):
-            return None
-        return {
-            "auto_faucet_token": auto_token.get("value"),
-            "token": token.get("value"),
-            "csrf_token_name": csrf.get("value"),
-            "referer": url,
-        }
-
-    # ─── CLAIM LOOP ───
-    def claim_loop(self):
-        if not self.login():
-            with self.lock:
-                self.stats["last_status"] = "login failed"
+            time.sleep(10)
             return
 
-        while True:
-            token_data = self._load_token()
-            if not token_data:
-                with self.lock:
-                    self.stats["last_status"] = "no token"
-                time.sleep(10)
-                continue
+        self.stats["auto"]["balance"] = self._extract_balance(html, "USDT")
+        cooldown = self._extract_cooldown(html)
+        self.stats["auto"]["cooldown"] = cooldown
+        self.stats["auto"]["next_claim_time"] = time.time() + cooldown
+        for i in range(cooldown, 0, -1):
+            self.stats["auto"]["next"] = i
+            time.sleep(1)
 
-            cooldown = COOLDOWN_USDT
-            with self.lock:
-                self.stats["next_claim_time"] = time.time() + cooldown
-                self.stats["last_status"] = "cooldown"
-            for i in range(cooldown, 0, -1):
-                with self.lock:
-                    self.stats["next"] = i
-                time.sleep(1)
+        data = {
+            "auto_faucet_token": auto_token.get("value"),
+            "csrf_token_name": csrf.get("value"),
+            "token": token.get("value"),
+        }
+        verify_url = f"{BASE_URL}/faucet/verify/usdt"
+        ok, resp, status = self._post_form(verify_url, data, referer=url)
+        if not ok:
+            time.sleep(10)
+            return
+        if status == 403:
+            time.sleep(120)
+            return
 
-            # POST verify — cuma 3 field
-            data = {
-                "auto_faucet_token": token_data["auto_faucet_token"],
-                "csrf_token_name": token_data["csrf_token_name"],
-                "token": token_data["token"],
-            }
-            verify_url = f"{BASE_URL}/faucet/verify/{self.currency}"
-            ok, resp, status = self._post_form(verify_url, data, referer=token_data["referer"])
-
-            if not ok:
-                with self.lock:
-                    self.stats["last_status"] = "post error"
-                time.sleep(10)
-                continue
-
-            if status == 403:
-                with self.lock:
-                    self.stats["last_status"] = "403 blocked"
-                time.sleep(120)
-                continue
-
-            icon, msg = self._extract_swal(resp)
-
-            if icon == "success" or (msg and "has been sent" in msg):
-                self.total_claims += 1
-                amount = self._extract_amount(resp)
-                with self.lock:
-                    self.stats["total_claims"] += 1
-                    self.stats["total_reward"] += amount
-                    self.stats["last_status"] = "ok"
-                amount_str = f"+{amount:.8f} USDT" if amount else "+? USDT"
-                self._add_history(amount_str)
-
-            elif icon == "error" or msg:
-                with self.lock:
-                    self.stats["last_status"] = (msg or "error")[:30]
-                low = (msg or "").lower()
-                if "wait" in low or "limit" in low or "too fast" in low:
-                    time.sleep(COOLDOWN_USDT + 5)
-                else:
-                    time.sleep(20)
+        if "Success" in resp or "sent to your FaucetPay" in resp:
+            amount = self._extract_amount(resp, "USDT")
+            self.total_claims += 1
+            self.stats["auto"]["total_claims"] += 1
+            self.stats["auto"]["total_reward"] += amount
+            self._add_history(amount)
+        else:
+            err = self._extract_swal_error(resp)
+            if err and "wait" in err.lower():
+                time.sleep(cooldown)
             else:
-                with self.lock:
-                    self.stats["last_status"] = "unknown resp"
-                time.sleep(15)
+                time.sleep(5)
 
-    # ─── DASHBOARD ───
+    def claim_manual(self):
+        url = f"{BASE_URL}/rewards/manual"
+        try:
+            r = self.session.get(url, timeout=REQUEST_TIMEOUT)
+            if r.status_code == 403:
+                time.sleep(120)
+                return
+            r.raise_for_status()
+            html = r.text
+        except Exception:
+            time.sleep(10)
+            return
+
+        self.stats["manual"]["balance"] = self._extract_balance(html, "USDT")
+        cooldown = COOLDOWN["manual"]
+        self.stats["manual"]["next_claim_time"] = time.time() + cooldown
+        for i in range(cooldown, 0, -1):
+            self.stats["manual"]["next"] = i
+            time.sleep(1)
+
+        try:
+            r = self.session.get(url, timeout=REQUEST_TIMEOUT)
+            if r.status_code == 200:
+                if "Success" in r.text or "sent to FaucetPay" in r.text:
+                    amount = self._extract_amount(r.text, "USDT")
+                    self.total_claims += 1
+                    self.stats["manual"]["total_claims"] += 1
+                    self.stats["manual"]["total_reward"] += amount
+                    self.stats["manual"]["balance"] = self._extract_balance(r.text, "USDT")
+                    self._add_history(amount)
+                else:
+                    time.sleep(5)
+            else:
+                time.sleep(5)
+        except Exception:
+            time.sleep(5)
+
+    def run(self):
+        if not self.login():
+            print("Login gagal.")
+            return
+        print("Login sukses. Mulai sequential...")
+
+        while True:
+            self.claim_auto()
+            time.sleep(1)
+            self.claim_manual()
+            time.sleep(1)
+
     def make_dashboard(self) -> Layout:
         layout = Layout()
         layout.split_column(
@@ -299,42 +288,35 @@ class RenderCoins:
         layout["banner"].update(Align.center(banner_text))
 
         layout["header"].update(Panel.fit(
-            f"[bold cyan]RapidGame USDT[/bold cyan] | Email: {self.email} | "
-            f"Total Claims: {self.total_claims}",
+            f"[bold cyan]RapidGame AutoFaucet[/bold cyan] | Email: {self.email} | Total Claims: {self.total_claims}",
             border_style="cyan"
         ))
 
-        table = Table(title="USDT Faucet Status", border_style="blue")
-        table.add_column("Coin", style="cyan")
-        table.add_column("Reward", style="green")
-        table.add_column("Claims Left", style="yellow")
+        table = Table(title="Faucet Status", border_style="blue")
+        table.add_column("Mode", style="cyan")
+        table.add_column("Balance", style="green")
         table.add_column("Cooldown", style="magenta")
         table.add_column("Next", style="red")
         table.add_column("Total Reward", style="white")
-        table.add_column("Status", style="yellow")
 
         now = time.time()
-        s = self.stats
-        next_sec = max(0, int(s["next_claim_time"] - now))
-        next_str = f"{next_sec}s" if next_sec > 0 else "Ready"
-        reward_str = f"{s['total_reward']:.8f} USDT"
-        table.add_row(
-            "USDT",
-            s["balance"],
-            s["claims_left"],
-            f"{s['cooldown']}s",
-            next_str,
-            reward_str,
-            s["last_status"][:20],
-        )
+        for c in ["auto", "manual"]:
+            s = self.stats[c]
+            next_sec = max(0, int(s["next_claim_time"] - now))
+            next_str = f"{next_sec}s" if next_sec > 0 else "Ready"
+            reward_str = f"{s['total_reward']:.8f} USDT"
+            table.add_row(
+                c.upper(),
+                s["balance"],
+                f"{s['cooldown']}s",
+                next_str,
+                reward_str,
+            )
 
         hist_text = Text()
         hist_text.append("── History (last 10) ──\n", style="bold cyan")
-        if self.history:
-            for line in self.history[-10:]:
-                hist_text.append(line + "\n")
-        else:
-            hist_text.append("(belum ada claim)\n", style="dim")
+        for line in self.history[-10:]:
+            hist_text.append(line + "\n")
 
         layout["body"].update(Group(table, hist_text))
         return layout
@@ -343,8 +325,9 @@ class RenderCoins:
 def main():
     clear_screen()
     email = get_user_input()
-    bot = RenderCoins(email)
-    thread = threading.Thread(target=bot.claim_loop, daemon=True)
+    bot = Bot(email)
+
+    thread = threading.Thread(target=bot.run, daemon=True)
     thread.start()
 
     clear_screen()
