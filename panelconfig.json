@@ -184,8 +184,8 @@
           "runner": "python3"
         },
         "7": {
-          "label": "OpenEarnApp 🟢",
-          "file": "OpenEarnApp.py",
+          "label": "FarmBuddiesBot 🟢",
+          "file": "FarmBuddiesBot.py",
           "runner": "python3"
         },
         "8": {
