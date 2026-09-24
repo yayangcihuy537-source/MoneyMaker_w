@@ -25,6 +25,13 @@ define('B_WHITE', "\033[1;37m");
 define('B_MAGENTA', "\033[1;35m");
 
 // ============================================================
+//  SOLVER ENDPOINTS (WARYONO)
+// ============================================================
+define('SOLVER_BASE', 'https://api.waryono.my.id');
+define('API_IN',  SOLVER_BASE . '/in.php');
+define('API_OUT', SOLVER_BASE . '/res.php');
+
+// ============================================================
 //  FUNCTION CURL (DENGAN COOKIE)
 // ============================================================
 function curl($url, $post = 0, $httpheader = 0, $proxy = 0) {
@@ -63,7 +70,7 @@ function curl($url, $post = 0, $httpheader = 0, $proxy = 0) {
 }
 
 // ============================================================
-//  FUNCTION CURL REQUEST (TANPA HEADER UNTUK BYPASS)
+//  FUNCTION CURL REQUEST (TANPA HEADER)
 // ============================================================
 function curl_request($url, $method = 'GET', $post = null, $headers = []) {
     $ch = curl_init();
@@ -99,7 +106,7 @@ function displayBanner($username = '') {
     echo "\n";
     echo B_CYAN . "  [+] Website : " . B_WHITE . "⚡️lightningquest.net ⚡️" . RESET . "\n";
     echo B_CYAN . "  [+] ScriptMaker : " . B_YELLOW . "@SouuXso 🔥" . RESET . "\n";
-    echo B_CYAN . "  [+] Captcha Solver : " . B_GREEN . "skipcha.online ⚡" . RESET . "\n";
+    echo B_CYAN . "  [+] Captcha Solver : " . B_GREEN . "waryono.my.id ⚡" . RESET . "\n";
     echo B_CYAN . "  [+] Bot : " . B_GREEN . "ONLINE 🟢" . RESET . "\n";
     echo B_CYAN . str_repeat('═', 56) . RESET . "\n";
     echo "\n";
@@ -225,14 +232,14 @@ function getCSRF() {
 }
 
 // ============================================================
-//  CEK SALDO SKIPCHA.ONLINE
+//  CEK SALDO WARYONO
 // ============================================================
 function checkBalance() {
     $apiKey = trim(file_get_contents('bypass_api_key.txt'));
     if (!$apiKey) return false;
 
-    $url = "https://skipcha.online/res.php?" . http_build_query([
-        'key'    => $apiKey,
+    $url = API_OUT . "?" . http_build_query([
+        'apikey' => $apiKey,
         'action' => 'getbalance',
         'json'   => 1
     ]);
@@ -245,16 +252,16 @@ function checkBalance() {
 }
 
 // ============================================================
-//  BYPASS CAPTCHA (SKIPCHA.ONLINE)
+//  BYPASS CAPTCHA (WARYONO.MY.ID)
 // ============================================================
 function bypassCaptcha($sitekey, $method, $pageurl) {
     $apiKey = trim(file_get_contents('bypass_api_key.txt'));
     if (!$apiKey) {
-        echo B_RED . "  [!] API Key skipcha.online tidak ditemukan!\n" . RESET;
+        echo B_RED . "  [!] API Key waryono.my.id tidak ditemukan!\n" . RESET;
         return false;
     }
 
-    // Map method ke format skipcha.online
+    // Map method ke format waryono
     $methodMap = [
         'hcaptcha'     => 'hcaptcha',
         'turnstile'    => 'turnstile',
@@ -263,20 +270,25 @@ function bypassCaptcha($sitekey, $method, $pageurl) {
     ];
     $solverMethod = $methodMap[strtolower($method)] ?? 'hcaptcha';
 
-    // --- STEP 1: SUBMIT KE /in.php ---
-    $submitUrl = "https://skipcha.online/in.php?" . http_build_query([
-        'key'     => $apiKey,
-        'method'  => $solverMethod,
+    // --- STEP 1: SUBMIT KE /in.php (POST JSON) ---
+    $submitUrl = API_IN;
+
+    $payload = json_encode([
+        'apikey'  => $apiKey,
+        'methods' => $solverMethod,
+        'domain'  => $pageurl,
         'sitekey' => $sitekey,
-        'pageurl' => $pageurl,
-        'json'    => 1
+        'json'    => 1,
     ]);
 
-    echo B_YELLOW . "  [BYPASS] Submitting to skipcha.online ({$solverMethod})...\n" . RESET;
-    $response = curl_request($submitUrl);
+    echo B_YELLOW . "  [BYPASS] Submitting to waryono.my.id ({$solverMethod})...\n" . RESET;
+
+    $response = curl_request($submitUrl, 'POST', $payload, [
+        'Content-Type: application/json'
+    ]);
 
     if ($response === false) {
-        echo B_RED . "  [!] Gagal koneksi ke skipcha.online\n" . RESET;
+        echo B_RED . "  [!] Gagal koneksi ke waryono.my.id\n" . RESET;
         return false;
     }
 
@@ -284,20 +296,30 @@ function bypassCaptcha($sitekey, $method, $pageurl) {
     if (!isset($data['status']) || $data['status'] != 1 || empty($data['request'])) {
         $errMsg = $data['request'] ?? $response;
         echo B_RED . "  [!] Submit error: " . $errMsg . "\n" . RESET;
+
+        // Fatal: API key / saldo
+        if (is_string($errMsg) && (
+            strpos($errMsg, 'ERROR_KEY') !== false ||
+            strpos($errMsg, 'ERROR_WRONG') !== false ||
+            strpos($errMsg, 'ERROR_ZERO_BALANCE') !== false
+        )) {
+            echo B_RED . "  [💀] API key / saldo bermasalah. Stop.\n" . RESET;
+            return false;
+        }
         return false;
     }
 
     $taskId = $data['request'];
     echo B_YELLOW . "  [BYPASS] Task ID: " . $taskId . "\n" . RESET;
 
-    // --- STEP 2: POLLING KE /res.php ---
+    // --- STEP 2: POLLING KE /res.php (GET) ---
     for ($i = 0; $i < 60; $i++) {
         sleep(3);
 
-        $pollUrl = "https://skipcha.online/res.php?" . http_build_query([
-            'key'    => $apiKey,
-            'action' => 'get',
+        $pollUrl = API_OUT . "?" . http_build_query([
+            'apikey' => $apiKey,
             'id'     => $taskId,
+            'action' => 'get',
             'json'   => 1
         ]);
 
@@ -321,7 +343,7 @@ function bypassCaptcha($sitekey, $method, $pageurl) {
         }
 
         // Error
-        if (strpos($pollData['request'], 'ERROR') !== false) {
+        if (is_string($pollData['request']) && strpos($pollData['request'], 'ERROR') !== false) {
             echo "\n" . B_RED . "  [BYPASS] Error: " . $pollData['request'] . "\n" . RESET;
             return false;
         }
@@ -694,10 +716,10 @@ function startFarming($email, $pass, $api) {
     $access_token = trim(file_get_contents('access_token.txt'));
     displayBanner($username);
 
-    // Cek saldo skipcha
+    // Cek saldo Waryono
     $balance = checkBalance();
     if ($balance !== false) {
-        echo B_CYAN . "  💰 Skipcha Balance : " . B_WHITE . $balance . " Tokens\n" . RESET;
+        echo B_CYAN . "  💰 Waryono Balance : " . B_WHITE . $balance . " Tokens\n" . RESET;
     }
     echo B_YELLOW . "  🔄 Starting auto loop...\n\n" . RESET;
     
@@ -788,8 +810,8 @@ function printMenu() {
     echo B_CYAN . "================================================\n";
     echo B_CYAN . "  [1] " . B_GREEN . "Start Farming\n";
     echo B_CYAN . "  [2] " . B_YELLOW . "Config Email & Password\n";
-    echo B_CYAN . "  [3] " . B_YELLOW . "Config Bypass API Key (skipcha.online)\n";
-    echo B_CYAN . "  [4] " . B_YELLOW . "Check Skipcha Balance\n";
+    echo B_CYAN . "  [3] " . B_YELLOW . "Config Bypass API Key (waryono.my.id)\n";
+    echo B_CYAN . "  [4] " . B_YELLOW . "Check Waryono Balance\n";
     echo B_CYAN . "  [0] " . B_RED . "Exit\n";
     echo B_CYAN . "================================================\n";
     echo B_WHITE . "  Pilih menu: " . RESET;
@@ -823,11 +845,10 @@ function configEmailPassword() {
 function configApikey() {
     clearScreen();
     echo B_CYAN . "================================================\n";
-    echo B_CYAN . "  " . B_WHITE . "Konfigurasi API Key (SKIPCHA.ONLINE)\n";
+    echo B_CYAN . "  " . B_WHITE . "Konfigurasi API Key (WARYONO.MY.ID)\n";
     echo B_CYAN . "================================================\n\n";
-    echo B_YELLOW . "  Dapatkan API Key dari https://skipcha.online\n";
-    echo B_YELLOW . "  Harga: 1 USDT = 10,000 Tokens\n";
-    echo B_YELLOW . "  Biaya hCaptcha: 1.0 Token / solve\n\n" . RESET;
+    echo B_YELLOW . "  Dapatkan API Key dari https://waryono.my.id\n";
+    echo B_YELLOW . "  Biaya hCaptcha: 1 Token / solve\n\n" . RESET;
     echo B_WHITE . "API Key: " . RESET;
     $key = trim(fgets(STDIN));
     if (!empty($key)) {
@@ -851,7 +872,7 @@ function configApikey() {
 function menuCheckBalance() {
     clearScreen();
     echo B_CYAN . "================================================\n";
-    echo B_CYAN . "  " . B_WHITE . "Check Skipcha Balance\n";
+    echo B_CYAN . "  " . B_WHITE . "Check Waryono Balance\n";
     echo B_CYAN . "================================================\n\n";
 
     if (!file_exists('bypass_api_key.txt')) {
