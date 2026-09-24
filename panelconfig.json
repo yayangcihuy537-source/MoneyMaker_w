@@ -14,7 +14,7 @@
           "runner": "python3"
         },
         "3": {
-          "label": "ClaimX 🟢",
+          "label": "ClaimX 🔴",
           "file": "ClaimX.php",
           "runner": "php"
         },
@@ -34,7 +34,7 @@
           "runner": "php"
         },
         "7": {
-          "label": "ClaimCrypto 🟢",
+          "label": "ClaimCrypto 🔴",
           "file": "ClaimCrypto.php",
           "runner": "php"
         },
@@ -69,7 +69,7 @@
           "runner": "php"
         },
         "3": {
-          "label": "AdCoins 🟢",
+          "label": "AdCoins 🔴",
           "file": "ad.py",
           "runner": "python3"
         },
@@ -94,7 +94,7 @@
           "runner": "python3"
         },
         "8": {
-          "label": "99Faucet 🔴",
+          "label": "99Faucet 🟢",
           "file": "99faucet.php",
           "runner": "php"
         },
@@ -164,7 +164,7 @@
           "runner": "python3"
         },
         "5": {
-          "label": "CloudEarnBot 🟢",
+          "label": "CloudEarnBot 🔴",
           "file": "Cloud.py",
           "runner": "python3"
         },
@@ -209,7 +209,7 @@
           "runner": "python3"
         },
         "14": {
-          "label": "BabyDogeRush 🟢",
+          "label": "BabyDogeRush 🔴",
           "file": "baby.py",
           "runner": "python3"
         },
