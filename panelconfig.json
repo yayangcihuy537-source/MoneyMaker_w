@@ -14,7 +14,7 @@
           "runner": "python3"
         },
         "3": {
-          "label": "ClaimX 🔴",
+          "label": "ClaimX 🟢",
           "file": "ClaimX.php",
           "runner": "php"
         },
