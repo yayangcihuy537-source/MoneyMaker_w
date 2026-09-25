@@ -29,7 +29,7 @@
           "runner": "python3"
         },
         "6": {
-          "label": "EarnSolana 🟢",
+          "label": "EarnSolana 🔴",
           "file": "solono.php",
           "runner": "php"
         },
@@ -39,16 +39,11 @@
           "runner": "php"
         },
         "8": {
-          "label": "CryptoFuture 🟢",
-          "file": "Future.php",
-          "runner": "php"
-        },
-        "9": {
           "label": "RapidGame 🟢",
           "file": "Rapid.py",
           "runner": "python3"
         },
-        "10": {
+        "9": {
           "label": "Coming Soon 🔒",
           "file": "comingsoon.php",
           "runner": "php"
@@ -99,7 +94,7 @@
           "runner": "php"
         },
         "9": {
-          "label": "FreeLTCfun 🟢",
+          "label": "FreeLTCfun 🔴",
           "file": "fun.php",
           "runner": "php"
         },
@@ -124,8 +119,8 @@
           "runner": "php"
         },
         "14": {
-          "label": "Coming Soon 🔒",
-          "file": "comingsoon.php",
+          "label": "CryptoFuture 🟢",
+          "file": "Future.php",
           "runner": "php"
         },
         "15": {
