@@ -3,12 +3,12 @@ error_reporting(E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED);
 ini_set('display_errors', '0');
 
 /**
- * CryptoFuture Auto Claim — Endless Loop (FIXED + MAX 250 + LIVE TIMER)
- * - Turnstile solver via waryono API
- * - Banner SOUU box style
- * - cf_clearance prompted only if CF challenge appears
- * - In-memory cookies, api key di config file
- * - Max claim 250 + live moving timer
+ * CryptoFuture Auto Claim — v5
+ * - Turnstile detection + auto-solve
+ * - Parser fleksibel (Swal / JSON / plain / balance delta)
+ * - Safe debug logger (redacted token) + response box
+ * - Max claim 250
+ * - Live moving timer + progress bar
  */
 
 define("RED","\033[0;31m"); define("GRN","\033[0;32m");
@@ -30,10 +30,11 @@ const SOLVER_IN  = "https://api.waryono.my.id/in.php";
 const SOLVER_OUT = "https://api.waryono.my.id/res.php";
 
 const CONFIG_FILE = "cryptofuture_config.json";
+const DEBUG_FILE  = "debug_verify_response.txt";
 
 const UA = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36";
 
-const MAX_CLAIMS = 250;
+const MAX_CLAIMS      = 250;
 const LOOP_SLEEP_STEP = 5;
 
 /* ═══════════ RICH ANSI ═══════════ */
@@ -69,16 +70,16 @@ function box_line($c){ return fg(51)."║  ".RST.ansi_pad($c,60).fg(51)."║".RS
 function box_div(){ return fg(51)."╠".str_repeat("═",62)."╣".RST."\n"; }
 
 /* ═══════════ GLOBAL STATE ═══════════ */
-$GLOBALS['_logs'] = [];
-$GLOBALS['_stage'] = 'INIT';
-$GLOBALS['_wallet'] = '?';
-$GLOBALS['_balance'] = '?';
-$GLOBALS['_claims'] = 0;
-$GLOBALS['_fails'] = 0;
-$GLOBALS['_earned'] = 0.0;
-$GLOBALS['_ip'] = '?';
-$GLOBALS['_isp'] = '?';
-$GLOBALS['_country'] = '?';
+$GLOBALS['_logs']      = [];
+$GLOBALS['_stage']     = 'INIT';
+$GLOBALS['_wallet']    = '?';
+$GLOBALS['_balance']   = '?';
+$GLOBALS['_claims']    = 0;
+$GLOBALS['_fails']     = 0;
+$GLOBALS['_earned']    = 0.0;
+$GLOBALS['_ip']        = '?';
+$GLOBALS['_isp']       = '?';
+$GLOBALS['_country']   = '?';
 $GLOBALS['_startTime'] = time();
 
 function push_log($msg, $tag='i'){
@@ -93,12 +94,14 @@ function push_log($msg, $tag='i'){
 /* ═══════════ IP CHECK ═══════════ */
 function check_ip(){
     if ($GLOBALS['_ip'] !== '?') return;
-    $r = @file_get_contents("http://ip-api.com/json");
+    $ctx = stream_context_create(['http'=>['timeout'=>5]]);
+    $r = @file_get_contents("http://ip-api.com/json", false, $ctx);
     if ($r === false) { $GLOBALS['_ip']='?'; return; }
     $j = json_decode($r, true);
-    $GLOBALS['_ip']      = $j['query'] ?? '?';
+    if (!is_array($j)) { $GLOBALS['_ip']='?'; return; }
+    $GLOBALS['_ip']      = $j['query']   ?? '?';
     $GLOBALS['_country'] = ($j['country'] ?? '?').' / '.($j['city'] ?? '?');
-    $GLOBALS['_isp']     = $j['isp'] ?? '?';
+    $GLOBALS['_isp']     = $j['isp']     ?? '?';
 }
 
 /* ═══════════ TIME HELPERS ═══════════ */
@@ -116,6 +119,42 @@ function fmt_uptime($s){
     return sprintf('%02d:%02d:%02d', $h, $m, $sec);
 }
 
+/* ═══════════ REDACT & DEBUG BOX ═══════════ */
+function redactPost(string $post): string
+{
+    parse_str($post, $data);
+    foreach ([
+        'csrf_token_name',
+        'claim_token',
+        'cf-turnstile-response',
+        'g-recaptcha-response',
+        'wallet',
+        'device_token',
+    ] as $key) {
+        if (isset($data[$key])) {
+            $data[$key] = '[REDACTED]';
+        }
+    }
+    return http_build_query($data);
+}
+
+function print_verify_box(int $code, string $body, string $plain): void
+{
+    echo "\n";
+    echo "╔══════════════════════════════════════════╗\n";
+    echo "║          VERIFY RESPONSE                 ║\n";
+    echo "╠══════════════════════════════════════════╣\n";
+    echo "║ HTTP : " . str_pad((string)$code, 30) . "║\n";
+    echo "║ SIZE : " . str_pad(strlen($body) . " bytes", 30) . "║\n";
+    echo "╚══════════════════════════════════════════╝\n";
+    if ($plain === '') {
+        echo "Response : EMPTY\n";
+    } else {
+        echo "Response : " . substr($plain, 0, 500) . "\n";
+    }
+    echo "\n";
+}
+
 /* ═══════════ BANNER ═══════════ */
 function banner(){
     check_ip();
@@ -128,11 +167,11 @@ function banner(){
 
     $barLen = 20;
     $filled = (int)round(($pct/100) * $barLen);
-    $bar = str_repeat("█", $filled).str_repeat("░", $barLen - $filled);
+    $bar    = str_repeat("█", $filled).str_repeat("░", $barLen - $filled);
 
     echo fg(51)."╔".str_repeat("═",62)."╗".RST."\n";
     echo box_line(gradient("CRYPTOFUTURE AUTO CLAIM", 51, 213));
-    echo box_line(fg(240)."─────── SOUU ENGINE ───────".RST);
+    echo box_line(fg(240)."─────── SOUU ENGINE v5 ───────".RST);
     echo box_div();
 
     echo box_line(fg(213).BOLD."NETWORK".RST);
@@ -169,7 +208,7 @@ function banner(){
     echo "   ".fg(240)."By Power ".RST.fg(213)."@SouuXso".RST.fg(240)." • ".RST.fg(46)."CryptoFuture Edition".RST."\n\n";
 }
 
-/* ═══════════ LIVE TICK (moving timer) ═══════════ */
+/* ═══════════ LIVE TICK ═══════════ */
 function live_tick($seconds, $label="next", $step=1){
     $w = (int)$seconds;
     while ($w > 0) {
@@ -201,10 +240,10 @@ function load_config(){
     return is_array($j) ? $j : [];
 }
 function save_config($cfg){
-    file_put_contents(CONFIG_FILE, json_encode($cfg, JSON_PRETTY_PRINT));
+    @file_put_contents(CONFIG_FILE, json_encode($cfg, JSON_PRETTY_PRINT));
 }
 
-/* ═══════════ IN-MEMORY COOKIE JAR ═══════════ */
+/* ═══════════ COOKIE JAR ═══════════ */
 $GLOBALS['COOKIES'] = [];
 function cookie_str(){
     if (!$GLOBALS['COOKIES']) return '';
@@ -260,14 +299,17 @@ function req($url, $method='GET', $data=null, $headers=[], $binary=false){
     $resp = curl_exec($ch);
     if ($resp === false){
         $err = curl_error($ch);
+        curl_close($ch);
         return ['body'=>'', 'code'=>0, 'headers'=>'', 'error'=>$err];
     }
     $info = curl_getinfo($ch);
+    curl_close($ch);
+
     if ($binary){
         return ['body'=>$resp, 'code'=>$info['http_code'], 'headers'=>'', 'error'=>''];
     }
-    $hs = $info['header_size'];
-    $raw = substr($resp, 0, $hs);
+    $hs   = $info['header_size'];
+    $raw  = substr($resp, 0, $hs);
     $body = substr($resp, $hs);
     cookie_absorb($raw);
     return ['body'=>$body, 'code'=>$info['http_code'], 'headers'=>$raw, 'error'=>''];
@@ -370,7 +412,7 @@ function login($wallet, $apikey){
     $ts_token = solve_turnstile($apikey, HOME, TURNSTILE_SITEKEY, '', '');
     if (!$ts_token) return ['ok'=>false, 'msg'=>'turnstile solve fail', 'cf'=>false];
 
-    $device = "dev_".substr(md5(uniqid(mt_rand(), true)), 0, 12).base_convert(time(), 10, 36);
+    $device = "dev_".substr(md5(uniqid(mt_rand(), true)), 0, 12).base_convert((string)time(), 10, 36);
     $post = http_build_query([
         'wallet'                => $wallet,
         'csrf_token_name'       => $csrf,
@@ -397,14 +439,29 @@ function parse_earn($html){
         'claim_token' => '',
         'wait' => 0,
         'balance' => null,
-        'has_form' => false
+        'has_form' => false,
+        'has_turnstile' => false,
+        'turnstile_sitekey' => TURNSTILE_SITEKEY,
     ];
 
     if (preg_match('/<form[^>]+id="fauform"[^>]*>(.*?)<\/form>/si', $html, $fm)) {
         $o['has_form'] = true;
         $in = $fm[1];
         if (preg_match('/name="csrf_token_name"[^>]*value="([^"]*)"/i', $in, $m)) $o['csrf'] = $m[1];
-        if (preg_match('/name="claim_token"[^>]*value="([^"]*)"/i', $in, $m)) $o['claim_token'] = $m[1];
+        if (preg_match('/name="claim_token"[^>]*value="([^"]*)"/i', $in, $m))     $o['claim_token'] = $m[1];
+
+        // Deteksi Turnstile di dalam form
+        if (stripos($in, 'cf-turnstile') !== false
+            || stripos($in, 'cf-turnstile-response') !== false) {
+            $o['has_turnstile'] = true;
+            if (preg_match('/class="cf-turnstile"[^>]*data-sitekey="([^"]+)"/i', $in, $m)) {
+                $o['turnstile_sitekey'] = $m[1];
+            } elseif (preg_match('/data-sitekey="([^"]+)"[^>]*class="cf-turnstile"/i', $in, $m)) {
+                $o['turnstile_sitekey'] = $m[1];
+            } elseif (preg_match('/data-sitekey="([^"]+)"/i', $in, $m)) {
+                $o['turnstile_sitekey'] = $m[1];
+            }
+        }
     }
 
     if (preg_match('/var\s+wait\s*=\s*(\d+)/i', $html, $m)) {
@@ -428,7 +485,7 @@ function fetch_balance(){
 /* ═══════════ MAIN ═══════════ */
 banner();
 
-$cfg = load_config();
+$cfg    = load_config();
 $apikey = $cfg['apikey'] ?? '';
 
 if (!$apikey) {
@@ -456,7 +513,7 @@ $GLOBALS['_wallet'] = $wallet;
 push_log("probing /faucet...", 'in');
 banner();
 
-$r = req(FAUCET);
+$r    = req(FAUCET);
 $html = $r['body'];
 
 if (is_cf_challenge($html)) {
@@ -480,7 +537,7 @@ if (strpos($html, 'id="fauform"') === false) {
 }
 
 $sessionStart = time();
-$round = 0;
+$round        = 0;
 
 /* ═══════════ LOOP ═══════════ */
 while (true) {
@@ -494,7 +551,7 @@ while (true) {
     $round++;
     $GLOBALS['_stage'] = "ROUND #{$round}";
 
-    $r = req(FAUCET);
+    $r    = req(FAUCET);
     $html = $r['body'];
 
     if (is_cf_challenge($html)) {
@@ -538,37 +595,133 @@ while (true) {
         continue;
     }
 
+    // Info turnstile
+    if (!empty($info['has_turnstile'])) {
+        push_log("form: turnstile DETECTED (sitekey=".substr($info['turnstile_sitekey'],0,16)."…)", 'wr');
+    } else {
+        push_log("form: no turnstile", 'i');
+    }
+    banner();
+
     // POST claim
     sleep(rand(2,4));
-    $post = http_build_query([
+
+    $postData = [
         'csrf_token_name' => $info['csrf'],
         'claim_token'     => $info['claim_token'],
-    ]);
+    ];
 
-    $r2 = req(VERIFY, 'POST', $post, ['Origin: '.SITE, 'Referer: '.FAUCET]);
-    $respHtml = $r2['body'];
+    if (!empty($info['has_turnstile'])) {
+        push_log("turnstile muncul — solving...", 'in');
+        banner();
+
+        $ts_token = solve_turnstile($apikey, HOME, $info['turnstile_sitekey'], '', '');
+        if (!$ts_token) {
+            push_log("turnstile solve fail — skip round", 'er');
+            $GLOBALS['_fails']++;
+            banner();
+            live_tick(rand(10, 20), "retry");
+            continue;
+        }
+        $postData['cf-turnstile-response'] = $ts_token;
+        push_log("turnstile solved", 'ok');
+        banner();
+    }
+
+    $post = http_build_query($postData);
+
+    $r2       = req(VERIFY, 'POST', $post, ['Origin: '.SITE, 'Referer: '.FAUCET]);
+    $respHtml = (string)($r2['body'] ?? '');
+    $httpCode = (int)($r2['code'] ?? 0);
+
+    // === SAFE DEBUG LOGGER (redacted) ===
+    $plainBody = trim(preg_replace('/\s+/', ' ', strip_tags($respHtml)));
+
+    @file_put_contents(
+        DEBUG_FILE,
+        str_repeat('═', 60)."\n".
+        "TIME   : ".date('Y-m-d H:i:s')."\n".
+        "ROUND  : #{$round}\n".
+        "HTTP   : {$httpCode}\n".
+        "TURNSTILE: ".(!empty($info['has_turnstile']) ? 'yes' : 'no')."\n".
+        "POST   : ".redactPost($post)."\n".
+        "BODY (5000 chars):\n".substr($respHtml, 0, 5000)."\n\n",
+        FILE_APPEND
+    );
+
+    // === SHOW BOX DI TERMINAL ===
+    print_verify_box($httpCode, $respHtml, $plainBody);
 
     $success = false;
-    $amount = 0.0;
+    $amount  = 0.0;
+    $reason  = 'unknown';
 
-    if ($r2['code'] === 200) {
-        if (preg_match("/Swal\.fire\(\{[^}]*html:\s*'([^']+)'/i", $respHtml, $m)) {
+    if ($httpCode === 200 && $respHtml !== '') {
+
+        // 1. Swal.fire html — multi-line tolerant
+        if (preg_match("/Swal\.fire\s*\(\s*\{.*?html\s*:\s*['\"]([^'\"]+)['\"]/is", $respHtml, $m)) {
             $msg = strip_tags($m[1]);
-            if (preg_match('/([0-9.]+)\s+Coins/i', $msg, $am)) { $amount = (float)$am[1]; $success = true; }
-            if (stripos($msg, 'success') !== false) $success = true;
+            if (preg_match('/([0-9.,]+)\s+Coins?/i', $msg, $am)) {
+                $amount = (float)str_replace(',', '', $am[1]);
+                $success = true; $reason = 'swal-html';
+            } elseif (stripos($msg, 'success') !== false) {
+                $success = true; $reason = 'swal-html-nocoins';
+            }
         }
-        if (!$success && preg_match('/Success!.*?([0-9.]+)\s+Coins/i', $respHtml, $m)) {
-            $amount = (float)$m[1]; $success = true;
+
+        // 2. Swal.fire title
+        if (!$success && preg_match("/Swal\.fire\s*\(\s*\{.*?title\s*:\s*['\"]([^'\"]+)['\"]/is", $respHtml, $m)) {
+            if (stripos($m[1], 'success') !== false) { $success = true; $reason = 'swal-title'; }
+            if (stripos($m[1], 'error') !== false)   { $reason = 'swal-title-error'; }
+        }
+
+        // 3. Plain text success
+        if (!$success && preg_match('/Success!.*?([0-9.]+)\s+Coins?/is', $respHtml, $m)) {
+            $amount = (float)$m[1]; $success = true; $reason = 'plain-text';
+        }
+
+        // 4. JSON
+        if (!$success) {
+            $j = json_decode($respHtml, true);
+            if (is_array($j)) {
+                $isOk = (($j['success'] ?? false) === true)
+                     || (($j['status']  ?? '') === 'ok')
+                     || (($j['status']  ?? '') === 'success')
+                     || (($j['code']    ?? 0)  === 200 && !empty($j['message']));
+                if ($isOk) {
+                    $success = true;
+                    $reason  = 'json';
+                    foreach (['amount','coins','reward','value','balance'] as $k) {
+                        if (isset($j[$k]) && is_numeric($j[$k])) { $amount = (float)$j[$k]; break; }
+                    }
+                    if ($amount === 0.0 && isset($j['message']) && preg_match('/([0-9.]+)\s+Coins?/i', $j['message'], $am)) {
+                        $amount = (float)$am[1];
+                    }
+                }
+            }
+        }
+
+        // 5. Balance delta fallback
+        if (!$success) {
+            sleep(1);
+            $balAfter = fetch_balance();
+            if ($balAfter !== null && $info['balance'] !== null) {
+                $delta = (float)$balAfter - (float)$info['balance'];
+                if ($delta > 0) { $success = true; $amount = $delta; $reason = 'balance-delta'; }
+            }
         }
     }
 
-    if (!$success && ($r2['code'] === 500 || stripos($respHtml, 'Database Error') !== false)) {
+    // HTTP 500 / DB err fallback
+    if (!$success && ($httpCode === 500 || stripos($respHtml, 'Database Error') !== false)) {
         push_log("HTTP 500 / DB err — re-check balance", 'wr');
         banner();
         sleep(2);
         $balAfter = fetch_balance();
-        $delta = (float)$balAfter - (float)$info['balance'];
-        if ($delta > 0) { $success = true; $amount = $delta; }
+        if ($balAfter !== null && $info['balance'] !== null) {
+            $delta = (float)$balAfter - (float)$info['balance'];
+            if ($delta > 0) { $success = true; $amount = $delta; $reason = 'db-delta'; }
+        }
     }
 
     if ($success) {
@@ -577,14 +730,18 @@ while (true) {
         if ($amount > 0) {
             $GLOBALS['_balance'] = number_format((float)$info['balance'] + $amount, 4);
         }
-        push_log("+".number_format($amount, 4)." | total: ".number_format($GLOBALS['_earned'],4)." | bal: ".$GLOBALS['_balance'], 'ok');
+        push_log("+".number_format($amount, 4)." [{$reason}] | total: ".number_format($GLOBALS['_earned'],4)." | bal: ".$GLOBALS['_balance'], 'ok');
     } else {
         $GLOBALS['_fails']++;
-        push_log("fail (HTTP ".$r2['code'].")", 'er');
+        push_log("fail (HTTP {$httpCode}) reason={$reason}", 'er');
+
+        $snip = trim(preg_replace('/\s+/', ' ', strip_tags($respHtml)));
+        if ($snip !== '') {
+            push_log("resp: ".substr($snip, 0, 80), 'wr');
+        }
     }
     banner();
 
-    // Cek limit setelah claim
     if ($GLOBALS['_claims'] >= MAX_CLAIMS) {
         $GLOBALS['_stage'] = 'LIMIT REACHED';
         push_log("max claim reached (".MAX_CLAIMS.") — stopping", 'g');
