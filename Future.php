@@ -34,8 +34,8 @@ const DEBUG_FILE  = "debug_verify_response.txt";
 
 const UA = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36";
 
-const MAX_CLAIMS      = 250;
-const LOOP_SLEEP_STEP = 5;
+const MAX_CLAIMS      = 100;
+const LOOP_SLEEP_STEP = 15;
 
 /* ═══════════ RICH ANSI ═══════════ */
 function fg($c){ return "\033[38;5;{$c}m"; }
