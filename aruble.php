@@ -72,6 +72,40 @@ function getIPInfo() {
 }
 
 // ============================================================
+//  CONFIG — single file arubleconfig.json
+// ============================================================
+const CONFIG_FILE = "arubleconfig.json";
+
+$GLOBALS['_config'] = [
+    'email'      => '',
+    'password'   => '',
+    'user_agent' => '',
+];
+
+function loadConfig() {
+    if (file_exists(CONFIG_FILE)) {
+        $raw = file_get_contents(CONFIG_FILE);
+        $j = json_decode($raw, true);
+        if (is_array($j)) {
+            foreach ($GLOBALS['_config'] as $k => $v) {
+                if (isset($j[$k]) && $j[$k] !== '') {
+                    $GLOBALS['_config'][$k] = $j[$k];
+                }
+            }
+            return $GLOBALS['_config'];
+        }
+    }
+    return $GLOBALS['_config'];
+}
+
+function saveConfig() {
+    file_put_contents(
+        CONFIG_FILE,
+        json_encode($GLOBALS['_config'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
+    );
+}
+
+// ============================================================
 //  BANNER
 // ============================================================
 function displayBanner($stage = 'INIT', $extra = []) {
@@ -134,6 +168,7 @@ function promptBox($title, $subtitle = '') {
     } else {
         echo fg(51) . "║" . str_repeat(' ', 62) . "║" . "\033[0m" . "\n";
     }
+    echo boxLine(fg(51) . "├─ Save to    : " . "\033[0m" . fg(250) . CONFIG_FILE . "\033[0m");
 
     echo fg(51) . "╚══════════════════════════════════════════════════════════════╝" . "\033[0m" . "\n";
     echo "\n   " . gradient("WAITING INPUT", 46, 226) . " " . fg(250) . "• " . date('H:i:s') . "\033[0m" . "\n";
@@ -143,7 +178,7 @@ function promptBox($title, $subtitle = '') {
 }
 
 // ============================================================
-//  TIMER — single-line refresh (termux-friendly)
+//  TIMER
 // ============================================================
 function timer($seconds) {
     date_default_timezone_set('UTC');
@@ -520,46 +555,43 @@ function aruble($csrf, $api = null, $path = '/faucet') {
     return $result['token'];
 }
 
-function slow($text, $delay = 30000) {
-    echo $text;
-}
-
 function clear() {
     if (stripos(PHP_OS, 'WIN') === 0) { pclose(popen('cls', 'w')); } else { passthru('clear'); }
 }
 
-function Save($namadata) {
-    if (file_exists($namadata)) {
-        $data = file_get_contents($namadata);
-    } else {
-        $label = ucfirst($namadata);
-        $hint = '';
-        if ($namadata === 'Email')      $hint = 'email akun aruble lo';
-        if ($namadata === 'Password')   $hint = 'password akun aruble lo';
-        if ($namadata === 'user-agent') $hint = 'paste user-agent browser lo';
-
-        promptBox($label, $hint);
-        $data = trim(fgets(STDIN));
-
-        if ($data === '') {
-            echo "\n  " . fg(196) . "x kosong, coba lagi" . "\033[0m\n";
-            usleep(800000);
-            return Save($namadata);
-        }
-
-        file_put_contents($namadata, $data);
-        echo "\n  " . fg(46) . "v tersimpan" . "\033[0m\n";
-        usleep(600000);
+// ============================================================
+//  CONFIG PROMPT — kalau key kosong
+// ============================================================
+function ensureConfigField($key, $label, $hint = '') {
+    if (!empty($GLOBALS['_config'][$key])) {
+        return $GLOBALS['_config'][$key];
     }
+
+    promptBox($label, $hint);
+    $data = trim(fgets(STDIN));
+
+    if ($data === '') {
+        echo "\n  " . fg(196) . "x kosong, coba lagi" . "\033[0m\n";
+        usleep(800000);
+        return ensureConfigField($key, $label, $hint);
+    }
+
+    $GLOBALS['_config'][$key] = $data;
+    saveConfig();
+
+    echo "\n  " . fg(46) . "v tersimpan ke " . CONFIG_FILE . "\033[0m\n";
+    usleep(600000);
     return $data;
 }
 
 // ============================================================
 //  MAIN
 // ============================================================
-$email = Save("Email");
-$pass  = Save("Password");
-$api   = Save("user-agent");
+loadConfig();
+
+$email = ensureConfigField('email',      'Email',      'email akun aruble lo');
+$pass  = ensureConfigField('password',   'Password',   'password akun aruble lo');
+$api   = ensureConfigField('user_agent', 'User-Agent', 'paste user-agent browser lo');
 
 $GLOBALS['_email'] = $email;
 
