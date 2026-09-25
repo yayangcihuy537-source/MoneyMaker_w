@@ -1,10 +1,11 @@
 <?php
 /**
- * FaucetBot Multi-Site v7.3 — non-blocking + 429 disable
+ * FaucetBot Multi-Site v7.4 — non-blocking + 429 disable
+ * CoinDrip BTC removed (AdsLab captcha, unsolvable via API).
  *
  * Modes:
- *   1 Gobrya DOGE | 2 CoinDrip BTC | 3 TaraKing TRX | 4 ALL
- *   5 Update cookie | 6 Check cookies | 7 Reset config
+ *   1 Gobrya DOGE | 2 TaraKing TRX | 3 ALL
+ *   4 Update cookie | 5 Check cookies | 6 Reset config
  *
  * 429 rate limit → site di-disable permanen sampai restart (biar gak buang token)
  */
@@ -26,12 +27,6 @@ $SITES = [
         'captcha_field'=>'cf-turnstile-response','captcha_type'=>'TURNSTILE',
     ],
     '2' => [
-        'name'=>'CoinDrip BTC','host'=>'coindrip.site','base'=>'https://coindrip.site',
-        'session'=>'https://coindrip.site/api/session','claim'=>'https://coindrip.site/claim',
-        'sitekey'=>'0x4AAAAAAEyQAaWaAMu1QTtt','currency'=>'BTC','loop_wait'=>3600,
-        'captcha_field'=>'captcha_token','captcha_type'=>'TURNSTILE',
-    ],
-    '3' => [
         'name'=>'TaraKing TRX','host'=>'taraking.top','base'=>'https://taraking.top',
         'session'=>'https://taraking.top/api/session','claim'=>'https://taraking.top/claim',
         'sitekey'=>'0x4AAAAAAE7f72EIFp1ptwY7','currency'=>'TRX','loop_wait'=>60,
@@ -146,7 +141,7 @@ function banner(){
     echo box_line(fg(51)."└─ Balance    : ".RST.fg(46).$GLOBALS['_balance'].RST);
     echo box_div();
 
-    if ($GLOBALS['_mode'] === '4') {
+    if ($GLOBALS['_mode'] === '3') {
         echo box_line(fg(213).BOLD."STATUS".RST);
         foreach ($GLOBALS['_nextReadyAt'] as $id => $ts) {
             $siteInfo = $GLOBALS['SITES'][$id] ?? null;
@@ -517,13 +512,13 @@ function menu_update_cookie() {
         $status = config_get($s['host'], 'cookie.txt') ? fg(46)."set".RST : fg(196)."kosong".RST;
         echo box_line(fg(51)."  ".fg(226).$id.".".RST.fg(46)." ".str_pad($s['name'], 16).RST." [".$status.fg(51)."]".RST);
     }
-    echo box_line(fg(51)."  ".fg(226)."4.".RST.fg(208)." SEMUA site".RST);
+    echo box_line(fg(51)."  ".fg(226)."3.".RST.fg(208)." SEMUA site".RST);
     echo fg(51)."╚".str_repeat("═",62)."╝".RST."\n";
     echo "\n   ".gradient("PILIH > ", 46, 226).fg(226);
     $pick = trim(fgets(STDIN));
     echo RST."\n";
 
-    if ($pick === '4') {
+    if ($pick === '3') {
         foreach ($SITES as $s) {
             echo "\n".WHT."Cookie ".YEL.$s['name'].WHT." (blank=skip):\n".RST;
             echo WHT."  → ".YEL;
@@ -596,29 +591,28 @@ function menu_reset_config() {
 while (true) {
     clear();
     echo fg(51)."╔".str_repeat("═",62)."╗".RST."\n";
-    echo box_line(gradient("FAUCETBOT MULTI-SITE v7.3", 51, 213));
+    echo box_line(gradient("FAUCETBOT MULTI-SITE v7.4", 51, 213));
     echo box_line(fg(240)."─────── SOUU ENGINE ───────".RST);
     echo box_div();
     echo box_line(fg(213).BOLD."PILIH MODE".RST);
     echo box_line(fg(51)."  ".RST.fg(226)."1.".RST.fg(46)." Gobrya DOGE".RST);
-    echo box_line(fg(51)."  ".RST.fg(226)."2.".RST.fg(46)." CoinDrip BTC".RST);
-    echo box_line(fg(51)."  ".RST.fg(226)."3.".RST.fg(46)." TaraKing TRX".RST);
-    echo box_line(fg(51)."  ".RST.fg(208)."4. ALL (rotate, non-blocking)".RST);
+    echo box_line(fg(51)."  ".RST.fg(226)."2.".RST.fg(46)." TaraKing TRX".RST);
+    echo box_line(fg(51)."  ".RST.fg(208)."3. ALL (rotate, non-blocking)".RST);
     echo box_div();
     echo box_line(fg(213).BOLD."TOOLS".RST);
-    echo box_line(fg(51)."  ".RST.fg(226)."5.".RST.fg(46)." Update cookie".RST);
-    echo box_line(fg(51)."  ".RST.fg(226)."6.".RST.fg(46)." Check cookie (test session)".RST);
-    echo box_line(fg(51)."  ".RST.fg(226)."7.".RST.fg(196)." Reset config".RST);
+    echo box_line(fg(51)."  ".RST.fg(226)."4.".RST.fg(46)." Update cookie".RST);
+    echo box_line(fg(51)."  ".RST.fg(226)."5.".RST.fg(46)." Check cookie (test session)".RST);
+    echo box_line(fg(51)."  ".RST.fg(226)."6.".RST.fg(196)." Reset config".RST);
     echo fg(51)."╚".str_repeat("═",62)."╝".RST."\n";
     echo "\n   ".gradient("PILIH > ", 46, 226).fg(226);
     $mode = trim(fgets(STDIN));
     echo RST."\n";
 
-    if ($mode === '5') { menu_update_cookie(); continue; }
-    if ($mode === '6') { menu_check_cookies(); continue; }
-    if ($mode === '7') { menu_reset_config(); continue; }
+    if ($mode === '4') { menu_update_cookie(); continue; }
+    if ($mode === '5') { menu_check_cookies(); continue; }
+    if ($mode === '6') { menu_reset_config(); continue; }
 
-    if (!in_array($mode, ['1','2','3','4'])) {
+    if (!in_array($mode, ['1','2','3'])) {
         echo RED."❌ mode invalid\n".RST;
         sleep(2);
         continue;
@@ -657,13 +651,13 @@ echo WHT."💰 Solver balance: ".GRN.($bal ?? "None").RST." token\n";
 sleep(1);
 
 // ── SINGLE MODE ──
-if ($mode !== '4') {
+if ($mode !== '3') {
     $site   = $SITES[$mode];
     $cookie = ensure_cookie($site);
 
     $cj = check_cookie($site, $cookie);
     if (empty($cj['logged_in'])) {
-        echo RED."❌ session invalid — pilih menu 5 buat update cookie\n".RST;
+        echo RED."❌ session invalid — pilih menu 4 buat update cookie\n".RST;
         sleep(3);
         exit;
     }
@@ -706,7 +700,7 @@ foreach ($SITES as $id => $site) {
 foreach ($SITES as $id => $site) {
     $cj = check_cookie($site, $cookies[$id]);
     if (empty($cj['logged_in'])) {
-        push_log("❌ ".$site['name']." — session invalid (menu 5 buat update)", 'er');
+        push_log("❌ ".$site['name']." — session invalid (menu 4 buat update)", 'er');
     } else {
         push_log("✓ ".$site['name']." — ".($cj['name'] ?? '?')." (".($cj['balance_currency'] ?? '?').")", 'ok');
     }
@@ -715,7 +709,6 @@ banner();
 sleep(2);
 
 while (true) {
-    // Cek apakah semua site disabled
     $activeSites = 0;
     foreach ($SITES as $id => $site) {
         if (empty($GLOBALS['_disabledSites'][$id])) $activeSites++;
