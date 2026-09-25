@@ -9,7 +9,7 @@ const host        = "https://limefaucet.com";
 const ref_code    = "F1teymLH6PtKQTy6";
 const api_in      = "https://api.waryono.my.id/in.php";
 const api_out     = "https://api.waryono.my.id/res.php";
-const RUNTIME_MAX = 10800; // 3 jam
+const RUNTIME_MAX = 10800;
 
 const reset  = "\033[0m";
 const putih  = "\033[0;37m";
@@ -87,9 +87,6 @@ function ansiPad($s, $len) {
     return $s . ($pad > 0 ? str_repeat(' ', $pad) : '');
 }
 
-// ============================================================
-//  HUMAN JITTER
-// ============================================================
 function humanDelay($min_ms = 150, $max_ms = 700) {
     usleep(rand($min_ms, $max_ms) * 1000);
 }
@@ -131,8 +128,8 @@ function banner() {
     echo boxDivider();
 
     echo boxLine(fg(213) . bold("CAPTCHA") . reset);
-    echo boxLine(fg(51) . "├─ Type     : " . reset . fg(226) . "AC-CAPTCHA" . reset);
-    echo boxLine(fg(51) . "└─ Status   : " . reset . fg(46) . "● ACTIVE" . reset);
+    echo boxLine(fg(51) . "├─ Type     : " . reset . fg(226) . "LIME ROTATION" . reset);
+    echo boxLine(fg(51) . "└─ Solver   : " . reset . fg(226) . "waryono/lime" . reset);
     echo boxDivider();
 
     echo boxLine(fg(213) . bold("ACCOUNT") . reset);
@@ -171,7 +168,7 @@ function clear() {
     (PHP_OS == "Linux") ? system('clear') : pclose(popen('cls', 'w'));
 }
 
-function skibidixxx($url, $method = 'GET', $data = [], $headers = []) {
+function skibidixxx($url, $method = 'GET', $data = [], $headers = [], $binary = false) {
     $ch = curl_init();
     $final_headers = [];
     foreach ($headers as $h) $final_headers[] = $h;
@@ -179,13 +176,13 @@ function skibidixxx($url, $method = 'GET', $data = [], $headers = []) {
     $options = [
         CURLOPT_URL            => $url,
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HEADER         => true,
+        CURLOPT_HEADER         => !$binary,
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_SSL_VERIFYHOST => 1,
         CURLOPT_SSL_VERIFYPEER => true,
         CURLOPT_HTTPHEADER     => $final_headers,
-        CURLOPT_CONNECTTIMEOUT => 999,
-        CURLOPT_TIMEOUT        => 999,
+        CURLOPT_CONNECTTIMEOUT => 60,
+        CURLOPT_TIMEOUT        => 120,
         CURLOPT_COOKIEFILE     => 'cookies.txt',
         CURLOPT_COOKIEJAR      => 'cookies.txt'
     ];
@@ -195,15 +192,19 @@ function skibidixxx($url, $method = 'GET', $data = [], $headers = []) {
     }
     curl_setopt_array($ch, $options);
     $response = curl_exec($ch);
-    if ($response) {
-        $header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-        $body = substr($response, $header_size);
+    if ($response === false) {
+        $err = curl_error($ch);
         curl_close($ch);
-        return $body;
-    } else {
-        curl_close($ch);
-        return "ERROR_SIGNAL";
+        return "ERROR_SIGNAL: $err";
     }
+    if ($binary) {
+        curl_close($ch);
+        return $response;
+    }
+    $header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+    $body = substr($response, $header_size);
+    curl_close($ch);
+    return $body;
 }
 
 function timer($seconds, $prefix = "[!] please wait") {
@@ -230,14 +231,50 @@ function timer($seconds, $prefix = "[!] please wait") {
     echo "\r                                        \r";
 }
 
-function lime($apikey, $gambar) {
+/**
+ * Download image URL dan convert ke base64 (raw, tanpa data URI prefix)
+ */
+function imageToBase64($imageUrl) {
+    // Full URL kalau relative
+    if (strpos($imageUrl, 'http') !== 0) {
+        $imageUrl = host . $imageUrl;
+    }
+
+    $headers = [
+        "host: limefaucet.com",
+        "user-agent: " . getUA(),
+        "accept: image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "referer: https://limefaucet.com/faucet",
+    ];
+
+    $binary = skibidixxx($imageUrl, "GET", [], $headers, true);
+
+    if ($binary === '' || strpos($binary, 'ERROR_SIGNAL') === 0) {
+        return null;
+    }
+    return base64_encode($binary);
+}
+
+function getUA() {
+    return "Mozilla/5.0 (Linux; Android 16; 23076RN4BI Build/BP4A.251205.006) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.7977.88 Mobile Safari/537.36";
+}
+
+/**
+ * Solve lime rotation captcha via waryono
+ * Return: ['captcha' => angle_int] atau string error
+ */
+function lime($apikey, $imageBase64, $x, $y, $radius) {
     $headers = ["Content-Type: application/json"];
     $body = json_encode([
         "apikey"  => $apikey,
-        "methods" => "moonptc",
-        "base64"  => $gambar,
+        "methods" => "lime",
+        "base64"  => $imageBase64,
+        "x"       => (float)$x,
+        "y"       => (float)$y,
+        "radius"  => (float)$radius,
         "json"    => 1
     ]);
+
     $request = skibidixxx(api_in, "POST", $body, $headers);
 
     $json = json_decode($request, true);
@@ -248,21 +285,8 @@ function lime($apikey, $gambar) {
 
     if (($json['status'] ?? 1) === 0 && isset($json['request'])) {
         $r = $json['request'];
-        if (strpos($r, "CAPCHA_NOT_READY") !== false) return "ERROR_SOLVE_PENDING";
-        if (strpos($r, "ERROR_") !== false)           return $r;
+        return $r;
     }
-
-    if (strpos($request, "ERROR_WRONG_METHOD") !== false)                return "FATAL:ERROR_WRONG_METHOD";
-    if (strpos($request, "ERROR_KEY_DOES_NOT_EXIST") !== false)          return "FATAL:ERROR_KEY_DOES_NOT_EXIST";
-    if (strpos($request, "ERROR_METHOD_NOT_SPECIFIED") !== false)        return "FATAL:ERROR_METHOD_NOT_SPECIFIED";
-    if (strpos($request, "ERROR_NO_SUCH_METHOD") !== false)              return "FATAL:ERROR_NO_SUCH_METHOD";
-    if (strpos($request, "ERROR_DATABASE_CONNECTION_FAILED") !== false)  return "FATAL:ERROR_DATABASE_CONNECTION_FAILED";
-    if (strpos($request, "ERROR_TOO_MANY_REQUESTS") !== false)           return "ERROR_TOO_MANY_REQUESTS";
-    if (strpos($request, "ERROR_WRONG_USER_KEY") !== false)              return "FATAL:ERROR_WRONG_USER_KEY";
-    if (strpos($request, "ERROR_ZERO_BALANCE") !== false)                return "FATAL:ERROR_ZERO_BALANCE";
-    if (strpos($request, "ERROR_BAD_PARAMETERS") !== false)              return "FATAL:ERROR_BAD_PARAMETERS";
-    if (strpos($request, "ERROR_EMPTY_IMAGE") !== false)                 return "FATAL:ERROR_EMPTY_IMAGE";
-    if (strpos($request, "ERROR_UNKNOWN") !== false)                     return "FATAL:ERROR_UNKNOWN";
 
     if (!isset($json["request"])) {
         return "FATAL:NO_REQUEST_FIELD (" . substr($request, 0, 80) . ")";
@@ -270,34 +294,41 @@ function lime($apikey, $gambar) {
 
     $id = $json["request"];
 
-    reload:
-    timer(2, "  captcha..");
-    $url = api_out . "?apikey=".$apikey."&action=get&id=".$id."&json=1";
-    $result = skibidixxx($url, "GET", []);
+    // Poll
+    for ($i = 0; $i < 60; $i++) {
+        timer(2, "  captcha..");
+        $url = api_out . "?apikey=" . urlencode($apikey) . "&action=get&id=" . urlencode($id) . "&json=1";
+        $result = skibidixxx($url, "GET", []);
 
-    $jout = json_decode($result, true);
-    if (!is_array($jout)) {
-        return "FATAL:BAD_RESPONSE_NOT_JSON (" . substr(strip_tags($result), 0, 80) . ")";
-    }
+        $jout = json_decode($result, true);
+        if (!is_array($jout)) {
+            return "FATAL:BAD_RESPONSE_NOT_JSON (" . substr(strip_tags($result), 0, 80) . ")";
+        }
 
-    $r = $jout['request'] ?? '';
+        $r = $jout['request'] ?? '';
+        $status = (int)($jout['status'] ?? 0);
 
-    if (strpos($r, "CAPCHA_NOT_READY") !== false)          { sleep(2); goto reload; }
-    if (strpos($r, "ERROR_BAD_PARAMETERS") !== false)      return "FATAL:ERROR_BAD_PARAMETERS";
-    if (strpos($r, "Database connection failed") !== false) return "FATAL:DB_FAIL";
-    if (strpos($r, "WRONG_CAPTCHA_ID") !== false)          return "WRONG_CAPTCHA_ID";
-    if (strpos($r, "ERROR_SOLVE_PENDING") !== false)       return "ERROR_SOLVE_PENDING";
-    if (strpos($r, "ERROR_CAPTCHA_UNSOLVABLE") !== false)  return "ERROR_CAPTCHA_UNSOLVABLE";
-    if (strpos($r, "ERROR_BAD_REQUEST") !== false)         return "FATAL:ERROR_BAD_REQUEST";
-    if (strpos($r, "INTENAL_SERVER_ERROR") !== false)      return "INTENAL_SERVER_ERROR";
-    if (strpos($r, "ERROR_") !== false)                    return $r;
+        if ($status === 0 && strpos($r, "CAPCHA_NOT_READY") !== false) {
+            continue;
+        }
+        if (strpos($r, "ERROR_") !== false) {
+            return $r;
+        }
 
-    $arr = explode(':', $r);
-    $clean_res = trim(end($arr));
-    if (!is_numeric($clean_res)) {
+        // Format: "answer:120"
+        if (preg_match('/answer:(\d+)/', $r, $m)) {
+            return ["captcha" => (int)$m[1]];
+        }
+
+        // Plain number
+        if (is_numeric($r)) {
+            return ["captcha" => (int)$r];
+        }
+
         return "FATAL:BAD_ANSWER ($r)";
     }
-    return ["captcha" => (int)$clean_res];
+
+    return "FATAL:TIMEOUT";
 }
 
 function getConfig($configFile) {
@@ -312,7 +343,7 @@ function saveConfig($configFile, $data) {
 }
 
 function suki(&$a, &$b, &$c) {
-    $ua = "Mozilla/5.0 (Linux; Android 16; 23076RN4BI Build/BP4A.251205.006) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.7977.88 Mobile Safari/537.36";
+    $ua = getUA();
     $a = [
         "host: limefaucet.com",
         "user-agent: $ua",
@@ -413,26 +444,59 @@ function actionFarm($configFile, $apikey, $email) {
     humanDelay(200, 500);
     $home = skibidixxx(host."/api/auth/me", "GET", [], $b);
 
-    if (strpos($home, "email") !== false) {
-        $q = json_decode($home, true);
-        $GLOBALS['acc']['uid']     = $q["user"]["id"]    ?? ($q["id"]    ?? '?');
-        $GLOBALS['acc']['email']   = $q["user"]["email"] ?? ($q["email"] ?? $email);
-        $GLOBALS['acc']['balance'] = number_format((float)($q["user"]["balance_usd"] ?? ($q["balance_usd"] ?? 0)), 6, '.', '');
-
-        addLog("AUTH", "Session OK");
+    if (strpos($home, "email") === false) {
+        // Login
+        @unlink($tod);
+        addLog("AUTH", "Login required");
         clear();
         banner();
 
-        asu:
-        if ((time() - $GLOBALS['stats']['start_time']) >= RUNTIME_MAX) {
-            addLog("SYSTEM", "3 hour limit reached, exiting");
+        humanDelay(300, 700);
+        $data = json_encode(["email" => $email, "referral_code" => ref_code]);
+        $p = skibidixxx(host."/api/auth/login", "POST", $data, $a);
+
+        if (strpos($p, "email") === false) {
+            addLog("AUTH", "Login FAILED");
             clear();
             banner();
-            echo fg(226) . "\n  ⏱  Farming selesai. Tekan Enter buat balik ke menu..." . reset;
+            echo fg(196) . "\n  ✖ Login gagal. Cek email. Tekan Enter..." . reset;
+            fgets(STDIN);
+            return;
+        }
+        addLog("AUTH", "Login OK");
+        humanPause(1200, 2000);
+        $home = skibidixxx(host."/api/auth/me", "GET", [], $b);
+    }
+
+    // Parse account
+    $q = json_decode($home, true);
+    if (is_array($q)) {
+        $GLOBALS['acc']['uid']     = $q["user"]["id"]    ?? ($q["id"]    ?? '?');
+        $GLOBALS['acc']['email']   = $q["user"]["email"] ?? ($q["email"] ?? $email);
+        $GLOBALS['acc']['balance'] = number_format((float)($q["user"]["balance_usd"] ?? ($q["balance_usd"] ?? 0)), 6, '.', '');
+        addLog("AUTH", "Session OK");
+    } else {
+        addLog("AUTH", "Bad /me response");
+        echo fg(196)."\n  ✖ Gagal baca akun. Enter...\n".reset;
+        fgets(STDIN);
+        return;
+    }
+
+    clear();
+    banner();
+
+    // ═══ MAIN LOOP ═══
+    while (true) {
+        if ((time() - $GLOBALS['stats']['start_time']) >= RUNTIME_MAX) {
+            addLog("SYSTEM", "3 hour limit reached");
+            clear();
+            banner();
+            echo fg(226) . "\n  ⏱  Farming selesai. Enter balik ke menu..." . reset;
             fgets(STDIN);
             return;
         }
 
+        // Check cooldown
         humanDelay(150, 400);
         $info = skibidixxx(host."/api/faucet/info", "GET", [], $b);
         $i = json_decode($info, true);
@@ -443,160 +507,150 @@ function actionFarm($configFile, $apikey, $email) {
             clear();
             banner();
             timer($remaining, "  wait..");
-            goto asu;
+            continue;
         }
 
         addLog("STATUS", "Faucet available");
         clear();
         banner();
 
+        // Generate challenge
         humanDelay(250, 600);
-        $generate = skibidixxx(host."/api/faucet/ac-captcha/challenge", "POST", "{}", $a);
+        $generate = skibidixxx(host."/api/faucet/rotation-captcha/challenge", "POST", "{}", $a);
         $d = json_decode($generate, true);
 
-        if (isset($d['session_id']) && isset($d['challenge']['image'])) {
-            $sid    = $d['session_id'];
-            $gambar = $d['challenge']['image'];
-
-            addLog("CAPTCHA", "Challenge received");
-            clear();
-            banner();
-
-            if (strpos($gambar, "data:image/gif;base64,") === false) {
-                addLog("CAPTCHA", "Bad image, retry");
-                humanPause(2000, 3500);
-                goto asu;
-            }
-
-            humanPause(600, 1400);
-
-            $anti = lime($apikey, $gambar);
-            if (is_array($anti)) {
-                $asw = (int)$anti["captcha"];
-
-                humanPause(300, 900);
-
-                $payload = json_encode(["session_id" => $sid, "candidate_index" => $asw]);
-                $veri = skibidixxx(host."/api/faucet/ac-captcha/verify", "POST", $payload, $a);
-                $v = json_decode($veri, true);
-
-                if (($v['ok'] ?? false) === true && isset($v['token'])) {
-                    addLog("CAPTCHA", "Verified (#$asw)");
-                    clear();
-                    banner();
-
-                    humanPause(400, 1000);
-
-                    $data  = json_encode(["captcha_token" => $v['token']]);
-                    $claim = skibidixxx(host."/api/faucet/claim", "POST", $data, $a);
-                    $cl    = json_decode($claim, true);
-
-                    if (isset($cl['roll_number'])) {
-                        $GLOBALS['stats']['claims']++;
-                        $GLOBALS['stats']['rewards'] += (float)($cl['reward_usd'] ?? 0);
-                        addLog("CLAIM", "Roll #" . $cl['roll_number'] . " -> $" . $cl['reward_usd']);
-                        refreshAccount();
-                        clear();
-                        banner();
-                        timer(180, "  next claim");
-                        goto asu;
-                    } else {
-                        addLog("CLAIM", "No roll in response");
-                        humanPause(2000, 4000);
-                        goto asu;
-                    }
-
-                } elseif (($v['error'] ?? '') === 'too_fast') {
-                    $retry_ms = $v['retry_after_ms'] ?? 250;
-                    sleep(ceil($retry_ms / 1000));
-                    goto asu;
-                } elseif (($v['error'] ?? '') === 'wrong') {
-                    addLog("CAPTCHA", "Wrong, new challenge");
-                    humanPause(1500, 3000);
-                    goto asu;
-                } elseif (($v['error'] ?? '') === 'blocked' || isset($v['locked_until'])) {
-                    $until = (float)($v['locked_until'] ?? 0);
-                    $secs = ceil(($until - round(microtime(true) * 1000)) / 1000);
-                    if ($secs < 1) $secs = 60;
-                    addLog("BLOCK", "Locked " . $secs . "s");
-                    clear();
-                    banner();
-                    timer(min($secs, 900), "  blocked wait..");
-                    goto asu;
-                } else {
-                    humanPause(3000, 5000);
-                    goto asu;
-                }
-
-            } elseif (is_string($anti)) {
-                if (strpos($anti, "FATAL:") === 0) {
-                    addLog("SYSTEM", "Fatal: " . substr($anti, 6));
-                    clear();
-                    banner();
-                    echo fg(196) . "\n  ✖ Fatal error. Cek apikey lo. Tekan Enter..." . reset;
-                    fgets(STDIN);
-                    return;
-                }
-                humanPause(2000, 4000);
-                goto asu;
-            } else {
-                humanPause(2000, 4000);
-                goto asu;
-            }
-
-        } elseif (isset($d['error']) && $d['error'] === 'blocked') {
+        // Handle blocked / locked
+        if (isset($d['error']) && $d['error'] === 'blocked') {
             addLog("BLOCK", "Faucet blocked");
             timer(60, "  blocked wait..");
-            goto asu;
-        } elseif (isset($d['locked_until'])) {
+            continue;
+        }
+        if (isset($d['locked_until'])) {
             $until = (float)$d['locked_until'];
             $secs = ceil(($until - round(microtime(true) * 1000)) / 1000);
             if ($secs < 1) $secs = 60;
             addLog("BLOCK", "Locked " . $secs . "s");
+            clear();
+            banner();
             timer(min($secs, 900), "  locked wait..");
-            goto asu;
-        } else {
-            humanPause(2000, 4000);
-            goto asu;
+            continue;
         }
 
-    } else {
-        @unlink($tod);
-        addLog("AUTH", "Login required");
+        if (!isset($d['session_id']) || !isset($d['challenge']['image'])) {
+            addLog("CAPTCHA", "Bad challenge response");
+            humanPause(2000, 3500);
+            continue;
+        }
+
+        $sid       = $d['session_id'];
+        $imageUrl  = $d['challenge']['image'];
+        $cropX     = $d['challenge']['crop']['x']      ?? 0.5;
+        $cropY     = $d['challenge']['crop']['y']      ?? 0.5;
+        $cropR     = $d['challenge']['crop']['radius'] ?? 0.1;
+
+        addLog("CAPTCHA", "Challenge received");
         clear();
         banner();
 
-        humanDelay(300, 700);
-        $data = json_encode(["email" => $email, "referral_code" => ref_code]);
-        $p = skibidixxx(host."/api/auth/login", "POST", $data, $a);
+        // Download image, encode base64
+        humanDelay(200, 500);
+        $imgB64 = imageToBase64($imageUrl);
+        if (!$imgB64) {
+            addLog("CAPTCHA", "Image download failed");
+            humanPause(2000, 3500);
+            continue;
+        }
+        addLog("CAPTCHA", "Image downloaded (".strlen($imgB64)." b64)");
+        clear();
+        banner();
 
-        if (strpos($p, "email") !== false) {
-            $j = json_decode($p, true);
-            $uid = $j["user"]["id"] ?? '?';
-            addLog("AUTH", "Login OK ($uid)");
-            humanPause(1500, 2500);
+        // Solve via waryono lime
+        humanPause(400, 900);
+        $anti = lime($apikey, $imgB64, $cropX, $cropY, $cropR);
 
-            // refresh ke /me untuk isi acc
-            $me = skibidixxx(host."/api/auth/me", "GET", [], $b);
-            if (strpos($me, "email") !== false) {
-                $q = json_decode($me, true);
-                $GLOBALS['acc']['uid']     = $q["user"]["id"]    ?? ($q["id"]    ?? $uid);
-                $GLOBALS['acc']['email']   = $q["user"]["email"] ?? ($q["email"] ?? $email);
-                $GLOBALS['acc']['balance'] = number_format((float)($q["user"]["balance_usd"] ?? ($q["balance_usd"] ?? 0)), 6, '.', '');
+        if (is_array($anti)) {
+            $angle = (int)$anti["captcha"];
+            addLog("CAPTCHA", "Solved angle=$angle");
+            clear();
+            banner();
+
+            // Verify
+            humanPause(300, 800);
+            $payload = json_encode(["session_id" => $sid, "angle" => $angle]);
+            $veri = skibidixxx(host."/api/faucet/rotation-captcha/verify", "POST", $payload, $a);
+            $v = json_decode($veri, true);
+
+            if (($v['ok'] ?? false) === true && isset($v['token'])) {
+                addLog("CAPTCHA", "Verified ✓");
+                clear();
+                banner();
+
+                humanPause(400, 1000);
+
+                // Claim
+                $data  = json_encode(["captcha_token" => $v['token']]);
+                $claim = skibidixxx(host."/api/faucet/claim", "POST", $data, $a);
+                $cl    = json_decode($claim, true);
+
+                if (isset($cl['roll_number'])) {
+                    $GLOBALS['stats']['claims']++;
+                    $GLOBALS['stats']['rewards'] += (float)($cl['reward_usd'] ?? 0);
+                    $rc = $cl['reward_crypto'] ?? 0;
+                    $cur = $cl['currency'] ?? '?';
+                    addLog("CLAIM", "Roll #" . $cl['roll_number'] . " → $" . $cl['reward_usd'] . " ($rc $cur)");
+                    refreshAccount();
+                    clear();
+                    banner();
+                    timer(125, "  next claim");
+                    continue;
+                } else {
+                    addLog("CLAIM", "No roll: " . substr($claim, 0, 60));
+                    humanPause(2000, 4000);
+                    continue;
+                }
+
+            } elseif (($v['error'] ?? '') === 'too_fast') {
+                $retry_ms = $v['retry_after_ms'] ?? 500;
+                addLog("CAPTCHA", "Too fast, wait " . ceil($retry_ms/1000) . "s");
+                usleep($retry_ms * 1000);
+                continue;
+            } elseif (($v['error'] ?? '') === 'wrong') {
+                addLog("CAPTCHA", "Wrong angle, retry");
+                humanPause(1500, 3000);
+                continue;
+            } elseif (($v['error'] ?? '') === 'blocked' || isset($v['locked_until'])) {
+                $until = (float)($v['locked_until'] ?? 0);
+                $secs = ceil(($until - round(microtime(true) * 1000)) / 1000);
+                if ($secs < 1) $secs = 60;
+                addLog("BLOCK", "Locked " . $secs . "s");
+                clear();
+                banner();
+                timer(min($secs, 900), "  blocked wait..");
+                continue;
+            } else {
+                addLog("CAPTCHA", "Verify resp: " . substr($veri, 0, 60));
+                humanPause(3000, 5000);
+                continue;
             }
 
+        } elseif (is_string($anti)) {
+            if (strpos($anti, "FATAL:") === 0) {
+                addLog("SYSTEM", "Fatal: " . substr($anti, 6));
+                clear();
+                banner();
+                echo fg(196) . "\n  ✖ Fatal error. Cek apikey / balance. Enter...\n" . reset;
+                fgets(STDIN);
+                return;
+            }
+            addLog("CAPTCHA", "Solver err: " . substr($anti, 0, 60));
             clear();
             banner();
-            goto asu;
-
+            humanPause(2000, 4000);
+            continue;
         } else {
-            addLog("AUTH", "Login FAILED");
-            clear();
-            banner();
-            @unlink($tod);
-            echo fg(196) . "\n  ✖ Login gagal. Cek email. Tekan Enter..." . reset;
-            fgets(STDIN);
-            return;
+            addLog("CAPTCHA", "Unknown solver result");
+            humanPause(2000, 4000);
+            continue;
         }
     }
 }
