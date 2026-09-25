@@ -3,11 +3,12 @@ error_reporting(E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED);
 ini_set('display_errors', '0');
 
 /**
- * CryptoFuture Auto Claim — Endless Loop
+ * CryptoFuture Auto Claim — Endless Loop (FIXED + MAX 250 + LIVE TIMER)
  * - Turnstile solver via waryono API
  * - Banner SOUU box style
  * - cf_clearance prompted only if CF challenge appears
  * - In-memory cookies, api key di config file
+ * - Max claim 250 + live moving timer
  */
 
 define("RED","\033[0;31m"); define("GRN","\033[0;32m");
@@ -16,11 +17,12 @@ define("MAG","\033[0;35m"); define("CYN","\033[0;36m");
 define("WHT","\033[0;37m"); define("RST","\033[0m");
 define("BOLD","\033[1m");
 
-const SITE  = "https://cryptofuture.co.in";
-const HOME  = SITE . "/";
-const LOGIN = SITE . "/auth/login";
-const EARN  = SITE . "/faucet/earn";
-const DASH  = SITE . "/dashboard";
+const SITE   = "https://cryptofuture.co.in";
+const HOME   = SITE . "/";
+const LOGIN  = SITE . "/auth/login";
+const FAUCET = SITE . "/faucet";
+const VERIFY = SITE . "/faucet/verify";
+const DASH   = SITE . "/dashboard";
 
 const TURNSTILE_SITEKEY = "0x4AAAAAACCJpcjk1yzJVey2";
 
@@ -31,6 +33,7 @@ const CONFIG_FILE = "cryptofuture_config.json";
 
 const UA = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36";
 
+const MAX_CLAIMS = 250;
 const LOOP_SLEEP_STEP = 5;
 
 /* ═══════════ RICH ANSI ═══════════ */
@@ -76,6 +79,7 @@ $GLOBALS['_earned'] = 0.0;
 $GLOBALS['_ip'] = '?';
 $GLOBALS['_isp'] = '?';
 $GLOBALS['_country'] = '?';
+$GLOBALS['_startTime'] = time();
 
 function push_log($msg, $tag='i'){
     $icons = ['i'=>fg(51)."●".RST, 'ok'=>fg(46)."✔".RST, 'er'=>fg(196)."✖".RST,
@@ -97,10 +101,34 @@ function check_ip(){
     $GLOBALS['_isp']     = $j['isp'] ?? '?';
 }
 
+/* ═══════════ TIME HELPERS ═══════════ */
+function fmt_time($s){
+    $s = (int)$s; if ($s<=0) return '0s';
+    if ($s >= 3600) return floor($s/3600).'h'.floor(($s%3600)/60).'m';
+    if ($s >= 60)   return floor($s/60).'m'.($s%60).'s';
+    return $s.'s';
+}
+function fmt_uptime($s){
+    $s = (int)$s;
+    $h = floor($s/3600);
+    $m = floor(($s%3600)/60);
+    $sec = $s%60;
+    return sprintf('%02d:%02d:%02d', $h, $m, $sec);
+}
+
 /* ═══════════ BANNER ═══════════ */
 function banner(){
     check_ip();
-    echo "\033[2J\033[H"; // clear + home
+    echo "\033[2J\033[H";
+
+    $elapsed = time() - $GLOBALS['_startTime'];
+    $claims  = $GLOBALS['_claims'];
+    $maxC    = MAX_CLAIMS;
+    $pct     = $maxC > 0 ? min(100, ($claims / $maxC) * 100) : 0;
+
+    $barLen = 20;
+    $filled = (int)round(($pct/100) * $barLen);
+    $bar = str_repeat("█", $filled).str_repeat("░", $barLen - $filled);
 
     echo fg(51)."╔".str_repeat("═",62)."╗".RST."\n";
     echo box_line(gradient("CRYPTOFUTURE AUTO CLAIM", 51, 213));
@@ -115,11 +143,17 @@ function banner(){
 
     echo box_line(fg(213).BOLD."SESSION".RST);
     echo box_line(fg(51)."├─ Stage      : ".RST.fg(208).$GLOBALS['_stage'].RST);
+    echo box_line(fg(51)."├─ Uptime     : ".RST.fg(226).fmt_uptime($elapsed).RST);
     echo box_line(fg(51)."├─ Wallet     : ".RST.fg(226).$GLOBALS['_wallet'].RST);
     echo box_line(fg(51)."├─ Balance    : ".RST.fg(46).$GLOBALS['_balance'].RST);
-    echo box_line(fg(51)."├─ Claims     : ".RST.fg(226).$GLOBALS['_claims'].RST);
+    echo box_line(fg(51)."├─ Claims     : ".RST.fg(226)."{$claims}/{$maxC}".RST);
     echo box_line(fg(51)."├─ Failed     : ".RST.fg(196).$GLOBALS['_fails'].RST);
     echo box_line(fg(51)."└─ Earned     : ".RST.fg(46).number_format($GLOBALS['_earned'], 4).RST);
+    echo box_div();
+
+    echo box_line(fg(213).BOLD."PROGRESS".RST);
+    $pctColor = $pct >= 80 ? 196 : ($pct >= 50 ? 208 : 46);
+    echo box_line(fg(51)."  [".fg($pctColor).$bar.fg(51)."]  ".RST.fg($pctColor).sprintf("%.1f%%", $pct).RST);
     echo box_div();
 
     echo box_line(fg(213).BOLD."LIVE LOG".RST);
@@ -130,8 +164,34 @@ function banner(){
     }
 
     echo fg(51)."╚".str_repeat("═",62)."╝".RST."\n";
-    echo "\n   ".gradient("BOT RUNNING", 46, 226)." ".fg(250)."• ".date('H:i:s').RST."\n";
+    echo "\n   ".gradient("BOT RUNNING", 46, 226)." ".fg(250)."• ".date('H:i:s').RST
+        ." • ".fg(51)."uptime ".fmt_uptime($elapsed).RST."\n";
     echo "   ".fg(240)."By Power ".RST.fg(213)."@SouuXso".RST.fg(240)." • ".RST.fg(46)."CryptoFuture Edition".RST."\n\n";
+}
+
+/* ═══════════ LIVE TICK (moving timer) ═══════════ */
+function live_tick($seconds, $label="next", $step=1){
+    $w = (int)$seconds;
+    while ($w > 0) {
+        $s = min($w, $step);
+        sleep($s);
+        $w -= $s;
+
+        $elapsed = time() - $GLOBALS['_startTime'];
+        $claims  = $GLOBALS['_claims'];
+        $pct     = MAX_CLAIMS > 0 ? min(100, ($claims / MAX_CLAIMS) * 100) : 0;
+
+        $line = "  ".fg(51)."⏳ {$label} ".fmt_time($w).RST
+              . "  ".fg(240)."|".RST
+              . "  ".fg(226)."uptime ".fmt_uptime($elapsed).RST
+              . "  ".fg(240)."|".RST
+              . "  ".fg(46)."claims {$claims}/".MAX_CLAIMS.RST
+              . "  ".fg(240)."|".RST
+              . "  ".fg(213).sprintf("%.1f%%", $pct).RST;
+        echo "\r".str_repeat(" ", 130)."\r".$line;
+        flush();
+    }
+    echo "\n";
 }
 
 /* ═══════════ CONFIG ═══════════ */
@@ -332,45 +392,37 @@ function login($wallet, $apikey){
 
 /* ═══════════ PARSER ═══════════ */
 function parse_earn($html){
-    $o = ['csrf'=>'','token'=>'','ticket'=>'','wallet'=>'','wait'=>0,'balance'=>null,'has_form'=>false];
+    $o = [
+        'csrf' => '',
+        'claim_token' => '',
+        'wait' => 0,
+        'balance' => null,
+        'has_form' => false
+    ];
 
     if (preg_match('/<form[^>]+id="fauform"[^>]*>(.*?)<\/form>/si', $html, $fm)) {
         $o['has_form'] = true;
         $in = $fm[1];
         if (preg_match('/name="csrf_token_name"[^>]*value="([^"]*)"/i', $in, $m)) $o['csrf'] = $m[1];
-        if (preg_match('/name="token"[^>]*value="([^"]*)"/i', $in, $m)) $o['token'] = $m[1];
-        if (preg_match('/name="earn_ticket"[^>]*value="([^"]*)"/i', $in, $m)) $o['ticket'] = $m[1];
-        if (preg_match('/name="wallet"[^>]*value="([^"]*)"/i', $in, $m)) $o['wallet'] = html_entity_decode($m[1]);
+        if (preg_match('/name="claim_token"[^>]*value="([^"]*)"/i', $in, $m)) $o['claim_token'] = $m[1];
     }
-    if (preg_match('/let\s+wait\s*=\s*(\d+)/i', $html, $m)) $o['wait'] = (int)$m[1];
-    if (preg_match('/balance-amount[^>]*>\s*([0-9.,]+)/i', $html, $m)) $o['balance'] = (float)str_replace(',', '', $m[1]);
-    elseif (preg_match('/TOTAL BALANCE.*?([0-9.]+)\s*Coins/si', $html, $m)) $o['balance'] = (float)$m[1];
+
+    if (preg_match('/var\s+wait\s*=\s*(\d+)/i', $html, $m)) {
+        $o['wait'] = (int)$m[1];
+    }
+
+    if (preg_match('/Balance:\s*<strong>([0-9,]+)\s*Coins<\/strong>/i', $html, $m)) {
+        $o['balance'] = (float)str_replace(',', '', $m[1]);
+    } elseif (preg_match('/TOTAL BALANCE.*?([0-9.]+)\s*Coins/si', $html, $m)) {
+        $o['balance'] = (float)$m[1];
+    }
 
     return $o;
 }
 
 function fetch_balance(){
-    $r = req(EARN);
+    $r = req(FAUCET);
     return parse_earn($r['body'])['balance'];
-}
-
-function fmt_time($s){
-    $s = (int)$s; if ($s<=0) return '0s';
-    if ($s >= 3600) return floor($s/3600).'h'.floor(($s%3600)/60).'m';
-    if ($s >= 60)   return floor($s/60).'m'.($s%60).'s';
-    return $s.'s';
-}
-
-function wait_bar($seconds, $prefix="next"){
-    $w = (int)$seconds;
-    echo fg(51)."  ⏳ {$prefix} ".fmt_time($w)."".RST;
-    while ($w > 0) {
-        $c = min($w, LOOP_SLEEP_STEP);
-        sleep($c);
-        $w -= $c;
-        echo fg(51).".".RST; flush();
-    }
-    echo "\n";
 }
 
 /* ═══════════ MAIN ═══════════ */
@@ -401,15 +453,15 @@ if (!$wallet) { echo RED."wallet kosong\n"; exit(1); }
 $GLOBALS['_wallet'] = $wallet;
 
 /* Init CF + login */
-push_log("probing /faucet/earn...", 'in');
+push_log("probing /faucet...", 'in');
 banner();
 
-$r = req(EARN);
+$r = req(FAUCET);
 $html = $r['body'];
 
 if (is_cf_challenge($html)) {
     if (!prompt_cf()) { echo RED."no cf_clearance, exit\n"; exit(1); }
-    $r = req(EARN);
+    $r = req(FAUCET);
     $html = $r['body'];
     if (is_cf_challenge($html)) { echo RED."still CF, exit\n"; exit(1); }
 }
@@ -432,10 +484,17 @@ $round = 0;
 
 /* ═══════════ LOOP ═══════════ */
 while (true) {
+    if ($GLOBALS['_claims'] >= MAX_CLAIMS) {
+        $GLOBALS['_stage'] = 'LIMIT REACHED';
+        push_log("max claim reached (".MAX_CLAIMS.") — stopping", 'g');
+        banner();
+        break;
+    }
+
     $round++;
     $GLOBALS['_stage'] = "ROUND #{$round}";
 
-    $r = req(EARN);
+    $r = req(FAUCET);
     $html = $r['body'];
 
     if (is_cf_challenge($html)) {
@@ -453,7 +512,7 @@ while (true) {
         if (!$lr['ok']) {
             push_log("re-login gagal: ".$lr['msg']." — tunggu 60s", 'er');
             banner();
-            sleep(60);
+            live_tick(60, "retry");
             continue;
         }
         push_log("re-login ok", 'ok');
@@ -467,7 +526,7 @@ while (true) {
     if ($info['wait'] > 0) {
         push_log("cooldown ".fmt_time($info['wait'])." | bal: ".$GLOBALS['_balance'], 'wr');
         banner();
-        wait_bar($info['wait'], "cooldown");
+        live_tick($info['wait'], "cooldown");
         continue;
     }
 
@@ -475,31 +534,18 @@ while (true) {
         push_log("no form & no wait — unknown", 'er');
         $GLOBALS['_fails']++;
         banner();
-        sleep(15);
+        live_tick(15, "retry");
         continue;
     }
 
     // POST claim
     sleep(rand(2,4));
-    $smart = base64_encode(json_encode([
-        'ts' => (int)(microtime(true) * 1000),
-        'cpu' => 8, 'mem' => 8, 'w' => 384, 'h' => 832,
-        'touch' => 5, 'moves' => rand(0,3),
-    ]));
-    $fp = hash('sha256', UA.'384x832');
-
     $post = http_build_query([
         'csrf_token_name' => $info['csrf'],
-        'token'           => $info['token'],
-        'earn_ticket'     => $info['ticket'],
-        'fp_hash'         => $fp,
-        'confirm_wallet'  => '',
-        'wallet'          => $info['wallet'],
-        'smart_token'     => $smart,
-        'captcha'         => 'smartcaptcha',
+        'claim_token'     => $info['claim_token'],
     ]);
 
-    $r2 = req(EARN, 'POST', $post, ['Origin: '.SITE, 'Referer: '.EARN]);
+    $r2 = req(VERIFY, 'POST', $post, ['Origin: '.SITE, 'Referer: '.FAUCET]);
     $respHtml = $r2['body'];
 
     $success = false;
@@ -538,14 +584,25 @@ while (true) {
     }
     banner();
 
-    $cd = $success ? 65 : rand(20, 40);
-    wait_bar($cd);
+    // Cek limit setelah claim
+    if ($GLOBALS['_claims'] >= MAX_CLAIMS) {
+        $GLOBALS['_stage'] = 'LIMIT REACHED';
+        push_log("max claim reached (".MAX_CLAIMS.") — stopping", 'g');
+        banner();
+        break;
+    }
+
+    $cd = $success ? 10 : rand(20, 40);
+    live_tick($cd, $success ? "next" : "retry");
 }
 
 /* ═══════════ SUMMARY ═══════════ */
 $uptime = time() - $sessionStart;
 $GLOBALS['_stage'] = 'DONE';
-push_log("done | claims=".$GLOBALS['_claims']." fails=".$GLOBALS['_fails']." earned=".number_format($GLOBALS['_earned'],4), 'g');
+push_log("done | claims=".$GLOBALS['_claims']."/".MAX_CLAIMS
+    ." fails=".$GLOBALS['_fails']
+    ." earned=".number_format($GLOBALS['_earned'],4)
+    ." uptime=".fmt_uptime($uptime), 'g');
 banner();
 echo fg(250)."  ~ session flushed\n".RST;
 exit(0);
