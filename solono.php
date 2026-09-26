@@ -1,532 +1,459 @@
-<?php
-/**
- * EarnSolana.xyz - Auto Faucet Claim (FULL VERSION v3)
- * Fix: daily limit false positive setelah claim sukses
- */
+#!/usr/bin/env python3
+"""
+╔═══════════════════════════════════════════════════════════════════╗
+║         ⚡ F R E E F L A R E C R Y P T O   A U T O   C L A I M ⚡║
+║   🔥 SOUU ENGINE UI • NO CACHE • MANUAL PASTE COOKIE           ║
+╚═══════════════════════════════════════════════════════════════════╝
+"""
 
-error_reporting(0);
-date_default_timezone_set('Asia/Jakarta');
+import requests, time, os, re, json
+from datetime import datetime
 
-$configFile = "config.json";
-$cookieFile = "session/es_cookies.txt";
+# ═══════════════════════════════════════════════════════════════════════════
+#  COLOR
+# ═══════════════════════════════════════════════════════════════════════════
+RESET  = "\033[0m"
+BOLD   = "\033[1m"
+DIM    = "\033[2m"
+RED    = "\033[38;5;196m"
+GREEN  = "\033[38;5;46m"
+YELLOW = "\033[38;5;226m"
+CYAN   = "\033[38;5;51m"
+MAGENTA= "\033[38;5;213m"
+BLUE   = "\033[38;5;39m"
+WHITE  = "\033[38;5;250m"
+GRAY   = "\033[38;5;245m"
+ORANGE = "\033[38;5;208m"
+PINK   = "\033[38;5;205m"
 
-if (!is_dir('session')) mkdir('session', 0777, true);
+ANSI_RE = re.compile(r'\x1b\[[0-9;]*m')
+def ansi_len(text): return len(ANSI_RE.sub('', text))
 
-const R  = "\033[0;31m";
-const G  = "\033[0;32m";
-const Y  = "\033[0;33m";
-const CY = "\033[0;36m";
-const W  = "\033[0;37m";
-const X  = "\033[0m";
+def clear():
+    os.system("clear" if os.name != "nt" else "cls")
 
-const HOST   = "https://earnsolana.xyz";
-const DEF_UA = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36";
+# ═══════════════════════════════════════════════════════════════════════════
+#  SOUU BANNER HELPERS
+# ═══════════════════════════════════════════════════════════════════════════
+def gradient(text, start=51, end=213):
+    if len(text) <= 1:
+        return f"\033[38;5;{start}m{text}{RESET}"
+    out = ''
+    for i, ch in enumerate(text):
+        t = i / (len(text) - 1)
+        c = int(round(start + (end - start) * t))
+        out += f"\033[38;5;{c}m{ch}"
+    return out + RESET
 
-// ==================== UTILITY ====================
-function clear(){ (PHP_OS == "Linux") ? system('clear') : pclose(popen('cls','w')); }
+def box_line(content, width=60):
+    pad = width - ansi_len(content)
+    if pad < 0: pad = 0
+    return f"\033[38;5;51m║  {RESET}{content}{' ' * pad}\033[38;5;51m║{RESET}\n"
 
-function maskEmail($e){
-    if (!filter_var($e, FILTER_VALIDATE_EMAIL)) return $e;
-    list($u, $d) = explode('@', $e);
-    if (strlen($u) <= 4) return substr($u,0,1) . '****@' . $d;
-    return substr($u,0,2) . '****' . substr($u,-2) . '@' . $d;
+def box_div():
+    return f"\033[38;5;51m╠{'═' * 62}╣{RESET}\n"
+
+def box_top():
+    return f"\033[38;5;51m╔{'═' * 62}╗{RESET}\n"
+
+def box_bot():
+    return f"\033[38;5;51m╚{'═' * 62}╝{RESET}\n"
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  KONFIG (dari capture)
+# ═══════════════════════════════════════════════════════════════════════════
+BASE_URL       = "https://freeflarcrypto.com"
+SESSION_URL    = f"{BASE_URL}/api/session"
+CLAIM_URL      = f"{BASE_URL}/claim"
+
+DEFAULT_INTERVAL = 1800  # 30 menit (dari capture)
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  STATE
+# ═══════════════════════════════════════════════════════════════════════════
+state = {
+    'mode':       'IDLE',
+    'status':     'INIT',
+    'success':    0,
+    'failed':     0,
+    'max_claim':  0,
+    'total_reward': 0.0,
+    'last_reward':  '0.000',
+    'currency':   'DGB',
+    'balance':    '0.00000000',
+    'username':   'unknown',
+    'cookie':     '',
+    'interval':   DEFAULT_INTERVAL,
+    'logs':       [],
+    'start_time': time.time(),
 }
 
-function log_msg($m, $t='info'){
-    $p = ['success'=>G."✓ ",'error'=>R."✗ ",'warn'=>Y."⚠ ", 'info'=>CY."» "][$t] ?? CY."» ";
-    echo $p.$m.X."\n"; flush();
-}
+MAX_LOGS = 6
 
-function timer($sec, $label="wait"){
-    $sec = (int)$sec; if ($sec<1) return;
-    $spin = ['⣾','⣽','⣻','⢿','⡿','⣟','⣯','⣷']; $si=0;
-    while ($sec>0){
-        $t = sprintf("%02d:%02d:%02d", floor($sec/3600), floor(($sec%3600)/60), $sec%60);
-        echo "\r\033[K".Y." $label: ".G.$t.W." ".$spin[$si].X;
-        $si = ($si+1)%8; sleep(1); $sec--;
-    }
-    echo "\r\033[K"; flush();
-}
+def push_log(msg, tag='i'):
+    icons = {'i': f'{CYAN}●{RESET}', 'ok': f'{GREEN}✔{RESET}', 'er': f'{RED}✖{RESET}',
+             'wr': f'{ORANGE}◈{RESET}', 'in': f'{MAGENTA}⬢{RESET}', 'g': f'{YELLOW}◆{RESET}'}
+    ts = datetime.now().strftime('%H:%M:%S')
+    line = f"{GRAY}[{ts}]{RESET} {icons.get(tag, '●')} {msg}"
+    state['logs'].append(line)
+    if len(state['logs']) > MAX_LOGS:
+        state['logs'].pop(0)
 
-function req($url, $method='GET', $data=null, $headers=[]){
-    global $cookieFile;
-    $ch = curl_init();
-    $opts = [
-        CURLOPT_URL            => $url,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HEADER         => true,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_SSL_VERIFYHOST => false,
-        CURLOPT_TIMEOUT        => 60,
-        CURLOPT_HTTPHEADER     => $headers,
-        CURLOPT_COOKIEFILE     => $cookieFile,
-        CURLOPT_COOKIEJAR      => $cookieFile,
-    ];
-    if ($method === 'POST'){
-        $opts[CURLOPT_POST] = true;
-        $opts[CURLOPT_POSTFIELDS] = is_array($data) ? http_build_query($data) : $data;
-    }
-    curl_setopt_array($ch, $opts);
-    $resp = curl_exec($ch);
-    if ($resp === false){ @curl_close($ch); return null; }
-    $hs   = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-    $body = substr($resp, $hs);
-    @curl_close($ch);
-    return $body;
-}
+def fmt_uptime(s):
+    s = int(s)
+    return f"{s//3600:02d}:{(s%3600)//60:02d}:{s%60:02d}"
 
-// ==================== HTML PARSERS ====================
-function get_csrf_from_html($html){
-    if (preg_match('/name="csrf_token_name"[^>]*value="([^"]+)"/i', $html, $m)) return $m[1];
-    return null;
-}
+def state_status_color():
+    s = state['status'].upper()
+    if 'BERHASIL' in s or 'SUCCESS' in s or 'FINISH' in s:
+        return GREEN
+    if 'FAIL' in s or 'VAILED' in s or 'SALAH' in s or 'MATI' in s or 'ERROR' in s:
+        return RED
+    if 'WAIT' in s or 'COOLDOWN' in s:
+        return ORANGE
+    return YELLOW
 
-function get_balance($html){
-    if (preg_match('/balance-amount">\s*([\d.]+)\s*<span/i', $html, $m)) return (float)$m[1];
-    if (preg_match('/Available Balance.*?<h3[^>]*>\s*([\d.]+)/s', $html, $m)) return (float)$m[1];
-    return null;
-}
+# ═══════════════════════════════════════════════════════════════════════════
+#  BANNER
+# ═══════════════════════════════════════════════════════════════════════════
+def print_banner():
+    elapsed = time.time() - state['start_time']
 
-function get_total_claims($html){
-    if (preg_match('/Total Faucet Claims.*?<h4>(\d+)</s', $html, $m)) return (int)$m[1];
-    return null;
-}
+    out = []
+    out.append(box_top())
+    out.append(box_line(gradient("FREEFLARE CRYPTO AUTO CLAIM")))
+    out.append(box_line(f"{DIM}─────── SOUU ENGINE ───────{RESET}"))
+    out.append(box_div())
 
-function get_today_claims($html){
-    if (preg_match('/Today Faucet Claims.*?<h4>(\d+)</s', $html, $m)) return (int)$m[1];
-    return null;
-}
+    out.append(box_line(f"{MAGENTA}{BOLD}SESSION{RESET}"))
+    out.append(box_line(f"\033[38;5;51m├─ User       : {RESET}{YELLOW}{state['username']}{RESET}"))
+    out.append(box_line(f"\033[38;5;51m├─ Mode       : {RESET}{YELLOW}{state['mode']}{RESET}"))
+    out.append(box_line(f"\033[38;5;51m├─ Status     : {RESET}{state_status_color()}{state['status']}{RESET}"))
+    out.append(box_line(f"\033[38;5;51m└─ Progress   : {RESET}{YELLOW}{state['success']} / {state['max_claim']}{RESET}"))
+    out.append(box_div())
 
-function is_logged_in($html){
-    return strpos($html, 'Logout') !== false
-        || strpos($html, 'Dashboard | EarnSolana') !== false
-        || strpos($html, 'Welcome back') !== false
-        || strpos($html, 'profile-banner') !== false;
-}
+    out.append(box_line(f"{MAGENTA}{BOLD}BALANCE{RESET}"))
+    out.append(box_line(f"\033[38;5;51m├─ Wallet     : {RESET}{GREEN}{state['balance']} {state['currency']}{RESET}"))
+    out.append(box_line(f"\033[38;5;51m├─ Total Earn : {RESET}{GREEN}+{state['total_reward']:.5f} {state['currency']}{RESET}"))
+    out.append(box_line(f"\033[38;5;51m└─ Last Claim : {RESET}{GREEN}+{state['last_reward']} {state['currency']}{RESET}"))
+    out.append(box_div())
 
-// ==================== FIX: DAILY LIMIT CHECK ====================
-// Cuma trigger kalau ada keyword eksplisit. NO heuristic.
-function is_daily_limit($html){
-    $low = strtolower($html);
+    out.append(box_line(f"{MAGENTA}{BOLD}SYSTEM{RESET}"))
+    out.append(box_line(f"\033[38;5;51m├─ Success    : {RESET}{GREEN}{state['success']}{RESET}"))
+    out.append(box_line(f"\033[38;5;51m├─ Failed     : {RESET}{RED}{state['failed']}{RESET}"))
+    out.append(box_line(f"\033[38;5;51m└─ Runtime    : {RESET}{YELLOW}{fmt_uptime(elapsed)}{RESET}"))
+    out.append(box_div())
 
-    $triggers = [
-        'daily limit reached',
-        'reached daily limit',
-        'reached your daily limit',
-        'you have reached the daily limit',
-        'daily claim limit reached',
-        'daily claim limit',
-        'daily claims exhausted',
-        'come back tomorrow',
-        'try again tomorrow',
-        'max claim per day',
-        'daily max claim',
-        'maximum daily claim',
-        'claim limit for today',
-    ];
+    for i in range(MAX_LOGS):
+        if i < len(state['logs']):
+            log_text = ANSI_RE.sub('', state['logs'][i])
+            if len(log_text) > 58:
+                log_text = log_text[:57] + "…"
+            out.append(box_line(state['logs'][i]))
+        else:
+            out.append(f"\033[38;5;51m║{' ' * 62}║{RESET}\n")
 
-    foreach ($triggers as $t){
-        if (strpos($low, $t) !== false) return true;
-    }
-    return false;
-}
+    out.append(box_bot())
+    out.append(f"\n   {gradient('BOT RUNNING', 46, 226)} {WHITE}• {datetime.now().strftime('%H:%M:%S')}{RESET}\n")
+    out.append(f"   {DIM}By Power {RESET}{MAGENTA}@SouuXso{RESET}{DIM} • {RESET}{GREEN}FreeFlare Edition{RESET}\n\n")
 
-function get_daily_limit_info($html){
-    $info = ['used'=>null, 'limit'=>null, 'remaining'=>null, 'reset'=>null];
-    if (preg_match('/daily claim[s]?[^0-9]*(\d+)\s*\/\s*(\d+)/i', $html, $m)){
-        $info['used']  = (int)$m[1];
-        $info['limit'] = (int)$m[2];
-        $info['remaining'] = $info['limit'] - $info['used'];
-    }
-    if (preg_match('/reached\s+(\d+)\s+claims?\s+today/i', $html, $m)){
-        $info['used'] = (int)$m[1];
-    }
-    if (preg_match('/reset[s]?\s+in\s+([^<]+)/i', $html, $m)){
-        $info['reset'] = trim($m[1]);
-    }
-    return $info;
-}
+    clear()
+    print(''.join(out), end='')
 
-function get_faucet_form_data($html){
-    $data = ['csrf'=>null,'token'=>null,'earn_ticket'=>null,'wallet'=>null];
-    if (preg_match('/name="csrf_token_name"[^>]*value="([^"]+)"/i', $html, $m)) $data['csrf'] = $m[1];
-    if (preg_match('/name="token"[^>]*value="([^"]+)"/i', $html, $m)) $data['token'] = $m[1];
-    if (preg_match('/name="earn_ticket"[^>]*value="([^"]+)"/i', $html, $m)) $data['earn_ticket'] = $m[1];
-    if (preg_match('/name="wallet"[^>]*value="([^"]+)"/i', $html, $m)) $data['wallet'] = $m[1];
-    return $data;
-}
+# ═══════════════════════════════════════════════════════════════════════════
+#  SETUP SCREEN
+# ═══════════════════════════════════════════════════════════════════════════
+def setup_screen(cookie_preview=''):
+    out = []
+    out.append(box_top())
+    out.append(box_line(gradient("FREEFLARE CRYPTO AUTO CLAIM")))
+    out.append(box_line(f"{DIM}─────── SOUU ENGINE ───────{RESET}"))
+    out.append(box_div())
+    out.append(box_line(f"{MAGENTA}{BOLD}SESSION{RESET}"))
+    out.append(box_line(f"\033[38;5;51m├─ Website    : {RESET}{YELLOW}https://freeflarcrypto.com{RESET}"))
+    out.append(box_line(f"\033[38;5;51m├─ Coin       : {RESET}{GREEN}DGB{RESET}"))
+    out.append(box_line(f"\033[38;5;51m├─ Cooldown   : {RESET}{YELLOW}30 menit / claim{RESET}"))
+    out.append(box_line(f"\033[38;5;51m└─ Cookie     : {RESET}{GREEN}{cookie_preview or 'belum diisi'}{RESET}"))
+    out.append(box_div())
+    out.append(box_line(f"{MAGENTA}{BOLD}PILIH MODE CLAIM{RESET}"))
+    out.append(box_line(f"  {CYAN}1.{RESET} {WHITE}10x claim{RESET}"))
+    out.append(box_line(f"  {CYAN}2.{RESET} {WHITE}25x claim{RESET}"))
+    out.append(box_line(f"  {CYAN}3.{RESET} {WHITE}50x claim{RESET}"))
+    out.append(box_line(f"  {CYAN}4.{RESET} {ORANGE}Unlimited{RESET}"))
+    out.append(box_bot())
+    clear()
+    print(''.join(out), end='')
 
-function get_captcha_type($html){
-    if (preg_match('/name="captcha"[^>]*value="([^"]+)"/i', $html, $m)) return $m[1];
-    return 'turnstile';
-}
+# ═══════════════════════════════════════════════════════════════════════════
+#  PARSERS
+# ═══════════════════════════════════════════════════════════════════════════
+def get_cookie(raw):
+    """Extract faas_session dari input user."""
+    raw = raw.strip()
+    if "faas_session=" in raw:
+        try:
+            return raw.split("faas_session=")[1].split(";")[0].strip()
+        except Exception:
+            return raw
+    return raw.replace(";", "").strip()
 
-function get_min_wait($html){
-    if (preg_match('/let wait = (\d+)/', $html, $m)) return (int)$m[1];
-    return 0;
-}
-
-function has_faucet_form($html){
-    return strpos($html, 'id="fauform"') !== false
-        && strpos($html, 'earn_ticket') !== false;
-}
-
-// ==================== FP HASH & DEVICE TOKEN ====================
-function gen_fp_hash($ua = DEF_UA){
-    $raw = "fp-" . $ua . "360" . "640";
-    return hash('sha256', $raw);
-}
-
-function gen_device_token(){
-    $chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    $rand = '';
-    for ($i=0; $i<13; $i++) $rand .= $chars[random_int(0, strlen($chars)-1)];
-    $ts = base_convert(time(), 10, 36);
-    return 'dev_' . $rand . $ts;
-}
-
-// ==================== LOGIN ====================
-function do_login($email){
-    log_msg("Login: ".maskEmail($email), 'info');
-
-    $h0 = [
-        "user-agent:".DEF_UA,
-        "accept-language:id-ID",
-        "accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "upgrade-insecure-requests:1",
-    ];
-
-    $home = req(HOST.'/', 'GET', null, $h0);
-    if (!$home){ log_msg("Gagal load /", 'error'); return false; }
-
-    $csrf = get_csrf_from_html($home);
-    if (!$csrf){ log_msg("CSRF tidak ketemu di homepage", 'error'); return false; }
-
-    $device_token = gen_device_token();
-
-    $body = [
-        'wallet'          => $email,
-        'csrf_token_name' => $csrf,
-        'device_token'    => $device_token,
-    ];
-
-    $h = array_merge($h0, [
-        "content-type:application/x-www-form-urlencoded",
-        "origin:".HOST,
-        "referer:".HOST."/",
-        "cache-control:max-age=0",
-    ]);
-
-    $resp = req(HOST.'/auth/login', 'POST', $body, $h);
-    if (!$resp){ log_msg("Login request gagal", 'error'); return false; }
-
-    $dash = req(HOST.'/dashboard', 'GET', null, $h0);
-    if ($dash && is_logged_in($dash)){
-        log_msg("Login OK!", 'success');
-        return $dash;
-    }
-
-    log_msg("Login gagal", 'error');
-    return false;
-}
-
-// ==================== DASHBOARD ====================
-function check_dashboard(){
-    $h = ["user-agent:".DEF_UA, "accept-language:id-ID"];
-    $dash = req(HOST.'/dashboard', 'GET', null, $h);
-    if (!$dash || !is_logged_in($dash)) return null;
-    return [
-        'html'         => $dash,
-        'balance'      => get_balance($dash),
-        'total_claims' => get_total_claims($dash),
-        'today_claims' => get_today_claims($dash),
-    ];
-}
-
-// ==================== CLAIM FAUCET ====================
-function claim_faucet($email, $max_claims = 250, $wait_between = 60){
-    $h0 = [
-        "user-agent:".DEF_UA,
-        "accept-language:id-ID",
-        "accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "upgrade-insecure-requests:1",
-    ];
-
-    $total_claimed = 0;
-    $consecutive_fail = 0;
-
-    while (true){
-        if ($total_claimed >= $max_claims){
-            log_msg("Max claim ($max_claims) tercapai. Stop.", 'warn');
-            break;
+def parse_session_json(text):
+    """Parse /api/session response."""
+    try:
+        j = json.loads(text)
+        return {
+            "balance":           j.get("balance", "0"),
+            "currency":          j.get("balance_currency", "DGB"),
+            "username":          j.get("name", "unknown"),
+            "logged_in":         j.get("logged_in", False),
+            "interval_seconds":  j.get("claim", {}).get("interval_seconds", DEFAULT_INTERVAL),
+            "claim_amount":      j.get("claim", {}).get("amount", "0"),
         }
+    except Exception:
+        return None
 
-        log_msg("=== Siklus #".($total_claimed+1)."/$max_claims ===", 'info');
-
-        // Step 1: GET /faucet/earn
-        $page = req(HOST.'/faucet/earn', 'GET', null, $h0);
-        if (!$page){
-            log_msg("Gagal load /faucet/earn", 'error');
-            $consecutive_fail++;
-            if ($consecutive_fail >= 5){ log_msg("5x gagal berturut, stop.", 'error'); break; }
-            timer(15, 'Retry'); continue;
+def parse_claim_json(text):
+    """Parse /claim response."""
+    try:
+        j = json.loads(text)
+        return {
+            "success":   j.get("success", False),
+            "amount":    j.get("amount", "0"),
+            "currency":  j.get("currency", "DGB"),
+            "claim_id":  j.get("claim_id"),
+            "payout_id": j.get("payout_id"),
+            "raw":       j,
         }
-        $consecutive_fail = 0;
+    except Exception:
+        return None
 
-        // Session check
-        if (!is_logged_in($page) && !has_faucet_form($page)){
-            log_msg("Session expired, login ulang...", 'warn');
-            $dash = do_login($email);
-            if (!$dash){ timer(30, 'Retry'); continue; }
-            continue;
-        }
-
-        // Daily limit check di halaman (SEBELUM claim)
-        if (is_daily_limit($page)){
-            log_msg("DAILY LIMIT tercapai di halaman faucet!", 'warn');
-            $lim = get_daily_limit_info($page);
-            if ($lim['used'] !== null || $lim['limit'] !== null){
-                log_msg("Daily claim: ".($lim['used'] ?? '?')."/".($lim['limit'] ?? '?'), 'info');
-            }
-            if ($lim['reset']) log_msg("Reset: ".$lim['reset'], 'info');
-
-            $d = check_dashboard();
-            if ($d){
-                if ($d['today_claims'] !== null) log_msg("Today claims: ".$d['today_claims'], 'info');
-                if ($d['total_claims'] !== null) log_msg("Total claims: ".$d['total_claims'], 'info');
-                if ($d['balance'] !== null)      log_msg("Balance: ".$d['balance']." Coins", 'info');
-            }
-            break;
-        }
-
-        // Parse form
-        $form = get_faucet_form_data($page);
-        if (!$form['csrf'] || !$form['token'] || !$form['earn_ticket']){
-            log_msg("Form data tidak lengkap (csrf/token/ticket)", 'error');
-            log_msg("csrf=".substr($form['csrf'] ?? 'NULL',0,20)." token=".substr($form['token'] ?? 'NULL',0,20)." ticket=".substr($form['earn_ticket'] ?? 'NULL',0,20), 'debug');
-            $consecutive_fail++;
-            if ($consecutive_fail >= 5){ log_msg("5x form invalid, stop.", 'error'); break; }
-            timer(15, 'Retry'); continue;
-        }
-
-        $captcha_type = get_captcha_type($page);
-        $wait_sec = get_min_wait($page);
-        if ($wait_sec > 0){
-            log_msg("Server minta tunggu {$wait_sec}s", 'warn');
-            timer($wait_sec + 2, 'Cooldown');
-            continue;
-        }
-
-        log_msg("Form OK. Token=".substr($form['token'],0,8)."... ticket=".substr($form['earn_ticket'],0,8)."...", 'info');
-
-        // POST /faucet/earn
-        $fp_hash = gen_fp_hash();
-        $body = [
-            'csrf_token_name' => $form['csrf'],
-            'token'           => $form['token'],
-            'earn_ticket'     => $form['earn_ticket'],
-            'fp_hash'         => $fp_hash,
-            'confirm_wallet'  => '',
-            'wallet'          => $form['wallet'] ?: $email,
-            'captcha'         => $captcha_type,
-        ];
-
-        $h_post = array_merge($h0, [
-            "content-type:application/x-www-form-urlencoded",
-            "origin:".HOST,
-            "referer:".HOST."/faucet/earn",
-            "cache-control:max-age=0",
-        ]);
-
-        $resp = req(HOST.'/faucet/earn', 'POST', $body, $h_post);
-        if (!$resp){
-            log_msg("POST /faucet/earn gagal", 'error');
-            $consecutive_fail++;
-            if ($consecutive_fail >= 5){ log_msg("5x POST gagal, stop.", 'error'); break; }
-            timer(15, 'Retry'); continue;
-        }
-
-        // Step 2: Cek hasil claim
-        $low = strtolower($resp);
-        $is_success = strpos($low, 'success') !== false
-            && (strpos($low, 'coins has been added') !== false
-                || strpos($low, 'has been added to your account') !== false
-                || strpos($low, 'added to your account balance') !== false);
-
-        if ($is_success){
-            $total_claimed++;
-            $consecutive_fail = 0;
-
-            $reward = 0;
-            if (preg_match('/([\d.]+)\s*Coins has been added/i', $resp, $m)) $reward = (float)$m[1];
-            log_msg("CLAIM #$total_claimed OK! +".$reward." Coins", 'success');
-
-            // Refresh dashboard
-            $d = check_dashboard();
-            if ($d){
-                if ($d['balance'] !== null)      log_msg("Balance: ".G.$d['balance'].W." Coins", 'info');
-                if ($d['today_claims'] !== null) log_msg("Today claims: ".$d['today_claims'], 'info');
-                if ($d['total_claims'] !== null) log_msg("Total claims: ".$d['total_claims'], 'info');
-            }
-
-            // FIX: HANYA cek daily limit dari response kalau ada keyword EKSPLISIT
-            // Ga pakai heuristic "form hilang"
-            if (is_daily_limit($resp)){
-                log_msg("Daily limit tercapai setelah claim ini (dari response).", 'warn');
-                break;
-            }
-
-            timer($wait_between + random_int(2,8), 'Next claim');
-            continue;
-        }
-
-        // FIX: Cek daily limit di response HANYA kalau bukan success
-        // (biar ga false positive kalau response = halaman sukses yang redirect)
-        if (is_daily_limit($resp)){
-            log_msg("DAILY LIMIT tercapai (response).", 'warn');
-            break;
-        }
-
-        // Gagal claim — kemungkinan cooldown, coba lagi
-        log_msg("Claim gagal / response tidak dikenali", 'error');
-        $consecutive_fail++;
-        if ($consecutive_fail >= 5){ log_msg("5x claim gagal berturut, stop.", 'error'); break; }
-        timer(20, 'Retry');
+# ═══════════════════════════════════════════════════════════════════════════
+#  API CALLS
+# ═══════════════════════════════════════════════════════════════════════════
+def build_headers():
+    return {
+        "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Referer": f"{BASE_URL}/",
+        "Origin": BASE_URL,
+        "sec-fetch-site": "same-origin",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-dest": "empty",
     }
 
-    echo W."-----------------------------------------------\n";
-    echo W."Total claimed: ".G.$total_claimed.W." kali (max: $max_claims)\n";
-    echo W."-----------------------------------------------\n";
+def build_cookies():
+    return {"faas_session": state['cookie']}
 
-    return ['ok'=>true, 'claimed'=>$total_claimed];
-}
+def api_session():
+    """GET /api/session — return dict atau None."""
+    try:
+        r = requests.get(
+            SESSION_URL,
+            headers=build_headers(),
+            cookies=build_cookies(),
+            timeout=20,
+        )
+        if r.status_code != 200:
+            return None
+        return parse_session_json(r.text)
+    except Exception as e:
+        push_log(f"session err: {str(e)[:40]}", 'er')
+        return None
 
-// ==================== UI ====================
-function bannerMain(){
-    echo W."===============================================\n";
-    echo Y."   BOT EARNSOLANA.XYZ - Auto Faucet Claim\n";
-    echo W."===============================================\n";
-}
-
-function saveConfig($f,$d){ file_put_contents($f, json_encode($d, JSON_PRETTY_PRINT)); }
-
-function getConfig($f){
-    $d = [];
-    if (file_exists($f)) $d = json_decode(file_get_contents($f), true) ?? [];
-
-    $account = $d['account'] ?? [];
-    $options = $d['options'] ?? [];
-
-    if (empty($account['email'])){
-        clear(); bannerMain();
-        echo W."Setup awal\n";
-        echo W."-----------------------------------------------\n";
-        echo W."Email (FaucetPay): ".Y; $e = trim(fgets(STDIN));
-        $account = ['email' => $e];
-    }
-
-    if (empty($options)){
-        $options = [
-            'max_claims'   => 250,
-            'wait_between' => 60,
-        ];
-    }
-
-    $cfg = ['account' => $account, 'options' => $options];
-    saveConfig($f, $cfg);
-    return $cfg;
-}
-
-function editAccount(&$cfg, $f){
-    clear(); bannerMain();
-    echo W." EDIT AKUN \n\n";
-    $a = $cfg['account'];
-    echo W."Email baru (Enter = biarkan): ".Y; $e = trim(fgets(STDIN));
-    if ($e !== '') $a['email'] = $e;
-    $cfg['account'] = $a;
-    saveConfig($f, $cfg);
-    echo G."\n✓ Config disimpan.\n"; sleep(2);
-}
-
-function editOptions(&$cfg, $f){
-    clear(); bannerMain();
-    echo W." EDIT OPTIONS \n\n";
-    $o = $cfg['options'];
-    echo W."Max claims (skrg=".$o['max_claims']."): ".Y;
-    $mc = trim(fgets(STDIN));
-    if ($mc !== '' && is_numeric($mc)) $o['max_claims'] = (int)$mc;
-
-    echo W."Wait between claims detik (skrg=".$o['wait_between']."): ".Y;
-    $wb = trim(fgets(STDIN));
-    if ($wb !== '' && is_numeric($wb)) $o['wait_between'] = (int)$wb;
-
-    $cfg['options'] = $o;
-    saveConfig($f, $cfg);
-    echo G."\n✓ Options disimpan.\n"; sleep(2);
-}
-
-// ==================== MAIN ====================
-$cfg = getConfig($configFile);
-
-while (true){
-    clear(); bannerMain();
-    echo W."Email : ".CY.maskEmail($cfg['account']['email'] ?? '-')."\n";
-    echo W."Max   : ".CY.($cfg['options']['max_claims'] ?? 250)."\n";
-    echo W."Wait  : ".CY.($cfg['options']['wait_between'] ?? 60)."s\n";
-    echo W."-----------------------------------------------\n";
-    echo CY."[1]".W." Cek Status & Daily Limit\n";
-    echo CY."[2]".G." Start Auto Claim\n";
-    echo CY."[3]".W." Force Login Ulang\n";
-    echo CY."[4]".G." Edit Akun\n";
-    echo CY."[5]".G." Edit Options\n";
-    echo CY."[0]".R." Keluar\n";
-    echo W."-----------------------------------------------\n";
-    echo W."Pilih: ".Y;
-    $c = trim(fgets(STDIN));
-
-    if ($c === '0'){ echo W."\nBye bro!\n"; exit; }
-    elseif ($c === '4') editAccount($cfg, $configFile);
-    elseif ($c === '5') editOptions($cfg, $configFile);
-    elseif (in_array($c, ['1','2','3'])){
-        $email = $cfg['account']['email'] ?? '';
-        if (empty($email)){ echo R."\nEmail belum diisi!\n"; sleep(2); continue; }
-
-        $h0 = ["user-agent:".DEF_UA, "accept-language:id-ID"];
-        $dash = req(HOST.'/dashboard', 'GET', null, $h0);
-
-        $need_login = (!$dash || !is_logged_in($dash)) || $c === '3';
-        if ($need_login){
-            @unlink($cookieFile);
-            $dash = do_login($email);
-            if (!$dash){ echo R."\nLogin gagal!\n"; sleep(3); continue; }
-        } else {
-            log_msg("Session valid ✓", 'success');
+def api_claim():
+    """POST /claim — return dict atau None."""
+    try:
+        r = requests.post(
+            CLAIM_URL,
+            headers={**build_headers(), "Content-Type": "application/x-www-form-urlencoded"},
+            cookies=build_cookies(),
+            timeout=20,
+        )
+        return {
+            "status_code": r.status_code,
+            "json": parse_claim_json(r.text),
+            "text": r.text[:300],
         }
+    except Exception as e:
+        push_log(f"claim err: {str(e)[:40]}", 'er')
+        return None
 
-        if ($dash && is_logged_in($dash)){
-            $bal = get_balance($dash);
-            $tot = get_total_claims($dash);
-            $tdy = get_today_claims($dash);
-            echo W."-----------------------------------------------\n";
-            if ($bal !== null) echo W."Balance     : ".G.$bal.W." Coins\n";
-            if ($tot !== null) echo W."Total claim : ".CY.$tot.W."\n";
-            if ($tdy !== null) echo W."Today claim : ".CY.$tdy.W."\n";
-            echo W."-----------------------------------------------\n";
-        }
+# ═══════════════════════════════════════════════════════════════════════════
+#  MAIN
+# ═══════════════════════════════════════════════════════════════════════════
+def main():
+    # ── Input cookie ──
+    setup_screen('')
 
-        if ($c === '1'){
-            echo "\n".W."Tekan Enter..."; fgets(STDIN);
-            continue;
-        }
+    print(f"\n   {gradient('PASTE COOKIE', 46, 226)}\n")
+    print(f"  {CYAN}┌─[ {YELLOW}faas_session{CYAN} ]{RESET}")
+    print(f"  {CYAN}└──> {RESET}", end='')
+    raw = input().strip()
+    cookie = get_cookie(raw)
+    if not cookie:
+        print(f"{RED}  ✖ Cookie kosong, exit.{RESET}")
+        return
 
-        if ($c === '2'){
-            $max  = (int)($cfg['options']['max_claims'] ?? 250);
-            $wait = (int)($cfg['options']['wait_between'] ?? 60);
-            echo "\n".W."Mode: AUTO CLAIM | max={$max} | wait={$wait}s\n";
-            sleep(1);
-            claim_faucet($email, $max, $wait);
-            echo "\n".W."Tekan Enter..."; fgets(STDIN);
-        }
-    }
-}
+    state['cookie'] = cookie
+    cookie_preview = cookie[:16] + '...' + cookie[-8:] if len(cookie) > 24 else cookie
+
+    # ── Pilih mode ──
+    setup_screen(cookie_preview)
+    print(f"\n  {CYAN}PILIH > {RESET}", end='')
+    pilih = input().strip()
+
+    if pilih == "1":   max_claim = 10;      mode = '10x claim'
+    elif pilih == "2": max_claim = 25;      mode = '25x claim'
+    elif pilih == "3": max_claim = 50;      mode = '50x claim'
+    elif pilih == "4": max_claim = 999999;  mode = 'Unlimited'
+    else:              max_claim = 10;      mode = '10x claim'
+
+    state['max_claim'] = max_claim
+    state['mode']      = mode
+    state['status']    = 'CHECKING'
+
+    push_log(f"mode: {mode} | max: {max_claim}", 'g')
+
+    # ── Verify session awal ──
+    print_banner()
+    sess = api_session()
+
+    if not sess or not sess.get("logged_in"):
+        state['status'] = 'COOKIE SALAH/MATI'
+        push_log("cookie invalid — cek faas_session", 'er')
+        print_banner()
+        print(f"\n   {RED}✖ Cookie tidak valid. Ambil ulang dari browser.{RESET}\n")
+        return
+
+    state['username'] = sess['username']
+    state['balance']  = sess['balance']
+    state['currency'] = sess['currency']
+    state['interval'] = sess.get('interval_seconds', DEFAULT_INTERVAL)
+
+    push_log(f"login OK — {sess['username']}", 'ok')
+    push_log(f"balance: {sess['balance']} {sess['currency']}", 'i')
+    push_log(f"cooldown: {state['interval']}s", 'i')
+    print_banner()
+
+    # ── Loop claim ──
+    while state['success'] < max_claim:
+        try:
+            # Cek session dulu (biar tau balance fresh + eligible)
+            sess = api_session()
+            if sess and sess.get("logged_in"):
+                state['balance']  = sess['balance']
+                state['currency'] = sess['currency']
+                if sess.get('interval_seconds'):
+                    state['interval'] = sess['interval_seconds']
+
+            # Attempt claim
+            state['status'] = f'CLAIM #{state["success"]+1}'
+            print_banner()
+
+            res = api_claim()
+
+            if res is None:
+                state['failed'] += 1
+                state['status'] = f'VAILED #{state["failed"]}'
+                push_log(f"claim request failed", 'er')
+                print_banner()
+                for i in range(5, 0, -1):
+                    print(f"\r   {YELLOW}◈ retry in {i}s{RESET}    ", end='')
+                    time.sleep(1)
+                print()
+                continue
+
+            sc = res["status_code"]
+            jd = res["json"]
+
+            # SUCCESS
+            if sc == 200 and jd and jd.get("success"):
+                amount    = jd.get("amount", "0")
+                currency  = jd.get("currency", state['currency'])
+                claim_id  = jd.get("claim_id", "-")
+                payout_id = jd.get("payout_id", "-")
+
+                state['success']      += 1
+                state['last_reward']   = amount
+                state['currency']      = currency
+                try:
+                    state['total_reward'] += float(amount)
+                except Exception:
+                    pass
+                state['status'] = f'BERHASIL #{state["success"]}'
+
+                push_log(f"+{amount} {currency} | id {claim_id}", 'ok')
+                push_log(f"payout {payout_id}", 'i')
+                print_banner()
+
+                if state['success'] >= max_claim:
+                    break
+
+                # Cooldown
+                interval = state['interval']
+                push_log(f"cooldown {interval}s", 'wr')
+                print_banner()
+
+                for i in range(interval, 0, -1):
+                    state['status'] = f'COOLDOWN {i}s'
+                    print(f"\r   {ORANGE}◈ cooldown {i}s → next {state['success']+1}/{max_claim}{RESET}    ", end='')
+                    time.sleep(1)
+                print()
+
+            # COOKIE MATI
+            elif sc in (401, 403) or (jd is None and "login" in res['text'].lower()):
+                state['status'] = 'COOKIE SALAH/MATI'
+                push_log("cookie mati — paste ulang", 'er')
+                print_banner()
+                break
+
+            # CLAIM BELUM BISA (cooldown server-side)
+            elif sc == 429 or "cooldown" in res['text'].lower() or "too soon" in res['text'].lower():
+                state['status'] = 'SERVER COOLDOWN'
+                push_log(f"server masih cooldown", 'wr')
+                print_banner()
+
+                # Ambil ulang interval + tunggu
+                sess = api_session()
+                wait = state['interval']
+                for i in range(wait, 0, -1):
+                    state['status'] = f'WAIT {i}s'
+                    print(f"\r   {ORANGE}◈ server cooldown {i}s{RESET}    ", end='')
+                    time.sleep(1)
+                print()
+
+            # FAILED GENERIC
+            else:
+                state['failed'] += 1
+                state['status'] = f'VAILED #{state["failed"]}'
+                push_log(f"HTTP {sc} | {res['text'][:40]}", 'er')
+                print_banner()
+
+                for i in range(5, 0, -1):
+                    state['status'] = f'RETRY {i}s'
+                    print(f"\r   {YELLOW}◈ retry in {i}s{RESET}    ", end='')
+                    time.sleep(1)
+                print()
+
+        except KeyboardInterrupt:
+            raise
+        except Exception as e:
+            state['failed'] += 1
+            state['status'] = 'ERROR'
+            push_log(f"error: {str(e)[:50]}", 'er')
+            print_banner()
+            time.sleep(2)
+
+    # ── Finish ──
+    state['status'] = 'FINISH'
+    push_log(f"selesai | sukses={state['success']} failed={state['failed']} total={state['total_reward']:.5f} {state['currency']}", 'g')
+    print_banner()
+    print(f"\n   {gradient('SELESAI', 46, 226)} {WHITE}• sukses {state['success']} | failed {state['failed']} | total +{state['total_reward']:.5f} {state['currency']}{RESET}\n")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print(f"\n{YELLOW}[!] Dihentikan.{RESET}")
