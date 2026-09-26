@@ -1,522 +1,675 @@
-#!/usr/bin/env python3
-"""
-NEWTUBE TON AUTO WATCH - FIXED v4
-- No proxy
-- Handles: daily_limit_reached, invalid_network, ip_in_use (409), timeout
-- Per-network watch durations (adsgramSpecial = 30s+ to satisfy server)
-- Auto-retry on watch_time_too_short (bumps duration by +10s, one retry)
-- Random fingerprint & user-agent
-- Reads new claimAdReward response shape ({ok:true, user:{...}})
-- Tolerates both old & new adStart response shapes
-- Fixed undefined RESET constant bug in 409 handler
-- Network list synced to what the live JS actually calls
-"""
-
 import requests
-import time
-import random
 import json
-import os
+import time
 import sys
-import hashlib
+import os
+import re
+import random
 from datetime import datetime
 
 # ============================================================
-# ANSI COLORS
+#  ANSI 256 HELPERS
 # ============================================================
-R, G, Y, B, M, C, W, X = (
-    '\033[91m', '\033[92m', '\033[93m', '\033[94m',
-    '\033[95m', '\033[96m', '\033[97m', '\033[0m',
-)
-CYAN = '\033[1;96m'
-DIM  = '\033[2;37m'
+RESET = "\033[0m"
 
-BANNER = f"""
-{CYAN}╔══════════════════════════════════════════════════════════════════════╗
-║  ███╗   ██╗███████╗██╗    ██╗████████╗██╗   ██╗██████╗ ███████╗    ║
-║  ████╗  ██║██╔════╝██║    ██║╚══██╔══╝██║   ██║██╔══██╗██╔════╝    ║
-║  ██╔██╗ ██║█████╗  ██║ █╗ ██║   ██║   ██║   ██║██████╔╝█████╗      ║
-║  ██║╚██╗██║██╔══╝  ██║███╗██║   ██║   ██║   ██║██╔══██╗██╔══╝      ║
-║  ██║ ╚████║███████╗╚███╔███╔╝   ██║   ╚██████╔╝██████╔╝███████╗    ║
-║  ╚═╝  ╚═══╝╚══════╝ ╚══╝╚══╝    ╚═╝    ╚═════╝ ╚═════╝ ╚══════╝    ║
-║                                                                    ║
-║           {Y}🤖 NEWTUBE TON AUTO WATCH (FIXED v4) 🤖{X}{CYAN}            ║
-║        {G}RANDOM FINGERPRINT • NO PROXY • PER-NET TIMING{X}{CYAN}         ║
-╚══════════════════════════════════════════════════════════════════════╝{X}
-"""
+def fg(c):    return f"\033[38;5;{c}m"
+def bold(s):  return f"\033[1m{s}\033[22m"
+def dim(s):   return f"\033[2m{s}\033[22m"
 
-MENU = f"""
-{CYAN}╔══════════════════════════════════════════════╗
-║              {Y}☁️ NEWTUBE TON ☁️{X}{CYAN}             ║
-║          {CYAN}AUTO WATCH ADS + CLAIM{CYAN}           ║
-╠══════════════════════════════════════════════╣
-║  {G}[1] 🚀 Start Auto Watch{X}{CYAN}                  ║
-║  {Y}[2] 🔑 Set Init Data{X}{CYAN}                    ║
-║  {B}[3] 💰 Check Balance{X}{CYAN}                    ║
-║  {R}[0] ❌ Exit{X}{CYAN}                                ║
-╚══════════════════════════════════════════════╝{X}
-"""
+def gradient(text, start=51, end=196):
+    n = len(text)
+    if n <= 1:
+        return fg(start) + text + RESET
+    out = ""
+    for i, ch in enumerate(text):
+        t = i / (n - 1)
+        c = int(round(start + (end - start) * t))
+        out += fg(c) + ch
+    return out + RESET
+
+def tag_color(tag):
+    m = {
+        "AUTH":     fg(46)  + bold("AUTH"),
+        "STATUS":   fg(51)  + bold("STATUS"),
+        "CAPTCHA":  fg(213) + bold("CAPTCHA"),
+        "CLAIM":    fg(226) + bold("CLAIM"),
+        "WAIT":     fg(208) + bold("WAIT"),
+        "BLOCK":    fg(196) + bold("BLOCK"),
+        "SYSTEM":   fg(135) + bold("SYSTEM"),
+        "AD":       fg(81)  + bold("AD"),
+        "VIDEO":    fg(135) + bold("VIDEO"),
+        "ERROR":    fg(196) + bold("ERROR"),
+        "INIT":     fg(213) + bold("INIT"),
+    }
+    return m.get(tag.strip(), fg(250) + bold(tag))
+
+def tag_icon(tag):
+    m = {
+        "AUTH":     "●",
+        "STATUS":   "●",
+        "CAPTCHA":  "◉",
+        "CLAIM":    "✔",
+        "WAIT":     "◷",
+        "BLOCK":    "✖",
+        "SYSTEM":   "⚙",
+        "AD":       "▶",
+        "VIDEO":    "◈",
+        "ERROR":    "✖",
+        "INIT":     "⚡",
+    }
+    return m.get(tag.strip(), "•")
+
+def ansi_len(s):
+    return len(re.sub(r'\033\[[0-9;]*m', '', s))
+
+def ansi_pad(s, length):
+    pad = length - ansi_len(s)
+    return s + (" " * pad if pad > 0 else "")
+
+def human_delay(min_ms=150, max_ms=700):
+    time.sleep(random.randint(min_ms, max_ms) / 1000.0)
+
+def human_pause(min_ms=400, max_ms=1200):
+    time.sleep(random.randint(min_ms, max_ms) / 1000.0)
+
 
 # ============================================================
-# CONFIG
+#  CONFIG / CONSTANTS
 # ============================================================
-CONFIG_FILE  = "newtube_config.json"
-BASE_URL     = "https://newtube-ton.vercel.app"
-API_USER     = f"{BASE_URL}/api/user"
-API_EARN     = f"{BASE_URL}/api/earn"
+VERSION = "5.0"
+BASE_URL = "https://newtube-ton.vercel.app/api"
 
-# Mirrors AD_SHOW_FUNCTIONS in the live JS + AD_NETWORKS_UI ids.
-VALID_NETWORKS = [
-    "adsgramDaily",
-    "adsgramSpecial",
-    "monetag",
-    "giga",
-    "usl",
-    "monetagPopup",
-]
+WAIT_TIMES = {
+    "adsgramDaily":   20,
+    "adsgramSpecial": 25,
+    "monetag":        20,
+    "giga":           25,
+    "usl":            25,
+}
+VIDEO_WAIT = 90
+DELAY_BETWEEN_ADS = 2
+DELAY_BETWEEN_NETWORKS = 3
+RETRY_DELAY = 5
+MAX_CONSECUTIVE_FAIL = 3
 
-# Per-network daily limits mirrored from AD_NETWORKS_UI in the live JS.
-NETWORK_LIMITS = {
-    "adsgramDaily":   10,
-    "adsgramSpecial": 10,
-    "monetag":        10,
-    "giga":           15,
-    "usl":            10,
-    "monetagPopup":    5,
+CONFIG_FILE = "config.json"
+
+# ============================================================
+#  GLOBAL STATE
+# ============================================================
+STATS = {
+    "ads":       0,
+    "rewards":   0,
+    "start":     time.time(),
+    "log":       [],
+}
+ACC = {
+    "user":    "?",
+    "balance": "0",
+    "status":  "idle",
 }
 
-# Counter field names in the user object (per network).
-NETWORK_COUNTER_FIELDS = {
-    "adsgramDaily":   "adsgramDailyCountToday",
-    "adsgramSpecial": "adsgramSpecialCountToday",
-    "monetag":        "monetagCountToday",
-    "giga":           "gigaCountToday",
-    "usl":            "uslCountToday",
-    "monetagPopup":   "monetagPopupCountToday",
-}
 
-# Global default watch duration range.
-MIN_DURATION = 18
-MAX_DURATION = 21
+def add_log(tag, msg):
+    STATS["log"].append({
+        "time": datetime.now().strftime("%H:%M:%S"),
+        "tag":  tag,
+        "msg":  msg,
+    })
+    if len(STATS["log"]) > 6:
+        STATS["log"].pop(0)
 
-# Per-network duration overrides (server rejects short watches on some).
-# adsgramSpecial enforces watch_time_too_short below ~30s.
-NETWORK_DURATIONS = {
-    "adsgramSpecial": (30, 35),
-    "adsgramDaily":   (18, 21),
-    "monetag":        (18, 21),
-    "giga":           (18, 21),
-    "usl":            (18, 21),
-    "monetagPopup":   (18, 21),
-}
-
-def get_duration(network, extra=0):
-    lo, hi = NETWORK_DURATIONS.get(network, (MIN_DURATION, MAX_DURATION))
-    return random.randint(lo + extra, hi + extra)
-
-USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
-    "Mozilla/5.0 (Linux; Android 13; SM-G998B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
-    "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/119.0",
-]
 
 # ============================================================
-# UTILS
+#  BOX / BANNER
 # ============================================================
-def load_config():
-    if os.path.exists(CONFIG_FILE):
-        try:
-            with open(CONFIG_FILE, 'r') as f:
-                return json.load(f)
-        except Exception:
-            return None
-    return None
+def box_line(content):
+    return fg(51) + "║  " + RESET + ansi_pad(content, 60) + fg(51) + "║" + RESET + "\n"
 
-def save_config(data):
-    with open(CONFIG_FILE, 'w') as f:
-        json.dump(data, f, indent=4)
+def box_divider():
+    return fg(51) + "╠══════════════════════════════════════════════════════════════╣" + RESET + "\n"
 
-def clear_screen():
+
+def banner(status_text="RUNNING"):
+    s  = STATS
+    a  = ACC
+    rt = int(time.time() - s["start"])
+    rts = f"{rt//3600:02d}:{(rt%3600)//60:02d}:{rt%60:02d}"
+
+    buf = ""
+    buf += fg(51) + "╔══════════════════════════════════════════════════════════════╗" + RESET + "\n"
+    buf += box_line(gradient("NEWTUBE TON AUTO WATCH", 51, 213))
+    buf += box_line(dim("─────── SOUU ENGINE ───────"))
+    buf += box_divider()
+
+    # NETWORK
+    buf += box_line(fg(213) + bold("NETWORK") + RESET)
+    buf += box_line(fg(51) + "├─ Adsgram Daily   : " + RESET + fg(226) + "10x @ 10 WTC" + RESET)
+    buf += box_line(fg(51) + "├─ Adsgram Special : " + RESET + fg(226) + "10x @ 20 WTC" + RESET)
+    buf += box_line(fg(51) + "├─ Monetag         : " + RESET + fg(226) + "10x @ 10 WTC" + RESET)
+    buf += box_line(fg(51) + "├─ Giga            : " + RESET + fg(226) + "15x @ 15 WTC" + RESET)
+    buf += box_line(fg(51) + "├─ USL             : " + RESET + fg(226) + "10x @ 15 WTC" + RESET)
+    buf += box_line(fg(51) + "└─ Video Mining    : " + RESET + fg(226) + "10x @ 60 WTC" + RESET)
+    buf += box_divider()
+
+    # ACCOUNT
+    buf += box_line(fg(213) + bold("ACCOUNT") + RESET)
+    buf += box_line(fg(51) + "├─ User       : " + RESET + fg(226) + str(a["user"]) + RESET)
+    buf += box_line(fg(51) + "├─ Balance    : " + RESET + fg(46) + str(a["balance"]) + " WTC" + RESET)
+    buf += box_line(fg(51) + "└─ Status     : " + RESET + fg(226) + str(a["status"]) + RESET)
+    buf += box_divider()
+
+    # SYSTEM
+    buf += box_line(fg(213) + bold("SYSTEM") + RESET)
+    buf += box_line(fg(51) + "├─ Ads Done     : " + RESET + fg(226) + str(s["ads"]) + RESET)
+    buf += box_line(fg(51) + "├─ Rewards      : " + RESET + fg(46) + "+" + str(s["rewards"]) + " WTC" + RESET)
+    buf += box_line(fg(51) + "└─ Runtime      : " + RESET + fg(208) + rts + RESET)
+    buf += box_divider()
+
+    # LOGS (6 lines)
+    for i in range(6):
+        if i < len(s["log"]):
+            l    = s["log"][i]
+            icon = tag_icon(l["tag"])
+            tag  = tag_color(l["tag"])
+            line = dim(f"[{l['time']}]") + " " + fg(250) + icon + RESET + " " + tag + " " + fg(252) + l["msg"] + RESET
+            buf += box_line(line)
+        else:
+            buf += fg(51) + "║" + (" " * 62) + "║" + RESET + "\n"
+
+    buf += fg(51) + "╚══════════════════════════════════════════════════════════════╝" + RESET + "\n"
+    buf += "\n   " + gradient(f"BOT {status_text}", 46, 226) + " " + fg(250) + "• " + datetime.now().strftime("%H:%M:%S") + RESET + "\n"
+    buf += "   " + dim("By Power ") + fg(213) + "@SouuXso" + RESET + dim(" • ") + fg(46) + "NewTube TON Edition" + RESET + "\n\n"
+
+    sys.stdout.write(buf)
+    sys.stdout.flush()
+
+
+# ============================================================
+#  TIMER (spinner)
+# ============================================================
+def timer(seconds, prefix="  wait.."):
+    wait_time = int(seconds)
+    if wait_time <= 0:
+        wait_time = 1
+    frames = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"]
+    fc = len(frames)
+    cf = 0
+    while wait_time > 0:
+        start = time.time()
+        while (time.time() - start) < 1:
+            h = wait_time // 3600
+            m = (wait_time % 3600) // 60
+            s = wait_time % 60
+            tf = f"{h:02d}:{m:02d}:{s:02d}"
+            sp = frames[cf]
+            sys.stdout.write(fg(250) + prefix + fg(46) + f" {tf} " + fg(226) + sp + "\r")
+            sys.stdout.flush()
+            time.sleep(0.1)
+            cf = (cf + 1) % fc
+            if (time.time() - start) >= 1:
+                break
+        wait_time -= 1
+    sys.stdout.write("\r" + (" " * 60) + "\r")
+    sys.stdout.flush()
+
+
+# ============================================================
+#  CLEAR
+# ============================================================
+def clear():
     os.system('cls' if os.name == 'nt' else 'clear')
 
-def print_header():
-    print(BANNER)
-
-def progress_bar(current, total, bar_len=20, fill='█', empty='░'):
-    pct = current / total
-    filled_len = int(bar_len * pct)
-    bar = fill * filled_len + empty * (bar_len - filled_len)
-    return f"[{bar}] {int(pct*100)}%"
-
-def random_delay(min_sec=1, max_sec=3):
-    time.sleep(random.uniform(min_sec, max_sec))
-
-def random_ua():
-    return random.choice(USER_AGENTS)
-
-def generate_fingerprint():
-    """Random fingerprint — new one each launch, per session."""
-    raw = f"{time.time()}{random.randint(100000, 999999)}"
-    return hashlib.sha256(raw.encode()).hexdigest()
-
-def safe_json_response(resp):
-    """Handles JSON with/without BOM, non-JSON bodies, and HTML fallbacks."""
-    text = resp.text or ""
-    if text.startswith('\ufeff'):
-        text = text[1:]
-    try:
-        return json.loads(text)
-    except Exception:
-        snippet = text.strip().replace("\n", " ")[:180]
-        raise Exception(f"Non-JSON response (HTTP {resp.status_code}): {snippet}")
 
 # ============================================================
-# BOT
+#  CONFIG IO
+# ============================================================
+def get_config():
+    if not os.path.exists(CONFIG_FILE):
+        return None
+    try:
+        with open(CONFIG_FILE, "r") as f:
+            c = json.load(f)
+        if "initData" not in c:
+            return None
+        return c
+    except Exception:
+        return None
+
+
+def save_config(data):
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+
+# ============================================================
+#  BOT CLASS
 # ============================================================
 class NewTubeBot:
-    def __init__(self, init_data=None):
-        self.init_data = init_data
-        self.session = requests.Session()
-        self.fingerprint = generate_fingerprint()
-        self._update_headers()
-
-    def _update_headers(self):
-        ua = random_ua()
-        chrome_ver = random.randint(100, 125)
-        self.session.headers.update({
-            "User-Agent": ua,
-            "Accept": "*/*",
-            "Accept-Language": "id,id-ID;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Accept-Encoding": "gzip, deflate",
-            "X-Requested-With": "org.telegram.messenger.web",
-            "Origin": BASE_URL,
-            "Referer": f"{BASE_URL}/",
-            "Content-Type": "application/json",
-            "Sec-Fetch-Site": "same-origin",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Dest": "empty",
-            "Sec-Ch-Ua": f'"Not?A_Brand";v="24", "Chromium";v="{chrome_ver}", "Android WebView";v="{chrome_ver}"',
-            "Sec-Ch-Ua-Mobile": "?1",
-            "Sec-Ch-Ua-Platform": '"Android"',
-        })
-
-    # --------------------------------------------------------
-    # raw request helper
-    # --------------------------------------------------------
-    def _request(self, method, url, data=None, params=None):
-        self._update_headers()
-        try:
-            if method.upper() == "GET":
-                resp = self.session.get(url, params=params, timeout=20)
-            else:
-                resp = self.session.post(url, json=data, timeout=20)
-
-            if resp.status_code == 409:
-                try:
-                    err = safe_json_response(resp)
-                    if err.get("error") == "ip_in_use":
-                        print(f"{Y}⚠️  IP/fingerprint already registered (owner exists). Continuing...{X}")
-                        return {"ok": True, "alreadyExists": True, "owner": err.get("owner")}
-                except Exception:
-                    pass
-                raise Exception(f"HTTP 409: {resp.text[:200]}")
-
-            if resp.status_code != 200:
-                raise Exception(f"HTTP {resp.status_code}: {resp.text[:200]}")
-
-            return safe_json_response(resp)
-        except requests.exceptions.Timeout:
-            raise Exception("Request timed out")
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"Request failed: {e}")
-
-    # --------------------------------------------------------
-    # API calls
-    # --------------------------------------------------------
-    def init_user(self):
-        payload = {
-            "action": "init",
-            "fingerprint": self.fingerprint,
-            "initData": self.init_data,
+    def __init__(self, init_data):
+        self.init_data = self.clean_init_data(init_data)
+        self.headers = {
+            "Host": "newtube-ton.vercel.app",
+            "content-type": "application/json",
+            "user-agent": (
+                "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+            ),
+            "origin": "https://newtube-ton.vercel.app",
+            "referer": "https://newtube-ton.vercel.app/",
+            "x-requested-with": "org.telegram.messenger",
+            "accept": "*/*",
+            "accept-language": "en-US,en;q=0.9",
         }
-        return self._request("POST", API_USER, data=payload)
 
+    def clean_init_data(self, raw_data):
+        cleaned = raw_data.strip()
+        cleaned = ''.join(c for c in cleaned if c.isprintable() or c in '\n\r\t')
+        cleaned = cleaned.replace('\n', '').replace('\r', '').replace('\t', '')
+        cleaned = re.sub(r'^initData\s*[:=]\s*', '', cleaned)
+        if cleaned.startswith('"') and cleaned.endswith('"'):
+            cleaned = cleaned[1:-1]
+        if cleaned.startswith("'") and cleaned.endswith("'"):
+            cleaned = cleaned[1:-1]
+        cleaned = ' '.join(cleaned.split())
+        return cleaned
+
+    # ===== PROFILE =====
     def get_profile(self):
+        url = f"{BASE_URL}/user"
         params = {"action": "profile", "initData": self.init_data}
-        return self._request("GET", API_USER, params=params)
-
-    def ad_start(self, network):
-        payload = {
-            "action": "adStart",
-            "network": network,
-            "initData": self.init_data,
-        }
-        return self._request("POST", API_EARN, data=payload)
-
-    def claim_ad_reward(self, network, start_time, signature):
-        payload = {
-            "action": "claimAdReward",
-            "network": network,
-            "startTime": start_time,
-            "signature": signature,
-            "initData": self.init_data,
-        }
-        return self._request("POST", API_EARN, data=payload)
-
-    # --------------------------------------------------------
-    # Main loop
-    # --------------------------------------------------------
-    def watch_all(self):
-        print(f"{C}🔐 Fingerprint: {self.fingerprint[:16]}...{X}")
-
-        # ── init ──
         try:
-            init_resp = self.init_user()
-            if init_resp.get("alreadyExists") or init_resp.get("ok"):
-                if init_resp.get("alreadyExists"):
-                    owner = init_resp.get("owner") or {}
-                    print(f"{G}✅ Already registered as {owner.get('firstName','?')} (ID {owner.get('id','?')}){X}")
-                else:
-                    print(f"{G}✅ Init OK{X}")
+            r = requests.get(url, headers=self.headers, params=params, timeout=30)
+            if r.status_code != 200:
+                add_log("ERROR", f"HTTP {r.status_code}")
+                return None
+            data = r.json()
+            if data.get('ok'):
+                user = data.get('user', {})
+                ACC["user"] = user.get('firstName', 'User')
+                ACC["balance"] = str(user.get('wtcBalance', 0))
+                return {
+                    'balance': user.get('wtcBalance', 0),
+                    'daily_count': user.get('adsgramDailyCountToday', 0),
+                    'special_count': user.get('adsgramSpecialCountToday', 0),
+                    'monetag_count': user.get('monetagCountToday', 0),
+                    'giga_count': user.get('gigaCountToday', 0),
+                    'usl_count': user.get('uslCountToday', 0),
+                    'video_mined': user.get('dailyVideoWtcMined', 0),
+                    'is_banned': user.get('isBanned', False),
+                }
+            else:
+                add_log("ERROR", f"API: {str(data)[:50]}")
+                return None
+        except requests.exceptions.ConnectionError:
+            add_log("ERROR", "Connection error")
+            return None
+        except requests.exceptions.Timeout:
+            add_log("ERROR", "Timeout")
+            return None
         except Exception as e:
-            print(f"{R}❌ Init failed: {e}{X}")
+            add_log("ERROR", f"{str(e)[:50]}")
+            return None
+
+    # ===== WATCH AD =====
+    def watch_ad(self, network_type):
+        url = f"{BASE_URL}/earn"
+        start_payload = {
+            "action": "adStart",
+            "network": network_type,
+            "initData": self.init_data,
+        }
+        try:
+            human_delay(120, 350)
+            r = requests.post(url, headers=self.headers, json=start_payload, timeout=30)
+            if r.status_code != 200:
+                add_log("ERROR", f"adStart HTTP {r.status_code}")
+                return None
+            start_data = r.json()
+            if not start_data.get('ok'):
+                add_log("ERROR", f"adStart: {str(start_data)[:50]}")
+                return None
+
+            start_time = start_data.get('startTime')
+            signature = start_data.get('signature')
+
+            wait_time = WAIT_TIMES.get(network_type, 20)
+            clear()
+            banner("RUNNING")
+            timer(wait_time, f"  {network_type}..")
+
+            claim_payload = {
+                "action": "claimAdReward",
+                "network": network_type,
+                "startTime": start_time,
+                "signature": signature,
+                "initData": self.init_data,
+            }
+            human_delay(150, 400)
+            r = requests.post(url, headers=self.headers, json=claim_payload, timeout=30)
+            if r.status_code != 200:
+                add_log("ERROR", f"claim HTTP {r.status_code}")
+                return None
+            claim_data = r.json()
+            if claim_data.get('ok'):
+                return {
+                    'reward': claim_data.get('reward', 0),
+                    'count_today': claim_data.get('countToday', 0),
+                    'daily_limit': claim_data.get('dailyLimit', 10),
+                }
+            else:
+                add_log("ERROR", f"claim: {str(claim_data)[:50]}")
+                return None
+        except Exception as e:
+            add_log("ERROR", f"ad err: {str(e)[:50]}")
+            return None
+
+    # ===== WATCH VIDEO =====
+    def watch_video(self):
+        url = f"{BASE_URL}/earn"
+        start_payload = {"action": "videoStart", "initData": self.init_data}
+        try:
+            human_delay(120, 350)
+            r = requests.post(url, headers=self.headers, json=start_payload, timeout=30)
+            if r.status_code != 200:
+                add_log("ERROR", f"videoStart HTTP {r.status_code}")
+                return None
+            start_data = r.json()
+            if not (start_data.get('success') or start_data.get('ok')):
+                add_log("ERROR", f"videoStart: {str(start_data)[:50]}")
+                return None
+
+            start_time = start_data.get('startTime')
+            signature = start_data.get('signature')
+
+            clear()
+            banner("RUNNING")
+            timer(VIDEO_WAIT, "  video..")
+
+            claim_payload = {
+                "action": "videoClaim",
+                "startTime": start_time,
+                "signature": signature,
+                "initData": self.init_data,
+            }
+            human_delay(150, 400)
+            r = requests.post(url, headers=self.headers, json=claim_payload, timeout=30)
+            if r.status_code != 200:
+                add_log("ERROR", f"videoClaim HTTP {r.status_code}")
+                return None
+            claim_data = r.json()
+            if claim_data.get('success') or claim_data.get('ok'):
+                reward = claim_data.get('reward', 60)
+                return {'reward': reward}
+            else:
+                add_log("ERROR", f"videoClaim: {str(claim_data)[:50]}")
+                return None
+        except Exception as e:
+            add_log("ERROR", f"video err: {str(e)[:50]}")
+            return None
+
+    # ===== BATCH ADS =====
+    def watch_ads_batch(self, network_type, network_name, target):
+        profile = self.get_profile()
+        if not profile:
+            return 0
+        count_key = {
+            "adsgramDaily": "daily_count",
+            "adsgramSpecial": "special_count",
+            "monetag": "monetag_count",
+            "giga": "giga_count",
+            "usl": "usl_count",
+        }.get(network_type, "daily_count")
+
+        watched = profile.get(count_key, 0)
+        remaining = target - watched
+        if remaining <= 0:
+            add_log("STATUS", f"{network_name} done ({target}x)")
+            return 0
+
+        total_reward = 0
+        consecutive_fail = 0
+
+        for i in range(remaining):
+            add_log("AD", f"{network_name} {i+1}/{remaining}")
+            clear()
+            banner("RUNNING")
+
+            result = self.watch_ad(network_type)
+            if result:
+                total_reward += result['reward']
+                STATS["rewards"] += result['reward']
+                STATS["ads"] += 1
+                consecutive_fail = 0
+                add_log("CLAIM", f"+{result['reward']} WTC | {result['count_today']}/{result['daily_limit']}")
+                clear()
+                banner("RUNNING")
+            else:
+                consecutive_fail += 1
+                add_log("ERROR", f"Fail ({consecutive_fail}/{MAX_CONSECUTIVE_FAIL})")
+                clear()
+                banner("RUNNING")
+                if consecutive_fail >= MAX_CONSECUTIVE_FAIL:
+                    add_log("BLOCK", f"{network_name} stop")
+                    clear()
+                    banner("RUNNING")
+                    break
+                time.sleep(RETRY_DELAY)
+
+            if i < remaining - 1:
+                time.sleep(DELAY_BETWEEN_ADS)
+
+        return total_reward
+
+    # ===== BATCH VIDEOS =====
+    def watch_videos_batch(self, target=10):
+        profile = self.get_profile()
+        if not profile:
+            return 0
+        mined = profile.get('video_mined', 0)
+        remaining = target - mined
+        if remaining <= 0:
+            add_log("STATUS", f"Video done ({target}x)")
+            return 0
+
+        total_reward = 0
+        consecutive_fail = 0
+        for i in range(remaining):
+            add_log("VIDEO", f"Mining {i+1}/{remaining}")
+            clear()
+            banner("RUNNING")
+
+            result = self.watch_video()
+            if result and result['reward'] > 0:
+                total_reward += result['reward']
+                STATS["rewards"] += result['reward']
+                STATS["ads"] += 1
+                consecutive_fail = 0
+                add_log("CLAIM", f"+{result['reward']} WTC (video)")
+                clear()
+                banner("RUNNING")
+            else:
+                consecutive_fail += 1
+                add_log("ERROR", f"Video fail ({consecutive_fail}/{MAX_CONSECUTIVE_FAIL})")
+                clear()
+                banner("RUNNING")
+                if consecutive_fail >= MAX_CONSECUTIVE_FAIL:
+                    add_log("BLOCK", "Video stop")
+                    clear()
+                    banner("RUNNING")
+                    break
+                time.sleep(RETRY_DELAY)
+
+            if i < remaining - 1:
+                time.sleep(DELAY_BETWEEN_NETWORKS)
+
+        return total_reward
+
+    # ===== RUN ALL =====
+    def run_all(self):
+        # Reset stats
+        STATS["ads"] = 0
+        STATS["rewards"] = 0
+        STATS["start"] = time.time()
+        STATS["log"] = []
+
+        add_log("INIT", f"Engine v{VERSION} boot")
+        clear()
+        banner("INIT")
+
+        human_delay(200, 500)
+        profile = self.get_profile()
+        if not profile:
+            add_log("ERROR", "Cannot fetch profile")
+            clear()
+            banner("ERROR")
+            sys.stdout.write(fg(196) + "\n  ✖ Profile error. Enter...\n" + RESET)
+            sys.stdout.flush()
+            input()
             return
 
-        # ── profile ──
-        try:
-            profile = self.get_profile()
-            user = profile.get("user", {}) or {}
-            print(f"{G}👤 User: {user.get('telegramUsername', 'N/A')}{X}")
-            print(f"{G}💰 WTC Balance: {user.get('wtcBalance', 0)}{X}")
-            print(f"{G}📈 Lifetime Earned: {user.get('lifetimeWtcEarned', 0)}{X}")
-            print(f"{G}📺 Ads Watched Today: {user.get('adsWatchedToday', 0)}{X}")
-            print(f"{G}📊 Lifetime Ads: {user.get('lifetimeAdsWatched', 0)}{X}")
-        except Exception as e:
-            print(f"{Y}⚠️  Profile fetch failed: {e}{X}")
-            user = {}
+        if profile.get('is_banned'):
+            add_log("ERROR", "User banned")
+            clear()
+            banner("ERROR")
+            sys.stdout.write(fg(196) + "\n  ✖ User banned. Enter...\n" + RESET)
+            sys.stdout.flush()
+            input()
+            return
 
-        # ── per-network loop ──
-        for network in VALID_NETWORKS:
-            limit = NETWORK_LIMITS.get(network, 10)
-            counter_field = NETWORK_COUNTER_FIELDS.get(network, "")
-            current_count = user.get(counter_field, 0) if counter_field else 0
+        ACC["status"] = "running"
+        add_log("AUTH", f"Login as {ACC['user']}")
+        clear()
+        banner("RUNNING")
 
-            print(f"\n{CYAN}=== {network} ({current_count}/{limit} today) ==={X}")
+        # ===== ADS =====
+        ad_types = [
+            ("adsgramDaily",   "Daily",   10),
+            ("adsgramSpecial", "Special", 10),
+            ("monetag",        "Monetag", 10),
+            ("giga",           "Giga",    15),
+            ("usl",            "USL",     10),
+        ]
 
-            attempt = 0
-            bump_extra = 0  # extra seconds added after a too-short rejection
+        for i, (net_type, name, target) in enumerate(ad_types):
+            if i > 0:
+                time.sleep(DELAY_BETWEEN_NETWORKS)
+            self.watch_ads_batch(net_type, name, target)
 
-            while True:
-                attempt += 1
-                if limit > 0 and current_count >= limit:
-                    print(f"{Y}⚠️  Daily limit already reached for {network}{X}")
-                    break
+        # ===== VIDEO =====
+        time.sleep(DELAY_BETWEEN_NETWORKS)
+        self.watch_videos_batch(10)
 
-                # ── adStart ──
-                try:
-                    start_resp = self.ad_start(network)
-                except Exception as e:
-                    print(f"{R}❌ adStart error: {e}{X}")
-                    break
+        # ===== DONE =====
+        ACC["status"] = "done"
+        add_log("SYSTEM", f"Finished +{STATS['rewards']} WTC")
+        clear()
+        banner("DONE")
 
-                if not start_resp.get("ok"):
-                    err = str(start_resp.get("error", ""))
-                    msg = str(start_resp.get("message", ""))
-                    if "daily_limit_reached" in err or "limit" in msg.lower():
-                        print(f"{Y}⚠️  Daily limit reached for {network}{X}")
-                        break
-                    if "invalid_network" in err:
-                        print(f"{Y}⚠️  Invalid network: {network} (skip){X}")
-                        break
-                    if err == "unauthorized":
-                        print(f"{R}❌ Session expired — refresh initData.{X}")
-                        return
-                    print(f"{Y}⚠️  adStart failed: {start_resp}{X}")
-                    break
+        sys.stdout.write(fg(226) + "\n  ⏱  Farming selesai. Enter balik ke menu...\n" + RESET)
+        sys.stdout.flush()
+        input()
+        ACC["status"] = "idle"
 
-                # Direct-credit payload (rare) — some backend builds return
-                # a rewarded result straight from adStart.
-                if "startTime" not in start_resp or "signature" not in start_resp:
-                    if "reward" in start_resp:
-                        reward = start_resp.get("reward", 0)
-                        current_count = start_resp.get("countToday", current_count + 1)
-                        print(f"{G}✅ (direct-credit) +{reward} WTC ({current_count}/{limit}){X}")
-                        random_delay(1, 3)
-                        continue
-                    print(f"{R}❌ adStart missing startTime/signature: {start_resp}{X}")
-                    break
-
-                start_time = start_resp["startTime"]
-                signature  = start_resp["signature"]
-
-                # ── fake watch ──
-                duration = get_duration(network, extra=bump_extra)
-                print(f"\n{CYAN}╔══════════════════════════════════════════════╗")
-                print(f"║              {Y}📺 WATCHING ADS 📺{X}{CYAN}              ║")
-                print(f"║         {C}Network: {G}{network}{X}{CYAN}")
-                print(f"║         {C}Attempt: {G}{attempt}{X}{CYAN}")
-                print(f"╚══════════════════════════════════════════════╝{X}\n")
-                print(f"{C}⏳ Watching for {duration}s...{X}")
-                for sec in range(duration):
-                    time.sleep(1)
-                    bar = progress_bar(sec + 1, duration)
-                    sys.stdout.write(f"\r  {G}{bar}{X} {sec+1}s/{duration}s")
-                    sys.stdout.flush()
-                print()
-
-                # ── claim ──
-                try:
-                    claim_resp = self.claim_ad_reward(network, start_time, signature)
-                except Exception as e:
-                    print(f"{R}❌ Claim error: {e}{X}")
-                    break
-
-                if not claim_resp.get("ok"):
-                    err = str(claim_resp.get("error", ""))
-                    msg = str(claim_resp.get("message", ""))
-
-                    if "daily_limit_reached" in err or "limit" in msg.lower():
-                        print(f"{Y}⚠️  Daily limit reached for {network}{X}")
-                        break
-                    if "invalid_network" in err:
-                        print(f"{Y}⚠️  Invalid network: {network} (skip){X}")
-                        break
-                    if "watch_time_too_short" in err:
-                        # Server says our fake watch was too short. Bump by
-                        # +10s and retry the SAME network once.
-                        bump_extra += 10
-                        print(f"{Y}⚠️  watch_time_too_short — retrying with +{bump_extra}s extra.{X}")
-                        random_delay(2, 4)
-                        continue
-                    print(f"{R}❌ Claim failed: {claim_resp}{X}")
-                    break
-
-                # ── Success ──
-                # New response shape: {ok:true, user:{...}}
-                user_obj = claim_resp.get("user")
-                if user_obj:
-                    old_balance = user.get("wtcBalance", 0)
-                    new_balance = user_obj.get("wtcBalance", old_balance)
-                    gained = max(0, new_balance - old_balance)
-                    current_count = user_obj.get(counter_field, current_count + 1)
-                    user = user_obj
-                    print(f"{G}✅ Claimed +{gained} WTC | Balance: {new_balance} | Today: {current_count}/{limit}{X}")
-                else:
-                    reward = claim_resp.get("reward", 0)
-                    current_count = claim_resp.get("countToday", current_count + 1)
-                    daily_limit = claim_resp.get("dailyLimit", limit)
-                    print(f"{G}✅ Claimed +{reward} WTC ({current_count}/{daily_limit}){X}")
-
-                if limit > 0 and current_count >= limit:
-                    print(f"{Y}⚠️  Daily limit reached for {network}{X}")
-                    break
-
-                random_delay(2, 4)
-
-        print(f"\n{G}✅ Done processing all networks.{X}")
 
 # ============================================================
-# MENU HANDLERS
+#  MENU
 # ============================================================
-bot = None
+def menu():
+    cfg = get_config()
+    init_disp = "belum diset"
+    if cfg and cfg.get("initData"):
+        raw = cfg["initData"]
+        init_disp = raw[:30] + "..." if len(raw) > 30 else raw
 
-def set_init_data():
-    global bot
-    clear_screen()
-    print_header()
-    print(f"\n{Y}🔑 SET INIT DATA{X}")
-    print(f"{C}{'='*50}{X}")
-    init_data = input(f"{G}Paste init_data (from WebApp): {X}").strip()
-    if not init_data:
-        print(f"{R}❌ init_data cannot be empty.{X}")
-        time.sleep(2)
-        return
-    config = load_config() or {}
-    config["init_data"] = init_data
-    save_config(config)
-    bot = NewTubeBot(init_data=init_data)
-    print(f"{G}✅ Saved. New fingerprint: {bot.fingerprint[:16]}...{X}")
-    time.sleep(1.5)
+    buf = ""
+    buf += fg(51) + "╔══════════════════════════════════════════════════════════════╗" + RESET + "\n"
+    buf += box_line(gradient("NEWTUBE TON MENU", 51, 213))
+    buf += box_divider()
+    buf += box_line(fg(51) + "  initData : " + RESET + fg(226) + init_disp + RESET)
+    buf += box_divider()
+    buf += box_line(fg(46)  + "  [1] " + RESET + fg(252) + "Start Farming" + RESET)
+    buf += box_line(fg(213) + "  [2] " + RESET + fg(252) + "Config initData" + RESET)
+    buf += box_line(fg(196) + "  [0] " + RESET + fg(252) + "Exit" + RESET)
+    buf += fg(51) + "╚══════════════════════════════════════════════════════════════╝" + RESET + "\n\n"
+    buf += fg(51) + "  Pilih >> " + RESET
 
-def start_auto_watch():
-    global bot
-    clear_screen()
-    print_header()
-    if not bot or not bot.init_data:
-        print(f"{R}❌ No init_data yet. Use menu 2 first.{X}")
-        time.sleep(2)
-        return
-    print(f"{G}🚀 Starting auto-watch...{X}")
-    bot.watch_all()
-    input(f"\n{C}Press Enter to return...{X}")
+    sys.stdout.write(buf)
+    sys.stdout.flush()
 
-def check_balance():
-    global bot
-    clear_screen()
-    print_header()
-    if not bot or not bot.init_data:
-        print(f"{R}❌ No init_data yet. Use menu 2 first.{X}")
-        time.sleep(2)
-        return
-    try:
-        profile = bot.get_profile()
-        user = profile.get("user", {}) or {}
-        print(f"{G}👤 User: {user.get('telegramUsername', 'N/A')}{X}")
-        print(f"{G}💰 WTC Balance: {user.get('wtcBalance', 0)}{X}")
-        print(f"{G}📈 Lifetime Earned: {user.get('lifetimeWtcEarned', 0)}{X}")
-        print(f"{G}📺 Ads Watched Today: {user.get('adsWatchedToday', 0)}{X}")
-        print(f"{G}📊 Lifetime Ads: {user.get('lifetimeAdsWatched', 0)}{X}")
-        print(f"{G}🤝 Valid Referrals: {user.get('validReferralCount', 0)}{X}")
-    except Exception as e:
-        print(f"{R}❌ Failed to fetch: {e}{X}")
-    input(f"\n{C}Press Enter to return...{X}")
+
+def action_config_initdata():
+    cfg = get_config() or {"initData": ""}
+    sys.stdout.write("\n" + fg(213) + "  initData baru (query_id=...) : " + RESET)
+    sys.stdout.flush()
+    val = sys.stdin.readline().strip()
+    if val:
+        # clean
+        val = val.strip()
+        val = ''.join(c for c in val if ord(c) >= 32 or c in '\n\r\t')
+        val = val.replace('\n', '').replace('\r', '').replace('\t', '')
+        val = re.sub(r'^initData\s*[:=]\s*', '', val)
+        if val.startswith('"') and val.endswith('"'):
+            val = val[1:-1]
+        if val.startswith("'") and val.endswith("'"):
+            val = val[1:-1]
+        cfg["initData"] = val
+        save_config(cfg)
+        sys.stdout.write(fg(46) + f"  ✓ initData disimpan ({len(val)} karakter)\n" + RESET)
+    else:
+        sys.stdout.write(fg(196) + "  ✖ kosong, tidak disimpan\n" + RESET)
+    sys.stdout.flush()
+    human_pause(500, 900)
+
 
 # ============================================================
-# MAIN
+#  MAIN LOOP
 # ============================================================
 def main():
-    global bot
-    config = load_config()
-    if config and config.get("init_data"):
-        bot = NewTubeBot(init_data=config["init_data"])
-        print(f"{G}🔑 Config loaded. Fingerprint: {bot.fingerprint[:16]}...{X}")
-        time.sleep(1)
-    else:
-        bot = None
-
+    first = True
     while True:
-        clear_screen()
-        print_header()
-        print(MENU)
-        status = "🟢 Ready" if bot and bot.init_data else "🔴 No init_data"
-        print(f"{DIM}Status: {status}{X}")
-        if bot:
-            print(f"{DIM}Fingerprint: {bot.fingerprint[:16]}...{X}")
+        clear()
+        if first:
+            sys.stdout.write("\n")
+            first = False
+        menu()
+        opt = sys.stdin.readline().strip()
 
-        choice = input(f"\n{CYAN}Pick menu » {X}").strip()
+        if opt == '1':
+            cfg = get_config()
+            if not cfg or not cfg.get("initData"):
+                clear()
+                sys.stdout.write(fg(196) + "\n  ✖ Config initData belum diset. Set dulu (menu 2).\n" + RESET)
+                sys.stdout.write(fg(250) + "  Tekan Enter..." + RESET)
+                sys.stdout.flush()
+                input()
+                continue
+            bot = NewTubeBot(cfg["initData"])
+            bot.run_all()
 
-        if choice == "1":
-            start_auto_watch()
-        elif choice == "2":
-            set_init_data()
-        elif choice == "3":
-            check_balance()
-        elif choice == "0":
-            print(f"\n{R}❌ Bye.{X}")
+        elif opt == '2':
+            action_config_initdata()
+
+        elif opt == '0':
+            clear()
+            sys.stdout.write(fg(213) + "\n  bye boss 👋\n\n" + RESET)
+            sys.stdout.flush()
             sys.exit(0)
+
         else:
-            print(f"{R}❌ Invalid choice.{X}")
-            time.sleep(1)
+            sys.stdout.write(fg(196) + "\n  ✖ Pilihan gak valid.\n" + RESET)
+            sys.stdout.flush()
+            human_pause(600, 1000)
+
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print(f"\n{Y}⏹ Stopped by user.{X}")
+        sys.stdout.write(fg(196) + "\n\n  ✖ Dihentikan\n" + RESET)
         sys.exit(0)
-
+    except Exception as e:
+        sys.stdout.write(fg(196) + f"\n  ✖ Fatal: {e}\n" + RESET)
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
