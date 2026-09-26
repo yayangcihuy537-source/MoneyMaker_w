@@ -44,14 +44,14 @@
           "runner": "python3"
         },
         "9": {
-          "label": "Coming Soon 🔒",
+          "label": "PandaFaucet 🔴",
           "file": "comingsoon.php",
           "runner": "php"
         },
         "10": {
-          "label": "Coming Soon 🔒",
-          "file": "comingsoon.php",
-          "runner": "php"
+          "label": "CryptoCrops 🟢",
+          "file": "cc.py",
+          "runner": "python3"
         },
         "11": {
           "label": "Coming Soon 🔒",
