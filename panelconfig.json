@@ -29,7 +29,7 @@
           "runner": "python3"
         },
         "6": {
-          "label": "EarnSolana 🔴",
+          "label": "freeflarcrypto 🟢",
           "file": "solono.php",
           "runner": "php"
         },
@@ -44,6 +44,16 @@
           "runner": "python3"
         },
         "9": {
+          "label": "Coming Soon 🔒",
+          "file": "comingsoon.php",
+          "runner": "php"
+        },
+        "10": {
+          "label": "Coming Soon 🔒",
+          "file": "comingsoon.php",
+          "runner": "php"
+        },
+        "11": {
           "label": "Coming Soon 🔒",
           "file": "comingsoon.php",
           "runner": "php"
@@ -246,6 +256,16 @@
         "22": {
           "label": "TReward 🟢",
           "file": "tr.py",
+          "runner": "python3"
+        },
+        "23": {
+          "label": "NewTube 🟢",
+          "file": "newtube.py",
+          "runner": "python3"
+        },
+        "24": {
+          "label": "AxionetBot 🟢",
+          "file": "Axionetbot.py",
           "runner": "python3"
         }
       }
