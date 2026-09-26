@@ -1,20 +1,498 @@
-# farm2.py - 30 layer protected version
-# Runtime-compatible with Termux/Python 3.x. Original program is reconstructed in memory only.
-import base64
-import hashlib
-import zlib
+import time
+import json
+import os
+import sys
+import requests
+from datetime import datetime
 
-_LAYERS = 30
-_DATA = '^^8`~N`)#T`1|4P@3n+F2c^gr$+b}vgsGo;P7Cnac#Zt9Drd8^DJOM4sZp_EN^Q5x(*TXEmse7a>*RC+ZiuH%9&~js1!(E<vldO>fyO8slK2yq$LX`;#QLX;Q9C?pzP^xRs!~?R>`-BB#acaOu|s6&X8n=N9lW6yDZ;(erAW@*r+)N*d2;1qx8-c;8kHyu1s@Q)as+QkhNJgE)RdL;b|OQi(TSEXg!uvs4~b5Lo6Gs>%d}MBvm}%BoX@K|W5B3L`9&1K;l5BqX84%FqpE2y@40MT$-E|nH|7hPBGPkTsJSz=6EfqQd(edF2^vYGgh7?=<%57N@@ze^(%slN3xvk6rW56k{e5Yln*22A7qtd@Ri57mRFX|*scDITCGWFN`O0}lCa&_$w)kT0O2`SDEqESdat5yX1gSs3GZb=-c}7|}T{+UwaI0(R2X@eKx#TtpB;t`KPtl>PFwn@KjyDJB8?kv3LyQ^69^QT;b(Sht$A42pVAIn01t4=Sv^!STy}4EDCZ@P(=e*aNA&MX*<t}9)+ojJkN5EAlRy%p7+KR8kIJGOs=P!((by}LB4?6MQ9Ef(-fI;RC4P4i3BN?p3`&9@7b%K7KDKaCftDMX^a+GmR<tt|aQ36Z7x!x(?sK^8M0UrU@T8fR6x|FWb$v|5ZVLA0a4Os<?alpFBTX5Rj;?R+1Dx{O|WYJP~Cq3!>0`aQ&?Oj6Hzyn>!czPtrx0<0qK<ZsN41Xhux|xMjaYiz|i_-{20|7K?p7nioiZztl$cEDf*beTF0!Ey7kL_1|Tl+{wSf6Bqoujp{BWN(+8HsDCYm21~367K&{fvU_nW7-FF0#_f+RM;sE2yL6NJAn*^x#hlwG+&?>A8?zn-eUch2x`p`h|(~=ai&>puHYE>gPh>a~DBsq=q=-;!rLX|5G_(C=lYc|3MCbP~x%!fA8~+O@IE9c1p)L$ltF^fP|UApSqldlDE2U0ZBu_FP*~K*(VcLHy*bCk(4A!GJz}n2ZG3c%JSwF-XcE!owBfEB8~iK5WID85yXz??@<mR$CS?c=+Z$2O-xYC^=##(?vr<uD*l7s3?-$-SL`~{9SO%P#^iqQv`N$4ouOnEvV(f}g*k{t++K;EbTK9Oddr9Iy!J|lc1ycMAanw;HhssPZVW2GCLXWq1#Iu|PW}bue?T<^6(pujasr#I=&WRyyq#uSqIJgVwSiz!i2Vu&vyWno2)nlFehc#o8G+2cWT8hC0&sk;Hnda82Y+ww3Q2$I!w_a8>q9}Qx2xl8Rc|r9d%AXKXFk;c;008%C^Izk%=4qhH69rN0PoF3^INJFG*xg!y|KYrRLY_u=)k)|_?PB&5jZ1}g2RgeE$(Dxpi(DQA5WkI!Kb-%RVKS(V27!+6XDuK=>u2-b6vxGZ40&qGb9@N61r=if1)(?k6TcD`pcJf!?TN)K7y@_sb7>(#fz?qNfESo0#4#H_xbP6b%ZvqtKFUHSJvM!-8-^E;B<w)oF~$P;Bm#%v!jL>rh_*?W4}SjBlC!kN%N0I2qXTI!khY-A<l<DxXQWK^vU14i9gfJXL=KX#c5p^(}(+~qr~<*qVy@Yyp3|+71jfrbX~=P=L`d*c=At8xPYvXZ15*5oEshC^BhZ5coJ3-nrB0~DV*J(!XF&21t%oy3b!hc7oC6|i1;1q*AqG79@`-;VDwGv{(67c#zw2r6V3NBM`!Z<7cJ}*x`c>(pU~v=+2uL~8;8CLOx-&{X8^lazWkuQr#H9iIhXuRiz697-SwYrA$5H)Lu@K6QH{Lw17MtIvug{hbg!0kGz5+k^RJx%^A|_=`dkNMT=$Aafs>@7BPFY`$q20-4@H-XHxySemVH-sG~hNlkvIAZ(>1MOcp!NTO_Utg0F;IYF8!N%iqhQvU0BG>HrF2m9qudBpcU)dyx%b$YxqCupc=X=ej7L4>i55u?q)-)qzZ&1oBdo*0z@ME1l!N}H36)G&pNBESC=G2kb<=&O5%&zGmqV-ITPtb@PU_7XU!#A7tTDGfsN~)vPXtht(IqMw37&H_Kn5_0~IX35#0*6&kA<AW%wLgb*iAc8`{If)4LYoYO=!yPECcFJJEjWoFl3a`KV~Et!_S$rg;c)7>fleXUp}<C&l*tPnKWrk{b6MvJy6VgF7R=iNxn!fR)=&Ujd5@lz;%mSY%j)(={`|R^4RUro^nzD-j;VuSAb5`iywVjMD<vc_SA_Ei*3g+W|!#j0-c)991kOk@^j4(Qbf?z6-&CUOTcLG=p|-YA}}wU`d6Gkswd32<v_^#e-)glgP(9So0T+ajSV_oR?loToJxZ1;3(0RQ91#1s1Tm-~dKI{`PIBq+JEbo<n0eC0Y3B$-s}wR?}ya#V;lA?xNg<XhL|&`<CDlV`=RFSuw|t4Vh)JP>qo#1HiyhYcmV@m$_eDxI5GtD7TC}{YU;05b<dI@agO-dmppEM1_Si$r4u+ofE9kfNcj7ekjle#c=tB5}nle=aw%{%~nN#wyyA=$F<Z#vdJhlz>1V-7paKWA!{m->{CML=xeWNHc--E+<Gj+#TrOL?bOL8wu~Z+V(3-k=PV;?#chwfJKPI|<(fa$truYUMZoFQWjN@5*B69?bJsv|*O!#lsY1%0nM337Ee<M=i4DwkmGaGCdd#qx`okcR2wK5$y5Qob%{UBD@3(_e`0>1^+z_<MOGAM>+yQr6*5Way+Tj~+<sja<!#MD76H>n?bz$GYw;9!V&rg@#cx22_e7@rNTWP1rB#~|Lx6P`TRO6^8+~Uz%p1H4hic)BIErM=cC_r}l76_ggxq-eX4$8@A>`lYO^hA^;^ubHh<Rgy&19Vzxe@;&B);16<6sJ%1V@Nt!YR^6#J}YMpdNjdWPUqK?D}y98$<y;ru5k1Y4;<*0k-tL(2jh*)JA#?gu{)vM{W`p}F;80XMA#I3>KOu06x&iQl<Px~e4BGu{s#c4KFGEwC74?$KsUi#Vg%dzoQQVyuEzGPQg)>)e#Q~?V^yvwr8HOR5o>yrvzVO!l*24kMA})b&P@dbIn|$-0su!$a7je?-clEl$1g*BlsKu)ZPa<IcNZU}O?Y@sl_eZmuowT#4${40%$nb#N1MAbeLHvCX2V)lqT|}Hnr)Pgz@<CU?>Ys&e0;sK8|dp8=tH!<j#bC@l&_S2=%=otT$p+)z7(1UHq3mpjUU0~Q#d|F7u`3&p42qL2tG}*s?b&xzsFI7>`1h#ND(A8AY()=eY^$Huo=;>y5@G4&g0P^+<JlG<^G=DAta3zQj<-hf^)3=(DU^g9&;D97Pe#Zl~~W^Q?mju?}xM;01ej6dUFKZF=1sPX-BdFmpu>Sh)&TAVlGyJk2wAdAGsGeG{1N_j*fM5!-3?H3=t3GgX+Z+`(wl!KZ3WyNL_)6jY@*RvwKi2A1|dlh(9qA6NVKLv%^Ysv~561dGY2IzZl&W=v8oVrv~I@g%Y`9jT$roG%l~uyQT4+$AE-t?U4Z6P8~63f)|ZGok<3By`-`_O0_QIUP4S#{)$0u209h-PYh$2S(}rKcjgY{2l$Qo@j2k1l<nr(B%Gv!llzT~1X6(buAOE1<?EoG(wwrX=3?nO0=rDYN3rAB9USKkb3|RT6HTg56u(Jvb2Sb;1)Q3FPjCPT1l@Iqesu;wS$8ku#y=kY;>mM#Lsw&}i;1x+Gu%9fDC=`xsxphV)cgw4(*#fXV2tZ(4!kX$2}0Wxz@-@I)e$f)-W@|vPq!JEEeXy5Pk1*zAOW&4A{u0Ct~726un3f&OpPzSu3wZCR-DmLuyIFIx~@qxnT_xAKliek@6%$oqj_X#zD?<vM_+!xOL1V~)d!<fHwD~Prp1*nsZbyHi7`G`VFx~}I#63(FldGO&}1CJfxiP-neBb4Vj_Arv_qrdeR{(%j|xi8!hAYgcNV52>66WT+pbFvTasIuk4L*$OQ&2o&QOwo1B);-w?xi!I8nbU1(KLE^^|D{G7Y;*V$&Hkt&hBbj858(DSHOd<Pphm&3%IxPfV?`y&)08Lx=P_+GiMvDedy#D_y>?(w&J=s0kP)-~2|PfbewZ0E>(ZVN}ggJj|vFv~2=okFBNhHz__jxey9o-r-VX*Pzmhj}=85dh#20mnM8m)=jy#x(-lEL=o}$A&=Y$K|h2eSXV`TNK|-Hpv)~vi$TcD!S@&VF9|^IrF>D$EJUrfQrv~M1&h$lMPlSnHi!@l$)$jL@n;Jg!rQH{Wq}_Wr%y`_7RrQFdw0gEHNHh2;LIn%;jq5CzL%$NV508r2Z2Rpn>MVnHSAIJO~9H~p9yB?-)qbn_zPM8e`oz7aEYgY+rrVAs!9z{pRX3U0zOT7I*3q^43c6!@RgG3w85u6PJwy(n#)x%b;QwzTxg{55zEDzuYVj|{&A+?zmWmDxvCv39+Jh`o+kA?gUi&8o!@fiLAp`u>r2MludLrzfmPjT&>=cZDv*V5A;|=(Ex?2L(7Ohqp&r79Jf2PpAsuXFQU*gzCPpX8<T0HhuZ(wt2@Yhi%QIvHXJhJd@UufZLHU2uO53B!x_c0m{s1{f+!c}>TlueeZC;49<@HcoM5Z!7I`P}o({>*$AEP%|ep323;`ou}f5W4`-W<X{(O0c(st=z^|10JbRVOF^<H72SZQ9V-<#RiS-{`bSHb)uF3J-#+ighu+9n;U@aRAYZ(?wK_-#A^!vhK)+4lJCt4xg-f3ELu&jW2`XNE6Bnc{cF|;(zvv>+YLJi7H=Oe~d=l?A81%DTX~rW62@iCK?m<u~`?!+>~XiK~%qrx_aV}mECnY9H+Wa<1%xP48X1orc@#{D_%sleS;MJIG|qs9_}nl)|l-$Bv5sG>G%jP#aa*Th^zO5%n{cGf@p7GM2$&$n_j+}0pADwthPY2*8%GIJ5vn@crbJ0_pEK#8m<j(8iNcGH0ViXSyxxR`|7VZOSs|afAA-Ac=XJswIL(yYP^$BVKlO<6Rl&@db{_PI>)mT85X`2e95JGQ-NCulx}a3<RLk>+aVaR^vK6)rccw59gm`?e0eVa59f8g<RRqVF6tF`GsIwLZTn`iDMj)%@slZ!ZqL4&S*kCaeGi$GD|10^)Vvw<7^ni!lN_YAO%!&B*{Od09puG-ff*n@TuM`1f-5Zcs*W4SFcQFx0~p)u5ZnXxOq2%R20qEqoOHJ&Ow2|Y4&D!$*JN^es-QjTyXYR^Yq^V2O;mzWh&o7~NU^nZ=s$46X94gC69U1v!I5Q5MR(pjR3M1zozVoGj0Ighn*M-mqF1Ffii9uvgbjyl{!3edvFa-liKT^RAPa4e?1$$}+``ba&2rNd>eK=)-4fEz1?wrVrP&|2mdWg$@&NeV=rN-pgF1ylow%`;o2_{pV-3x&qQY16v%MT%1~fg`ldafg9`y5kAG1H5>nPtb+n#|D>m#g>#(oES0Ct3Us>^2#=1xg!=Y^&lOhZDaKtPb#o!HIPCGq9=3s=R>n*pq_snF3N$6|kUGhV3OHi36#1xz}VNPVS4;r7=5q{cz#f|7{i^&wr&-ze2I)-u9*A2g6k%-I-W+M07^&$J9I5%*8JbB@U~YYED|ufAeRgtQ@)=Ocz_jI%(YMQaDBF%KyR#*&mBy2$s(@H8jb+Vv+(;?P<JU-IOm)nZ<TU>|?*^llrbxR=;@CkQm}NYj}dw0%1syK`0-1Xwz$8^4DI9SoS(p-HWsB1mvnozZ8**-z2(4qpqoR;)_CZW7+Z)R??s;w9vV7@qLXv=FrA#PQ}<<m^1na_b|RzTuTp%80q)%GuN^?}h0-i}sb)uV75!f@D=Z^=eW>46Z4!wAp0rCK)eSAcjSKb2y9_!eiBD(f+z5&N8T`f)fnvwagfg<vU5{@qx)8q(6Zi{I~pSeLqvHI7Z!3*}6nx=!++An%zrpkDHODV8ITAxqiN8IKDOT)Ed+ISzSg~rnS*7&(T=DGhVMUkl-<0&v$+i{&b|#n=I7<laWWiz|%`qZcJ$WPlzr+0ZBC%um|B$GF0>#B!cPo+Y>Z=(gzlDxl>Q{$J4CH=@2N_{l^i_g|s3Mlp#>b&_c5ZKG6u;S4m*ar_W(9ncwGgo#$|Mv|u(n&36ufbzz;NYdxy7(su92#js1p#*rva?^vlZLaeu!MMWdflJ^E!wnVYn@iA}3&=gTpSp?KEFcS<K1|Jyx(frrzCA2d&hq0!6s2}SBrO&XTF{+sMeV2_<B9&IAR7ozz6vt9&>s*m5Np4E7W)N%|iY~F=25oT8v(nEc!ltBubNOu_yHoP?rAtaFnUd*1w2_2@t!p2(exn7@bCBthvs?mtZg(BW6?WsU_J&gA3(*lS2KlBb`!t1iP4n>1vrf)3`=D>z(qfPzNrUL4snRqG3xZoj&+xF6PLX^ts(^?QV@R^8eKMwEhi`F{GlcL(^OXje)yB=wSdVh-0KNx)Clh(QO_YpMLEC<=LCd@-px#4A7A@)yFiqfWJ`dRiJ-`mU{cAfj3CUw1{RvUt07`<a#=P11uszu|kJ+oN@Z?@XQE*M*<W`x`lr4kK=Nn}U=W)=q?e4m5-gb)AwTcyGUn)kK0=s{VOOe4rJzpIj9{@i>1XPG_FV^yQ2`gy_b|WLkKA~W9o@0HC%|)&6b4?=Ck?`oWiQ@wV_lc88qzKko-;KR`NbyGAO`B9)PF>JlFvq)s9jD23r6GL!ij@Xarq+VvJF_r~8#L=56#OdVi9pnY#KtSb;Qi=%z2fv41^s=$`T%L%{E`q!9ALQ{lQa_jUFd4L`v4t4%D_t${xd}e8lZUZx!U&%%!D?~`$(bqSx+DlUZuDy9k`8We9d?(lVHl6xsulMn3GQ>be1REc^?9lK%(?&YuLM63W3>Z5yz$aKFUCof}D#kmM^#a+HV)gSQxh0ZhFerT;#8TwZPCDne_3Qa@42!_)X~+ZnVTzr`{HpTl<Qt3Mb!jH*rGWjTUo!26!D)I?#qUd$z0UA)ql?h#Re)1gXXfdC23Q1tyK?G8J}@t6082%0&>f8nW~Gyzp;pt^8;tfsw85_o{M2d_wmxn&awh!KDy@#aM?*m-B<EO^wrJ_byWu=}|4|>z|4wUD|mT=UO$zxZfQnlc}Ph-4mFR<7ivk_W8)qfk#L5pa9k50K%Q|S-k-o5#`C4FW@zP7levrmFoQMJ}<(_aJ_rMU9#zfW7(W48Cp$>Eu7OL+^Xbi-G7zAx#BMEGXTHr-t^SKs9<ZlkqmDE3nI-TzTwCf)hkv&h0@+@QeF&G=fu%GyAEmG0HJj$@hC;m0Hqcox?=adgoGz8@WUI2b<l)VsvrWK)|z7(T@8Dx%*wbMYy;=5^u|7mj9Eqz7ihw0K=Sc#R&<UWH4_8HXEE*_Q2I2}{eF`0T`JLLCh{azMiNLkUfEzc!*At9F<nJZv2Pn=mP}$mW4JWrWxG)=^+oR?OZ%j$n+h93UTzy`Bj#6|QJtU+3i0Z>k=1mQoRw9wWZj8GVQPZ8m}kW>NGO`wFkE~X`%!PoL_dT&in*8xvbM6vkEADXz|f*py<%Vt@<q}OhLTGg^SWr%MSNXiO$O+6C^9#&_DxYNheyHT0jZUH8Mc7>!9n@xoVis;mJ(q9>1ZZ;GKhUXn``$&Rp^@vYta5Dqr-ibs+nxkp8+g|vy>g)z36Z#=L!1$+*3diU!!Xb!K(1wwNHw+6%r<=@5(rEr29+S=z62v&a?pXR=<H;*@&rbFsxeotX(DJ1Y2@^#rxn0DD2ovHc;2+i?@N94DbklYs1tecliH}v4KJ?ahYMxpkhJ`25`}NdL8iue#g*9sn0Y6Ow90!8AWKlxyIN)Y(c}Ka6u%_8V6Gu6rYDN-g8kT6i<-@kZ(EHD-0MWqqTl)=CM^lq_a>$r##s9!QG0XB3YB?iw$DZvCfuVtS3=!mcRBmmbpUPwRAI_+)p_xy#7BvQB4Lu2>pdmx|4$tlnE-`vEd6xh<1I>AU_T|4EpV`r_UJBPn;Aq)u~fxf0h0sR7Nj^q?tyT-j>+TnJyQOOyl<$9M0!<%l46UdOi?XxPh+UWn_IJ5$!1rMRE1(`AZZ4DuZ6mOnD6G4{lyuxGoW$#NVq8@*3+Mj{Pl*%1-Ib1yW8pvD`-AQ&k4Nd2gJuIefb+vZ79;EM#KXH#wxJS~hymA#4Sy2`1T{?%^@-Xpy6XkkOLz7Y%_Li%<d8r9Yic57{=!xM(7WZK}v>AMTO3WjOV@6y-m@A~6@;_~k0-sLMPnHco)}Q{iR18-V-@VbvW?$|Vz3Te*F^UB{)6rGt1dW4-x%+#&7hM}?Su@r;<4oq-o{hy?W(7~9d_K(ZujKIX2gAgEBVko3p$6M;RP`WXa|Q+!2|7yL)fSpF0xbHhI={7Cn)*{odYA?p~~4mlX!L<|_aPlD`wBe3ztm=)v)_G(uY^Z}t>?rI5vsQo{GuWY%RW3sJt`wHL)HrfeZJpjglI2VTOb1WiI;QOxy*wUzSzmdAm5fqpE{aw8==vcO~%jT_NF>!?a&;p}fSFCVUUf}`*&5%oBr?S>`MXsM#BB41^ZB+NDF!Kyp^OongvVk34ScB-L+PlM1WG1kO%qvNgNFuA6Aotl@%7}5^ZNr1vX#kcZ7EA;NG!jvQR+M;TWgb1`Z902lJ^|4S$&S`I{my^KZ9EwXwIva@LX_hBjOQ7D7BVaelJH2{Da#%QfUhu-c9cl7;?F0f!W41*s1n{y{7qg|g#N@fqdfa|<=^;E9b<|Mqn@&U*Sj@rG%=*=AqgV=kYv&eBrp?YV%9WL2rIH>s7~m=)$zp_la}oEy{qo-F)8$2h1vyc=})>mDo5pu5F+CJ-NyHQyZ1$`D{PPmO~JlNwlaSTliD0}0skkprlwHnS?<^s>jK%do|@swi4g>Lp~b_I>yH}HK7IS4ONQ;;Vn*O2Y6f*`p7O7m%;aO*U`FT-m{cb^qJ_{Yi<~MzP{=+40GJ%Os2<<u)1}c6)8g(-$PckEG<gap;X+%ZAd5HUw=Q&{wrMZzm8ChiNeYNn6|*cDM1+*R{?mES1S%~Cp`P1cPMjTN(HnxQ@jh_7tXI%wNNfN<8-pU<G+=zoWMcU^j?rXhtP^Vk^#~9VJy9^g4!unVpiG|3$<ExmbRMSyYGGxrE;hJzT=-eP9)IdcVicu6o&opiVf<Q31q-v81Ce97?bBHO%lBKz`3{A7lM;m+(STWIjZO?3IY*s7E68HzmY^`x1~LIjRkfvq9nacPz8lZ@=eZmauI6j-cJ3&f*GZ#fHJW|SRg2*u8lj$%M?5OGOFEHZR({Mecd+#OhnC3%{Ak5KF;JcZN42y+GXUYrR}wl63|A_ZW&O<4juvE{u{x_mtD<4`-5u%W86!cv_FkSzG&t}CMbF}q<s`)QtKjJz%T)2Ab$ABv-<vp>8;B!{FOj4QT)Y;eNy!-W(9gTCbW_Md7C|(*^K*Qb@r~^Dl3RJGBla7S()tD9<MTpt1pQSs)5eAB=W+$PJy_zx%>9%woyV}SaaRf2fX!Y=A#}V{y?+e;z+bySP0fL@KtX_Tkg~pe=Ln$k864&~s;Eaz_Z{S-y1_JE19bRt6-zPt4}c#ZnP}9z-rMn0-MF~QObGX@ZVXwQl%Id@&S0L6l;Hzp0fWj=zYB`hUWbLur5YrW4_$aHJ<hgC@puMioADaSx4fwfA6Iwli29Upmn^Tjmi1ilKFRPxKi2Js%=U%~yAr9YIlniXSih2^ak%eav=dRNB-ziV8~v{s(@(MO#kBD{`|^J1*yRXXijEEwEzIc5Mp`YU0|BTFrxX{qo)F2ael=Pl_hr^<ljN#RFx=j|G|CB4WRAZd^gZ2y98yas!qnp>$2$%6<py+<_T>n7n~4r>YewrUOuw^`9<3nRKbytoPhri9EfJf0u%0cTgb-^c(k`)<n?LP2$Y#FTeJclCvexu{AcyCC%+2PSUCbm=4}4eMZx>;wiz@rVSJpPr7M68{dUDFjd4l@i03NZ6X+FW;z+=ZyBcE}XJtgUR1GyIyffYO==Y3AWju;?{o}qkr7B4lpe9+j%J3lQwfT}#~_b3LE#CMP1uO^!L^lg(6gr&cfI?Y@u<jPh2peQm$In>_d70Ea{RP)@_-2eS`pZnrH%^pbVzX&y$QQO_VLM>Na37%rmmEKn=NuPxvzp>3@%+om1@Lv2F!@3yeFvdZb8^?8Lz`}>XOT0~MaEla~y-gqDVRdK*B5>IcI9iEMiJ4F&US+*p+DpPV<>UChuMBk^w83uPoqx>*sbUks;N2Pn+I#dmX*?_NV%t?53#h;tGV`N=T=QXoPqW-2z2qj@2EHp)SDXFy0W`u=25yrhjHxjp0VTA%G!D5KQThz}vnn@OKKhpIUCZ8|`~fOa646Sd5?|gKGODDc8+hkAm#c@%mKI+JccmSGG3dgB$DdsSlTKA%^j7U6hl?cnVep!Rh1iT-OGh6+ogIbH%-ikbuX<d;u{_c(!u@LYj(!LqsXSa_WZ=^3OeZyW9@PrTCDBY*up?JC_y2b1*immLlwp;J8>xKPJSW|#z#wgHrx2S^BpD?VcAofgpk@3?v8nce()g703YU{<lV8x&K%qporU5ibF~jV_#PxtD!{8nXMHKl8IXWeEykZ}I9$S}My%ynZ+m^&BrStbKfLo<gAVG*;5!z>=e;4G%4BIvTmXSfbp@H{VjH^W2*9k^>a8c%crzRQM6xkc>SMl|bdx}S<kxc4+K;!~x*7>{zhXlJFa|Op%?oDI^+xyX9rY>c!zQFv@o9rv*?qlb=o@uTETB}^%&taP0hT0d&GR!VN<F+06C_>c}$H1BPFJu9uyy(ICvZ0Czz@H_Ho*)+I$rB-_ban|79ymYG&#t8VTk!b7(QeI6+3WI<<bJ+oWU?wT1-%KAzx}9)aV@@*=?DbS^i<ZIm%?DLOw4AbR}9{Pcr5^26`!6f;I_X!6ff(t<Z$!#O&q;U^<!tY1jR)mx<=5h+iJk?$M~SsLx5Fa$PKb@1nabS+Y|{~=P;SF1NY!u_r0|~+@$ijF^nR}CI@UBQXF4nl3In_Rp0hnxU!Vz0?axwoK1)2*P{~cmh#(q=x%e4N2_V+wp3D)%leh;8$Au7NueG*16Yhdy?0V`ptDF5zI+I~;Xx~Ab+j%2@Z5Y19ZB@=Zh10iv~F)Za10*k{>vzFmsSZwdhkIDHG?@Sk<Z0534CBxc0#dK*YGt#%`^g>hw)-^ok!q213HNHIiz;K-s(%S)1OiMWjc5U{2!<{+AvS=dqW)z<ICwW(qr8`&*uZq4POa<>o^mDV$rxjx<dvJzE^jDU)-j=_9J*6+gkkDJrdEEDTmTg;b?4L`n~#dBm=3d@!)lEx(d&nJt8)9o8_n|_*R%mOftIK25gT4Q4we*az<6?osomh_Ih2{G<ycbZH;a-#@6M78}<`NTi_C?1-K&0n!$pY2~ydcELK~6b;H><4++w-RixAdt^<NjhJrdD2kN3O4cvwKkZvVbcqFNVbKE^EBl5-x6@2ZpHNQNeW`BQg?Sq4ulrq^3{|it*@6S|g$z6Zj0p5WhzJ_FK{|1FQ$ekdpg{pcF5f(*H0g~Hz+xtFuLM*(vstOD#jX_YxQ`%W{*-!PJHjF<ro2uX8_y3}lh0NruyGE<cMTnxPz)ts6n;D`;;W&-b)nnm2@3Ix|f0km8mmLSUL?~fxmI`BzvPmQCPV#Xhc;~|YT=!&`*^T<%dOMH)T))M-M&)Un8v)KXxVIYRLDR7lYBs{x#}s6PX$TpS^|0HV-O+UD5_=g*LD!}dJ^H47;AOh9d`x4TW)zreJ)&vq_=E;L4Rx>W(n2jnSJV(nyib7}E?#}z4piQ#dYmYm?QZch_=H}z!0}>PP;{i9MATl7Zv!Z!Tu!a~*2#WBrZ7R|j{NZn!dRiys(<p1j1d7n;Tr4r{Kf?U`#w7pP62mPtwlh^XxNh!11>OY3q>EEomdV{e)*A6w8CEW4Z{-Ix<96?W)Xo&1L>Xn!}VUngtj#4z(%UU*YNL}L#5i0!`C4kIQNjtiUyfT+b9L9*TQiB_)~&(s|gFVA+V#%s;ZKrX>c>CXt(;p0IUf7Yt>dqk2t~B!yzNmK#Aq1`-7Ehb<e(FnOfH<E13CY6|&$b@M^`#H9hy@?bd71w^SD#^<lUqFF-7Mm?V-{t?E8pBP`2}?YcZ5?;FMJ2eT;=r&k@UP-(T}z=$I`hHdXrWP?GCr^p<fu9WU3i|T>q>KR;|FjD5r;HnGVSN%b71ly1)Ymu`ZXZ?-ddgoMfg@tL&#+gnSlM=QV4Z+D+^=I9Fi+Q3n(gYijh%ObU3&R`o'
+CONFIG_FILE = "config.json"
+CURRENT_TOKEN = None
+CONFIG = {}
+BASE_URL = ""
+FARM_FP = ""
+DEVICE_ID = ""
+INIT_DATA = ""
 
-def _decode():
-    data = _DATA.encode("ascii")
-    for i in range(_LAYERS - 1, -1, -1):
-        data = base64.b85decode(data)
-        key = hashlib.sha256(f"AHD1905-FARM2-LAYER-{i}-TERMUX".encode()).digest()
-        data = bytes(b ^ key[j % len(key)] for j, b in enumerate(data))
-        data = zlib.decompress(data)
-    return data
+# --- COLOR PALETTE ---
+C_RESET = "\033[0m"
+C_BOLD = "\033[1m"
+C_GREEN = "\033[1;32m"
+C_CYAN = "\033[1;36m"
+C_YELLOW = "\033[1;33m"
+C_RED = "\033[1;31m"
+C_PURPLE = "\033[1;35m"
+C_WHITE = "\033[1;97m"
+C_DIM = "\033[2m"
 
-exec(compile(_decode(), "farm2.py", "exec"))
+def slow_print(text, delay=0.03):
+    for char in text:
+        sys.stdout.write(char)
+        sys.stdout.flush()
+        time.sleep(delay)
+    print()
 
+def get_network_info():
+    try:
+        res = requests.get("https://ipapi.co/json/", timeout=5)
+        if res.status_code == 200:
+            data = res.json()
+            ip = data.get("ip", "Unknown")
+            isp = data.get("org", "Unknown ISP")
+            city = data.get("city", "Unknown City")
+            region = data.get("region", "Unknown Region")
+            lokasi = f"{city}, {region}"
+            return ip, isp, lokasi
+    except Exception:
+        pass
+    return "127.0.0.1", "Local Network", "Indonesia"
+
+def display_banner():
+    ip, isp, lokasi = get_network_info()
+    current_time = datetime.now().strftime("%d %B %Y | %H:%M:%S WIB")
+
+    print(f"{C_CYAN}╔════════════════════════════════════════╗{C_RESET}")
+    print(f"{C_CYAN}║{C_RESET} {C_CYAN}{C_BOLD} ____  _   _ ____  ____ ___ _____ ____  {C_RESET}{C_CYAN}║{C_RESET}")
+    print(f"{C_CYAN}║{C_RESET} {C_CYAN}{C_BOLD}| __ )| | | |  _ \\|  _ \\_ _| ____/ ___| {C_RESET}{C_CYAN}║{C_RESET}")
+    print(f"{C_CYAN}║{C_RESET} {C_CYAN}{C_BOLD}|  _ \\| | | | | | | | | | ||  _| \\___ \\ {C_RESET}{C_CYAN}║{C_RESET}")
+    print(f"{C_CYAN}║{C_RESET} {C_CYAN}{C_BOLD}| |_) | |_| | |_| | |_| | || |___ ___) |{C_RESET}{C_CYAN}║{C_RESET}")
+    print(f"{C_CYAN}║{C_RESET} {C_CYAN}{C_BOLD}|____/ \\___/|____/|____/___|_____|____/  {C_RESET}{C_CYAN}║{C_RESET}")
+    print(f"{C_CYAN}╠════════════════════════════════════════╣{C_RESET}")
+    print(f"{C_CYAN}║{C_RESET} {C_YELLOW}AHD1905 ● SCRIPTYXSOUU ● MONEYMAKER    {C_RESET}{C_CYAN}║{C_RESET}")
+    print(f"{C_CYAN}║{C_RESET} {C_WHITE}IP  : {ip[:30].ljust(30)}{C_RESET} {C_CYAN}║{C_RESET}")
+    print(f"{C_CYAN}║{C_RESET} {C_WHITE}ISP : {isp[:30].ljust(30)}{C_RESET} {C_CYAN}║{C_RESET}")
+    print(f"{C_CYAN}║{C_RESET} {C_WHITE}Lokasi: {lokasi[:28].ljust(28)}{C_RESET} {C_CYAN}║{C_RESET}")
+    print(f"{C_CYAN}║{C_RESET} {C_WHITE}Waktu : {current_time[:28].ljust(28)}{C_RESET} {C_CYAN}║{C_RESET}")
+    print(f"{C_CYAN}╚════════════════════════════════════════╝{C_RESET}\n")
+
+def print_header(username, usdt, water):
+    print(f"{C_CYAN}╔════════════════════════════════════════╗{C_RESET}")
+    print(f"{C_CYAN}║{C_RESET} {C_YELLOW}👤 User     :{C_RESET} {username.ljust(24)} {C_CYAN}║{C_RESET}")
+    print(f"{C_CYAN}║{C_RESET} {C_GREEN}💰 Saldo    :{C_RESET} {f'{usdt} USDT'.ljust(24)} {C_CYAN}║{C_RESET}")
+    print(f"{C_CYAN}║{C_RESET} {C_CYAN}💧 Air Kebun:{C_RESET} {water.ljust(24)} {C_CYAN}║{C_RESET}")
+    print(f"{C_CYAN}╚════════════════════════════════════════╝{C_RESET}")
+    print(f" {C_YELLOW}📜 LIVE PROCESS LOGS:{C_RESET}")
+    print(f"{C_DIM}──────────────────────────────────────────{C_RESET}")
+
+def custom_log(msg, username, usdt, water, duration=3):
+    lower_msg = msg.lower()
+    prefix = "✨ "
+    color = C_WHITE
+    
+    if "water" in lower_msg or "air" in lower_msg or "menyiram" in lower_msg or "💧" in lower_msg:
+        prefix = "💧 "
+        color = C_CYAN
+    elif "corn" in lower_msg or "tanaman" in lower_msg or "plant" in lower_msg or "tanam" in lower_msg or "jagung" in lower_msg or "🌱" in lower_msg:
+        prefix = "🌽 "
+        color = C_YELLOW
+    elif "harvest" in lower_msg or "panen" in lower_msg or "🌿" in lower_msg:
+        prefix = "🌾 "
+        color = C_GREEN
+    elif "ads" in lower_msg or "iklan" in lower_msg or "reward" in lower_msg or "📺" in lower_msg:
+        prefix = "📺 "
+        color = C_PURPLE
+    elif "error" in lower_msg or "gagal" in lower_msg or "❌" in lower_msg:
+        prefix = "❌ "
+        color = C_RED
+    elif "auth" in lower_msg or "token" in lower_msg or "🔑" in lower_msg:
+        prefix = "🔑 "
+        color = C_YELLOW
+        
+    clean_msg = msg.replace("💧", "").replace("🌱", "").replace("🌿", "").replace("✨", "").replace("❌", "").replace("🔑", "").replace("🎉", "").strip()
+    final_msg = f"{prefix}{clean_msg}"
+    
+    if len(final_msg) > 40:
+        final_msg = final_msg[:37] + "..."
+        
+    print(f"{C_GREEN}╔════════════════════════════════════════╗{C_RESET}")
+    print(f"{C_GREEN}║{C_RESET} {color}{final_msg.ljust(38)}{C_RESET} {C_GREEN}║{C_RESET}")
+    print(f"{C_GREEN}╚════════════════════════════════════════╝{C_RESET}")
+    
+    time.sleep(duration)
+    
+    # Hapus persis 3 baris log task di bawah
+    sys.stdout.write("\033[3A\033[J")
+
+def idle_countdown(seconds, username, usdt, water):
+    clock_emojis = ["🕛", "🕐", "🕑", "🕒", "肆", "🕔", "🕕", "🕖", "🕗", "🕘", "🕙", "🕚"]
+    
+    # Cetak kerangka frame idle sekali di awal
+    print(f"{C_GREEN}╔════════════════════════════════════════╗{C_RESET}")
+    print(f"{C_GREEN}║{C_RESET} \033[38;5;255m⏳ [IDLE] Istirahat... Sisa: 05:00     {C_RESET} {C_GREEN}║{C_RESET}")
+    print(f"{C_GREEN}╚════════════════════════════════════════╝{C_RESET}")
+    
+    for remaining in range(seconds, 0, -1):
+        mins, secs = divmod(remaining, 60)
+        time_format = f"{mins:02d}:{secs:02d}"
+        clock_icon = clock_emojis[remaining % len(clock_emojis)]
+        
+        # Geser kursor ke atas tepat 3 baris untuk menimpa teks sisa waktu tanpa berkedip
+        sys.stdout.write("\033[3A")
+        print(f"{C_GREEN}╔════════════════════════════════════════╗{C_RESET}")
+        print(f"{C_GREEN}║{C_RESET} {C_WHITE}{clock_icon} [IDLE] Istirahat... Sisa: {time_format}     {C_RESET} {C_GREEN}║{C_RESET}")
+        print(f"{C_GREEN}╚════════════════════════════════════════╝{C_RESET}")
+        time.sleep(1)
+        
+    # Bersihkan frame idle setelah selesai
+    sys.stdout.write("\033[3A\033[J")
+
+def isi_data():
+    os.system("clear" if os.name == "posix" else "cls")
+    display_banner()
+    print(f"{C_CYAN}┌────────────────────────────────────────┐{C_RESET}")
+    print(f"{C_CYAN}│{C_RESET} {C_YELLOW}      SETUP AKUN FARM BUDDIES BOT       {C_RESET}{C_CYAN}│{C_RESET}")
+    print(f"{C_CYAN}└────────────────────────────────────────┘{C_RESET}\n")
+    
+    init_data = input(f"{C_WHITE}➜ Masukkan Telegram init_data: {C_RESET}").strip()
+    device_id = input(f"{C_WHITE}➜ Masukkan deviceId: {C_RESET}").strip()
+    fingerprint = input(f"{C_WHITE}➜ Masukkan fingerprint: {C_RESET}").strip()
+
+    config_data = {
+        "init_data": init_data,
+        "device_id": device_id,
+        "fingerprint": fingerprint,
+        "base_url": "https://farm-buddies-api.htmmo2025.workers.dev/api"
+    }
+
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(config_data, f, indent=4)
+    
+    print(f"\n{C_GREEN}✅ Konfigurasi berhasil disimpan!{C_RESET}")
+    time.sleep(2)
+
+def get_headers():
+    return {
+        "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36",
+        "Content-Type": "application/json",
+        "Accept": "*/*",
+        "Origin": "https://farm-buddies.pages.dev",
+        "Referer": "https://farm-buddies.pages.dev/",
+        "authorization": f"Bearer {CURRENT_TOKEN}",
+        "x-farm-fp": FARM_FP
+    }
+
+def authenticate(username="Unknown", usdt="0.00", water="0/10"):
+    global CURRENT_TOKEN
+    auth_url = f"{BASE_URL}/auth/telegram"
+    payload = {
+        "initData": INIT_DATA,
+        "deviceId": DEVICE_ID,
+        "fingerprint": FARM_FP
+    }
+    try:
+        custom_log("[AUTH] Mengautentikasi ulang...", username, usdt, water, duration=2)
+        res = requests.post(auth_url, headers={"Content-Type": "application/json"}, json=payload, timeout=15)
+        if res.status_code == 200:
+            data = res.json()
+            if data.get("ok"):
+                CURRENT_TOKEN = data.get("token")
+                custom_log("[AUTH] Berhasil dapat Token baru!", username, usdt, water, duration=2)
+                return True
+        custom_log(f"[AUTH] Gagal autentikasi. Status: {res.status_code}", username, usdt, water, duration=2)
+    except Exception as e:
+        custom_log(f"[AUTH] Error: {e}", username, usdt, water, duration=2)
+    return False
+
+def make_request(method, endpoint, json_payload=None, username="Unknown", usdt="0.00", water="0/10"):
+    global CURRENT_TOKEN
+    if not CURRENT_TOKEN:
+        if not authenticate(username, usdt, water):
+            return None
+
+    url = f"{BASE_URL}{endpoint}"
+    try:
+        if method.lower() == "get":
+            res = requests.get(url, headers=get_headers(), timeout=15)
+        elif method.lower() == "post":
+            res = requests.post(url, headers=get_headers(), json=json_payload, timeout=15)
+        else:
+            return None
+
+        if res.status_code == 401:
+            custom_log("[AUTH] Token kedaluwarsa. Memperbarui...", username, usdt, water, duration=2)
+            if authenticate(username, usdt, water):
+                if method.lower() == "get":
+                    res = requests.get(url, headers=get_headers(), timeout=15)
+                elif method.lower() == "post":
+                    res = requests.post(url, headers=get_headers(), json=json_payload, timeout=15)
+            else:
+                return None
+        return res
+    except Exception as e:
+        custom_log(f"Request error: {e}", username, usdt, water, duration=2)
+        return None
+
+def fetch_bootstrap():
+    res = make_request("get", "/user/bootstrap")
+    if res and res.status_code == 200:
+        data = res.json()
+        if data.get("ok"):
+            profile = data.get("profile", {})
+            farm = data.get("farm", {})
+            username = profile.get("username", "Unknown")
+            usdt = str(profile.get("usdt", "0.00"))
+            water = f"{farm.get('water')}/{farm.get('waterMax')}"
+            return data, username, usdt, water
+    return None, "Unknown", "0.00", "0/10"
+
+def get_best_crop(bootstrap_data):
+    try:
+        crops = bootstrap_data.get("farm", {}).get("crops", [])
+        unlocked_crops = [c for c in crops if not c.get("locked", True)]
+        if unlocked_crops:
+            best_crop = max(unlocked_crops, key=lambda x: x.get("payout", 0))
+            return best_crop.get("id", "corn")
+    except Exception:
+        pass
+    return "corn"
+
+def process_plant_action(plot_idx, bootstrap_data, username, usdt, water):
+    best_crop = get_best_crop(bootstrap_data)
+    payload = {"idx": plot_idx, "crop": best_crop}
+    res = make_request("post", "/farm/plant", payload, username, usdt, water)
+    if res and res.status_code == 200 and res.json().get("ok"):
+        custom_log(f"[PLANT] Tanam {best_crop.upper()} di Plot [{plot_idx}]!", username, usdt, water, duration=3)
+        return True
+    return False
+
+def process_water_action(bootstrap_data, username, usdt, water):
+    farm_info = bootstrap_data.get("farm", {})
+    plots = farm_info.get("plots", [])
+    current_water = farm_info.get("water", 0)
+
+    if current_water <= 0:
+        return False
+
+    for plot in plots:
+        idx = plot.get("idx")
+        state = plot.get("state")
+        watered = plot.get("watered", False)
+
+        if state in ["growing", "ready"] and not watered:
+            custom_log(f"[WATER] Plot [{idx}] belum disiram...", username, usdt, water, duration=2)
+            res = make_request("post", "/farm/water", {"idx": idx}, username, usdt, water)
+            if res and res.status_code == 200 and res.json().get("ok"):
+                custom_log(f"[WATER] Sukses siram Plot [{idx}]!", username, usdt, water, duration=3)
+                return True
+    return False
+
+def process_farm_ads_flow(username, usdt, water):
+    res_session = make_request("post", "/ads/farm/session", {"ref": "water"}, username, usdt, water)
+    if not res_session:
+        return False
+    if res_session.status_code == 409:
+        return "COOLDOWN"
+    if res_session.status_code != 200:
+        return False
+
+    data_session = res_session.json()
+    if not data_session.get("ok"):
+        return False
+
+    session_id = data_session.get("sessionId")
+    min_watch = data_session.get("minWatchSec", 6)
+    custom_log(f"[REFILL] Nonton iklan air ({min_watch} dtk)...", username, usdt, water, duration=min_watch)
+
+    complete_payload = {"sessionId": session_id, "ref": "water", "provider": "adsgram", "clicked": True, "adsgramClicked": False}
+    res_complete = make_request("post", "/ads/farm/complete", complete_payload, username, usdt, water)
+    if res_complete and res_complete.status_code == 200 and res_complete.json().get("ok"):
+        custom_log("[REFILL] Air kebun terisi penuh!", username, usdt, water, duration=3)
+        return True
+    return False
+
+def process_harvest_flow(plot_idx, username, usdt, water):
+    res_session = make_request("post", "/ads/harvest/session", {"idx": plot_idx}, username, usdt, water)
+    if not res_session:
+        return False
+    if res_session.status_code == 409:
+        return "COOLDOWN"
+    if res_session.status_code != 200:
+        return False
+
+    data_session = res_session.json()
+    if not data_session.get("ok"):
+        return False
+
+    session_id = data_session.get("sessionId")
+    min_watch = data_session.get("minWatchSec", 8)
+    custom_log(f"[HARVEST] Nonton iklan Plot [{plot_idx}] ({min_watch} dtk)...", username, usdt, water, duration=min_watch)
+
+    complete_payload = {"sessionId": session_id, "provider": "adsgram", "clicked": True, "adsgramClicked": False}
+    res_complete = make_request("post", "/ads/harvest/complete", complete_payload, username, usdt, water)
+    if res_complete and res_complete.status_code == 200 and res_complete.json().get("ok"):
+        custom_log(f"[HARVEST] Panen Plot [{plot_idx}] sukses!", username, usdt, water, duration=3)
+        return True
+    return False
+
+def process_ad_flow(task_id, task_title, username, usdt, water):
+    res_session = make_request("post", f"/ads/task/{task_id}/session", {"slotIndex": -1}, username, usdt, water)
+    if not res_session:
+        return False
+    if res_session.status_code == 409:
+        return "COOLDOWN"
+    if res_session.status_code != 200:
+        return False
+
+    data_session = res_session.json()
+    if not data_session.get("ok"):
+        return False
+
+    session_id = data_session.get("sessionId")
+    min_watch = data_session.get("minWatchSec", 8)
+    custom_log(f"[TASK] Nonton [{task_title}] ({min_watch} dtk)...", username, usdt, water, duration=min_watch)
+
+    complete_payload = {
+        "sessionId": session_id,
+        "slotIndex": data_session.get("slotIndex", 0),
+        "provider": data_session.get("provider", "adsgram"),
+        "clicked": True,
+        "adsgramClicked": False
+    }
+    res_complete = make_request("post", f"/ads/task/{task_id}/complete", complete_payload, username, usdt, water)
+    if res_complete and res_complete.status_code == 200 and res_complete.json().get("ok"):
+        custom_log(f"[TASK] Sukses klaim [{task_title}]!", username, usdt, water, duration=3)
+        return True
+    return False
+
+def run_smart_scanner(bootstrap_data, username, usdt, water):
+    if not bootstrap_data:
+        return False
+
+    farm_info = bootstrap_data.get("farm", {})
+    plots = farm_info.get("plots", [])
+
+    for plot in plots:
+        idx = plot.get("idx")
+        if plot.get("state") == "empty" and not plot.get("locked", False):
+            if process_plant_action(idx, bootstrap_data, username, usdt, water):
+                return True
+
+    if process_water_action(bootstrap_data, username, usdt, water):
+        return True
+
+    if farm_info.get("water", 0) == 0:
+        res = process_farm_ads_flow(username, usdt, water)
+        if res is True:
+            return True
+        elif res == "COOLDOWN":
+            time.sleep(2)
+
+    for plot in plots:
+        idx = plot.get("idx")
+        if plot.get("state") == "ready" and plot.get("adsDone", 0) < plot.get("adsNeeded", 0):
+            res = process_harvest_flow(idx, username, usdt, water)
+            if res is True:
+                return True
+            elif res == "COOLDOWN":
+                time.sleep(2)
+
+    tasks_data = bootstrap_data.get("tasks", [])
+    ad_tasks = [t for t in tasks_data if t.get("type") == "ad"] if isinstance(tasks_data, list) else []
+
+    all_ads_limit_reached = all(t.get("progress", 0) >= t.get("target", 20) for t in ad_tasks) if ad_tasks else True
+
+    if all_ads_limit_reached:
+        return False
+
+    for task in ad_tasks:
+        task_id = task.get("id")
+        title = task.get("title", "Ad Task")
+        target = task.get("target", 20)
+        progress = task.get("progress", 0)
+
+        if progress >= target:
+            continue
+
+        result = process_ad_flow(task_id, title, username, usdt, water)
+        if result is True:
+            return True
+        elif result == "COOLDOWN":
+            time.sleep(2)
+            continue
+
+    return False
+
+def run_bot():
+    global BASE_URL, FARM_FP, DEVICE_ID, INIT_DATA
+    BASE_URL = CONFIG.get("base_url", "https://farm-buddies-api.htmmo2025.workers.dev/api")
+    FARM_FP = CONFIG.get("fingerprint", "")
+    DEVICE_ID = CONFIG.get("device_id", "")
+    INIT_DATA = CONFIG.get("init_data", "")
+
+    bootstrap_data, username, usdt, water = fetch_bootstrap()
+    if not authenticate(username, usdt, water):
+        return
+
+    # Clear layar SEKALI SAJA di awal agar banner tetap di atas secara permanen
+    os.system("clear" if os.name == "posix" else "cls")
+    display_banner()
+    print_header(username, usdt, water)
+    
+    while True:
+        try:
+            bootstrap_data, username, usdt, water = fetch_bootstrap()
+            
+            if bootstrap_data:
+                # Perbarui info header di tempatnya tanpa kedip
+                sys.stdout.write("\033[6A")
+                print_header(username, usdt, water)
+                
+                success_action = run_smart_scanner(bootstrap_data, username, usdt, water)
+                
+                if not success_action:
+                    idle_countdown(300, username, usdt, water)
+                else:
+                    time.sleep(1)
+            else:
+                custom_log("[WARNING] Gagal sync server. Coba 10 dtk...", "Unknown", "0.00", "0/10", duration=10)
+                
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            time.sleep(30)
+
+def main():
+    while True:
+        os.system("clear" if os.name == "posix" else "cls")
+        display_banner()
+        
+        slow_print(f"{C_WHITE}Sebelum menjalankan scriptnya mari kita berdoa kepada TUHAN YANG MAHA ESA agar di beri rezeki lebih untuk mencukupi kebutuhan sehari-hari dan beramal{C_RESET}", 0.015)
+        slow_print(f"{C_YELLOW}#SAVEPALESTINE{C_RESET}\n", 0.02)
+        
+        print(f"{C_CYAN}Panel Menu :{C_RESET}")
+        print(f"{C_CYAN}1.{C_RESET} Jalankan Bot 🚀")
+        print(f"{C_CYAN}2.{C_RESET} Config 📋")
+        print(f"{C_CYAN}3.{C_RESET} Hapus 🧹")
+        print(f"{C_CYAN}0.{C_RESET} Exit 🚪\n")
+        
+        pilihan = input(f"{C_WHITE}Pilih menu ➜ {C_RESET}").strip()
+        
+        if pilihan == "1":
+            if os.path.exists(CONFIG_FILE):
+                with open(CONFIG_FILE, "r") as f:
+                    global CONFIG
+                    CONFIG = json.load(f)
+                run_bot()
+            else:
+                print(f"\n{C_RED}❌ Data belum diisi! Pilih menu 2 dulu.{C_RESET}")
+                time.sleep(2)
+        elif pilihan == "2":
+            isi_data()
+        elif pilihan == "3":
+            if os.path.exists(CONFIG_FILE):
+                os.remove(CONFIG_FILE)
+                print(f"\n{C_GREEN}✅ Data berhasil dihapus!{C_RESET}")
+            else:
+                print(f"\n{C_YELLOW}⚠️ Tidak ada data untuk dihapus.{C_RESET}")
+            time.sleep(2)
+        elif pilihan == "0":
+            print(f"\n{C_CYAN}Terima kasih, selamat istirahat wak!{C_RESET}\n")
+            sys.exit(0)
+        else:
+            print(f"\n{C_RED}❌ Pilihan tidak valid!{C_RESET}")
+            time.sleep(1)
+
+if __name__ == "__main__":
+    main()
+
+
+#Created by AHD1905 
