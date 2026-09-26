@@ -35,7 +35,7 @@
         },
         "7": {
           "label": "CentPay 🟢",
-          "file": "ClaimCrypto.php",
+          "file": "ClaimCrypto.py",
           "runner": "php"
         },
         "8": {
