@@ -2,8 +2,8 @@
 
 error_reporting(0);
 date_default_timezone_set('Asia/Jakarta');
-$configFile = "c22onfig.json";
-$waryono = "coo22kies.txt";
+$configFile = "con66fig.json";
+$waryono = "cookie66s.txt";
 
 const hitam  = "\033[0;30m";
 const merah  = "\033[0;31m";
@@ -114,7 +114,7 @@ function print_task_log($type, $index, $coins, $title, $msg) {
 
 function print_empty_task_notice($username, $balance, $level, $current_exp, $seconds = 300, $prefix = "  PTC cooldown") {
     banner($username, $balance, $level, $current_exp);
-    echo "\n" . centerText("\033[1;31m⚠️ INFORMASI SISTEM: BRO SABAR, TASK KOSONG! ⚠️\033[0m") . "\n";
+    echo "\n" . centerText("\033[1;31m⚠️INFORMASI SISTEM: BRO SABAR, TASK KOSONG! ⚠️\033[0m") . "\n";
     echo centerText("--------------------------------------------------", putih) . "\n\n";
     
     $wait_time = (int)$seconds;
@@ -143,18 +143,31 @@ function print_empty_task_notice($username, $balance, $level, $current_exp, $sec
     echo "\r                                                       \r";
 }
 
-function timer_silent($seconds) {
+function timer($seconds, $prefix = "WATCHING") {
     $wait_time = (int)$seconds;
+    $tv_frames = ['📺', '📻', '📽️', '🎬'];
+    $frame_count = count($tv_frames);
+    $current_frame = 0;
+    $frame_delay = 0.1;
     while ($wait_time > 0) {
         $start_time = microtime(true);
         while ((microtime(true) - $start_time) < 1) {
-            usleep(100000);
+            $hours = floor($wait_time / 3600);
+            $minutes = floor(($wait_time % 3600) / 60);
+            $seconds_left = $wait_time % 60;
+            $time_formatted = sprintf('%02d:%02d:%02d', $hours, $minutes, $seconds_left);
+            $tv = $tv_frames[$current_frame];
+            $output = cyan . "[ " . $tv . " " . $prefix . " : " . hijau . "$time_formatted" . cyan . " " . $tv . " ]" . reset;
+            echo centerText($output) . "\r";
+            usleep($frame_delay * 1000000);
+            $current_frame = ($current_frame + 1) % $frame_count;
             if ((microtime(true) - $start_time) >= 1) {
                 break;
             }
         }
         $wait_time--;
     }
+    echo "\r                                                                  \r";
 }
 
 function device_token_init() {
@@ -609,7 +622,7 @@ banner($username, $balance, $level, $current_exp);
 	$watched = 0;
 	$task_counter = 1;
 	while (true) {
-	    timer_silent($required);
+	    timer($required, "WATCHING [".$vid."]");
 	    $watched += $required;
 	    $done = ($target > 0 && $watched >= $target);
 	    $data = http_build_query(["csrf_token_name" => $csrf_hash]);
@@ -660,7 +673,7 @@ banner($username, $balance, $level, $current_exp);
 	        sleep(2);
 	        goto youtube;
 	    }
-	    timer_silent($wait);
+	    timer($wait, "YOUTUBE PTC");
 
 	    nyaha:
 	    $bypass = cloud($apikey, $sitekey);
@@ -704,7 +717,7 @@ banner($username, $balance, $level, $current_exp);
 	$detik    = $res[2][0] ?? 0;
 	if ($url_view) {
 		$go = skibidixxx($url_view, "GET", [], $a);
-		timer_silent($detik);
+		timer($detik, "WINDOW PTC");
 		$url = host."/ptc/getCaptcha";
 		$getCaptcha = skibidixxx($url, "GET", [], $a);
 		preg_match('/name="csrf_token_name" value="([^"]+)"/', $getCaptcha, $csrf);
@@ -762,7 +775,7 @@ banner($username, $balance, $level, $current_exp);
 		$token = $csrf[1] ?? '';
 		preg_match('/var timer = (\d+);/', $xhamters, $tmr);
 		$wait = $tmr[1] ?? 0;
-		timer_silent($wait);
+		timer($wait, "IFRAME PTC");
 
 		nyawit:
 		$bypass = cloud($apikey, $sitekey);
@@ -801,7 +814,4 @@ banner($username, $balance, $level, $current_exp);
 
 
 
-
-
-
-#Created by AHD1905 
+#created AHD1905 
