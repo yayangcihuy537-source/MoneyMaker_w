@@ -34,7 +34,7 @@
           "runner": "php"
         },
         "7": {
-          "label": "ClaimCrypto 🔴",
+          "label": "CentPay 🟢",
           "file": "ClaimCrypto.php",
           "runner": "php"
         },
