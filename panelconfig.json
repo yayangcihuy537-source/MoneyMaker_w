@@ -30,8 +30,8 @@
         },
         "6": {
           "label": "freeflarcrypto 🟢",
-          "file": "solono.php",
-          "runner": "php"
+          "file": "solono.py",
+          "runner": "python3"
         },
         "7": {
           "label": "CentPay 🟢",
