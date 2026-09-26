@@ -2,8 +2,8 @@
 
 error_reporting(0);
 date_default_timezone_set('Asia/Jakarta');
-$configFile = "config.json";
-$waryono = "cookies.txt";
+$configFile = "c22onfig.json";
+$waryono = "coo22kies.txt";
 
 const hitam  = "\033[0;30m";
 const merah  = "\033[0;31m";
