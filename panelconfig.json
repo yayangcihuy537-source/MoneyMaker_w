@@ -129,9 +129,9 @@
           "runner": "php"
         },
         "16": {
-          "label": "Coming Soon 🔒",
-          "file": "comingsoon.php",
-          "runner": "php"
+          "label": "LiteBits.io 🟢",
+          "file": "LiteBits.io.py",
+          "runner": "python3"
         }
       }
     },
