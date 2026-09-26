@@ -36,7 +36,7 @@
         "7": {
           "label": "CentPay 🟢",
           "file": "ClaimCrypto.py",
-          "runner": "php"
+          "runner": "python3"
         },
         "8": {
           "label": "RapidGame 🟢",
