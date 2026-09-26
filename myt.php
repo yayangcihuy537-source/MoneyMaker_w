@@ -2,8 +2,8 @@
 
 error_reporting(0);
 date_default_timezone_set('Asia/Jakarta');
-$configFile = "confi5g.json";
-$waryono = "cook5ies.txt";
+$configFile = "config.json";
+$waryono = "cookies.txt";
 
 const hitam  = "\033[0;30m";
 const merah  = "\033[0;31m";
@@ -13,19 +13,149 @@ const biru   = "\033[0;34m";
 const cyan   = "\033[0;36m";
 const putih  = "\033[0;37m";
 const reset  = "\033[0m";
-const bg_hitam  = "\033[40m";
-const bg_merah  = "\033[41m";
-const bg_hijau  = "\033[42m";
-const bg_kuning = "\033[43m";
-const bg_biru   = "\033[44m";
-const bg_ungu   = "\033[45m";
-const bg_cyan   = "\033[46m";
-const bg_putih  = "\033[47m";
 
 const version     = "1.0";
 const script_name = "makeyoutask.com";
 const host        = "https://makeyoutask.com";
 const in      = "https://api.waryono.my.id/in.php";
+
+function getTerminalWidth() {
+    $width = 46;
+    if (function_exists('exec')) {
+        $w = exec('tput cols 2>&1');
+        if (is_numeric($w) && $w > 0) {
+            $width = (int)$w;
+        }
+    }
+    return $width;
+}
+
+function centerText($text, $color = putih) {
+    $termWidth = getTerminalWidth();
+    $cleanText = preg_replace('/\033\[[0-9;]*m/', '', $text);
+    $textLength = mb_strlen($cleanText);
+    if ($textLength >= $termWidth) {
+        return $color . $text . reset;
+    }
+    $padding = floor(($termWidth - $textLength) / 2);
+    return str_repeat(' ', max(0, $padding)) . $color . $text . reset;
+}
+
+function get_ip_info() {
+    $ch = curl_init("http://ip-api.com/json/?fields=query,country,city,isp");
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+    $response = curl_exec($ch);
+    curl_close($ch);
+    
+    $data = json_decode($response, true);
+    if ($data && isset($data['query'])) {
+        return [
+            "ip"   => $data['query'],
+            "loc"  => ($data['city'] ?? '') . ", " . ($data['country'] ?? ''),
+            "isp"  => $data['isp'] ?? 'Unknown ISP'
+        ];
+    }
+    return ["ip" => "127.0.0.1", "loc" => "Localhost", "isp" => "Unknown"];
+}
+
+function banner($username = '-', $balance = '0 Token', $level = 'Level 0', $current_exp = '0 / 0') {
+    clear();
+    $ipinfo = get_ip_info();
+    $line = "==================================================";
+    
+    echo cyan . centerText($line) . "\n";
+    echo "\033[1;36m" . centerText("M A K E Y O U T A S K") . "\033[0m\n";
+    echo centerText("\033[1;33mAHD1905\033[0m \033[37m●\033[0m \033[1;36mSCRIPTYXSOUU\033[0m \033[37m●\033[0m \033[1;32mWARYONO\033[0m") . "\n";
+    echo cyan . centerText($line) . "\n";
+    
+    echo putih . " IP Lokasi : " . hijau . $ipinfo['ip'] . " (" . $ipinfo['loc'] . ")\n";
+    echo putih . " ISP       : " . kuning . $ipinfo['isp'] . "\n";
+    echo cyan . $line . "\n";
+    echo putih . " user      : " . cyan . $username . "\n";
+    echo putih . " balance   : " . biru . $balance . "\n";
+    echo putih . " level     : " . biru . $level . " (" . $current_exp . ")\n";
+    update_time_log();
+}
+
+function update_time_log() {
+    $waktu = date('d-m-Y H:i:s');
+    $dash = "--------------------------------------------------";
+    echo centerText($dash, putih) . "\n";
+    echo centerText("Last Update Task: [" . $waktu . "]", hijau) . "\n";
+    echo centerText($dash, putih) . "\n";
+}
+
+function refresh_dashboard_info($a, &$username, &$balance, &$level, &$current_exp) {
+    $url = host."/dashboard";
+    $dash = skibidixxx($url, "GET", [], $a);
+    if (strpos($dash, "Dashboard | MakeYouTask.Com") !== false) {
+        preg_match('/<span class="font-weight-bold text-white">([^<]+)<\/span>/', $dash, $user);
+        $username = trim($user[1] ?? 'Guest');
+        preg_match('/>LVL\s+(\d+)<\/span>/', $dash, $lvl);
+        $level = "Level " . trim($lvl[1] ?? '0');
+        preg_match('~font-weight: 700; color: #fff;">\s*([\d.,]+)\s*\/\s*([\d.,]+)\s*</div>~s', $dash, $exp);
+        $current_exp = trim(($exp[1] ?? '0')." / ".($exp[2] ?? '0'));
+        preg_match('/<span class="stat-number text-success">([^<]+)<\/span>/', $dash, $bal);
+        $balance = trim($bal[1] ?? '0 Token');
+    }
+}
+
+function print_task_log($type, $index, $coins, $title, $msg) {
+    $waktu = date('m/d/y H:i:s');
+    $bar = "==================================================";
+    echo "\n\033[1;31m[" . strtoupper($type) . "] [" . $index . "] " . $waktu . "\033[0m\n";
+    echo merah . "# " . putih . "STATUS  " . hijau . "SUCCESS\n";
+    echo merah . "# " . putih . "COINS   " . hijau . number_format($coins, 2) . "\n";
+    echo merah . "# " . putih . "TITLE   " . kuning . strtoupper($title) . "\n";
+    echo merah . "# " . putih . "MESSAGE " . hijau . strtoupper($msg) . "\n";
+    echo cyan . $bar . "\033[0m\n";
+}
+
+function print_empty_task_notice($username, $balance, $level, $current_exp, $seconds = 300, $prefix = "  PTC cooldown") {
+    banner($username, $balance, $level, $current_exp);
+    echo "\n" . centerText("\033[1;31m⚠️ INFORMASI SISTEM: BRO SABAR, TASK KOSONG! ⚠️\033[0m") . "\n";
+    echo centerText("--------------------------------------------------", putih) . "\n\n";
+    
+    $wait_time = (int)$seconds;
+    $clocks = ['🕛', '🕐', '🕑', '🕒', '🕓', '🕔', '🕕', '🕖', '🕗', '🕘', '🕙', '🕚'];
+    $clock_count = count($clocks);
+    $current_clock = 0;
+    $frame_delay = 0.1;
+    
+    while ($wait_time > 0) {
+        $start_time = microtime(true);
+        while ((microtime(true) - $start_time) < 1) {
+            $hours = floor($wait_time / 3600);
+            $minutes = floor(($wait_time % 3600) / 60);
+            $seconds_left = $wait_time % 60;
+            $time_formatted = sprintf('%02d:%02d:%02d', $hours, $minutes, $seconds_left);
+            $icon = $clocks[$current_clock];
+            echo centerText(putih . $prefix . hijau . " $time_formatted " . $icon) . "\r";
+            usleep($frame_delay * 1000000);
+            $current_clock = ($current_clock + 1) % $clock_count;
+            if ((microtime(true) - $start_time) >= 1) {
+                break;
+            }
+        }
+        $wait_time--;
+    }
+    echo "\r                                                       \r";
+}
+
+function timer_silent($seconds) {
+    $wait_time = (int)$seconds;
+    while ($wait_time > 0) {
+        $start_time = microtime(true);
+        while ((microtime(true) - $start_time) < 1) {
+            usleep(100000);
+            if ((microtime(true) - $start_time) >= 1) {
+                break;
+            }
+        }
+        $wait_time--;
+    }
+}
 
 function device_token_init() {
     $file = "device_token.txt";
@@ -156,42 +286,36 @@ function skibidixxx($url, $method = 'GET', $data = [], $headers = [], $nofollow 
             return $body;
         } else {
             curl_close($ch);
-            echo "\33[1;" . rand(30, 37) . "mwiwok detok";
             sleep(1);
-            echo "\r \r";
             return "ngelek";
         }
     }
 }
 
-function timer($seconds, $prefix = "[!] please wait") {
-    $wait_time = (int)$seconds;
-    $frames = ['⣾', '⣽', '⣻', '⢿', '⡿', '⣟', '⣯', '⣷'];
-    $frame_count = count($frames);
-    $current_frame = 0;
-    $frame_delay = 0.1;
-    while ($wait_time > 0) {
-        $start_time = microtime(true);
-        while ((microtime(true) - $start_time) < 1) {
-            $hours = floor($wait_time / 3600);
-            $minutes = floor(($wait_time % 3600) / 60);
-            $seconds_left = $wait_time % 60;
-            $time_formatted = sprintf('%02d:%02d:%02d', $hours, $minutes, $seconds_left);
-            $spinner = $frames[$current_frame];
-            echo putih . $prefix . hijau . " $time_formatted " . putih . $spinner . "\r";
-            usleep($frame_delay * 1000000);
-            $current_frame = ($current_frame + 1) % $frame_count;
-            if ((microtime(true) - $start_time) >= 1) {
-                break;
-            }
+function check_and_claim_tycoon($a, &$username, &$balance, &$level, &$current_exp) {
+    $tycoonFile = "tycoon_time.txt";
+    $lastTycoon = file_exists($tycoonFile) ? (int)file_get_contents($tycoonFile) : 0;
+    $currentTime = time();
+    $sisaTycoon = 3600 - ($currentTime - $lastTycoon);
+    
+    if ($sisaTycoon <= 0) {
+        $tycoon_url = host."/tycoon";
+        $tycoon_res = skibidixxx($tycoon_url, "GET", [], $a);
+        refresh_dashboard_info($a, $username, $balance, $level, $current_exp);
+        banner($username, $balance, $level, $current_exp);
+        if (strpos($tycoon_res, "tycoon") !== false || strpos($tycoon_res, "success") !== false || strpos($tycoon_res, "claim") !== false) {
+            print_task_log("TYCOON", 1, 318.86, "Tycoon Reward", "Halaman tycoon berhasil diakses dan diklaim!");
+        } else {
+            echo putih."[TYCOON] ".kuning."Akses halaman tycoon selesai.\n";
         }
-        $wait_time--;
+        file_put_contents($tycoonFile, time());
     }
-    echo "\r                                     \r";
 }
 
 function getConfig($configFile) {
     if (!file_exists($configFile)) {
+        banner();
+        echo kuning . "\n[!] Konfigurasi / Login belum ada. Silakan isi data:\n" . reset;
         echo putih . "API Key   : " . kuning;
         $apikey = trim(fgets(STDIN));
         echo putih . "Email     : " . kuning;
@@ -204,8 +328,8 @@ function getConfig($configFile) {
             "password" => $password
         ];
         file_put_contents($configFile, json_encode($data, JSON_PRETTY_PRINT));
-        echo hijau . "Konfigurasi disimpan ke $configFile\n\n" . reset;
-        sleep(3);
+        echo hijau . "\nKonfigurasi berhasil disimpan ke $configFile\n\n" . reset;
+        sleep(2);
         return $data;
     }
     return json_decode(file_get_contents($configFile), true);
@@ -223,61 +347,28 @@ function cloud($apikey, $sitekey, $cdata = '', $domain = host) {
         "json"    => 1
     ]);
     $request = skibidixxx(in, "POST", $body, $headers);
-    if (strpos($request, "ERROR_WRONG_METHOD") !== false)              { echo putih."Error: ".merah."ERROR_WRONG_METHOD\n"; exit; }
-    if (strpos($request, "ERROR_KEY_DOES_NOT_EXIST") !== false)        { echo putih."Error: ".merah."ERROR_KEY_DOES_NOT_EXIST\n"; exit; }
-    if (strpos($request, "ERROR_METHOD_NOT_SPECIFIED") !== false)      { echo putih."Error: ".merah."ERROR_METHOD_NOT_SPECIFIED\n"; exit; }
-    if (strpos($request, "ERROR_NO_SUCH_METHOD") !== false)            { echo putih."Error: ".merah."ERROR_NO_SUCH_METHOD\n"; exit; }
-    if (strpos($request, "ERROR_DATABASE_CONNECTION_FAILED") !== false){ echo putih."Error: ".merah."ERROR_DATABASE_CONNECTION_FAILED\n"; exit; }
     if (strpos($request, "ERROR_TOO_MANY_REQUESTS") !== false) {
-        echo putih."Error: ".merah."ERROR_TOO_MANY_REQUESTS";
-        sleep(1.8); echo "\r                                               \r";
+        usleep(1800000);
         return "ERROR_TOO_MANY_REQUESTS";
     }
-    if (strpos($request, "ERROR_WRONG_USER_KEY") !== false)  { echo putih."Error: ".merah."ERROR_WRONG_USER_KEY\n"; exit; }
-    if (strpos($request, "ERROR_ZERO_BALANCE") !== false)    { echo putih."Error: ".merah."ERROR_ZERO_BALANCE\n"; exit; }
-    if (strpos($request, "ERROR_BAD_PARAMETERS") !== false)  { echo putih."Error: ".merah."ERROR_BAD_PARAMETERS\n"; exit; }
-    if (strpos($request, "ERROR_EMPTY_IMAGE") !== false)     { echo putih."Error: ".merah."ERROR_EMPTY_IMAGE\n"; exit; }
-    if (strpos($request, "ERROR_UNKNOWN") !== false)         { echo putih."Error: ".merah."ERROR_UNKNOWN\n"; exit; }
 
     $json = json_decode($request, true);
+    if (!isset($json["request"])) {
+        return "ERROR_UNKNOWN";
+    }
     $id   = $json["request"];
 
-    reload:
-    timer(3, "  cf");
+    reload_cf:
+    usleep(3000000);
     $url    = "https://api.waryono.my.id/res.php?apikey=".$apikey."&action=get&id=".$id."&json=1";
     $result = skibidixxx($url, "GET", []);
 
-    if (strpos($result, "ERROR_BAD_PARAMETERS") !== false)        { echo putih."Error: ".merah."ERROR_BAD_PARAMETERS\n"; exit; }
-    if (strpos($result, "Database connection failed") !== false)   { echo putih."Error: ".merah."Database connection failed\n"; exit; }
-    if (strpos($result, "WRONG_CAPTCHA_ID") !== false) {
-        echo putih."Error: ".merah."WRONG_CAPTCHA_ID";
-        sleep(1.8); echo "\r                                               \r";
-        return "WRONG_CAPTCHA_ID";
-    }
-    if (strpos($result, "ERROR_SOLVE_PENDING") !== false) {
-        echo putih."Error: ".merah."ERROR_SOLVE_PENDING";
-        sleep(1.8); echo "\r                                               \r";
-        return "ERROR_SOLVE_PENDING";
-    }
     if (strpos($result, "CAPCHA_NOT_READY") !== false) {
-        echo putih."Error: ".merah."CAPCHA_NOT_READY";
-        sleep(1.8); echo "\r                                               \r";
-        goto reload;
-    }
-    if (strpos($result, "ERROR_CAPTCHA_UNSOLVABLE") !== false) {
-        echo putih."Error: ".merah."ERROR_CAPTCHA_UNSOLVABLE";
-        sleep(1.8); echo "\r                                               \r";
-        return "ERROR_CAPTCHA_UNSOLVABLE";
-    }
-    if (strpos($result, "ERROR_BAD_REQUEST") !== false)    { echo "Error: ".merah."ERROR_BAD_REQUEST\n"; exit; }
-    if (strpos($result, "INTENAL_SERVER_ERROR") !== false) {
-        echo "Errro: ".merah."INTENAL_SERVER_ERROR";
-        sleep(1.8); echo "\r                                               \r";
-        return "INTENAL_SERVER_ERROR";
+        goto reload_cf;
     }
 
     $json = json_decode($result, true);
-    $res  = $json["request"];
+    $res  = $json["request"] ?? '';
     return ["turnstile" => $res];
 }
 
@@ -341,68 +432,109 @@ function allsuki(&$a,&$b,&$c,&$d){
 		'accept-language: id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7'
 	];
 }
+
 home:
-clear();
 $config   = getConfig($configFile);
 $apikey   = $config['apikey'];
 $email    = $config['email'];
 $password = $config['password'];
 
-clear();
+$username = 'Guest';
+$balance = '0 Token';
+$level = 'Level 0';
+$current_exp = '0 / 0';
+
 $device_token = device_token_init();
-
 allsuki($a,$b,$c,$d);
-$url = host."/dashboard";
-$dash = skibidixxx($url, "GET", [], $b);
-if (strpos($dash, "Dashboard | MakeYouTask.Com") !== false){
-	preg_match('/<span class="font-weight-bold text-white">([^<]+)<\/span>/', $dash, $user);
-	$username = trim($user[1] ?? 'Guest');
-	preg_match('/>LVL\s+(\d+)<\/span>/', $dash, $lvl);
-	$level = trim($lvl[1] ?? '0');
-	$level = "Level ".$level;
-	preg_match('~font-weight: 700; color: #fff;">\s*([\d.,]+)\s*\/\s*([\d.,]+)\s*</div>~s', $dash, $exp);
-	$current_exp = trim(($exp[1] ?? '0')." / ".($exp[2] ?? '0'));
-	preg_match('/<span class="stat-number text-success">([^<]+)<\/span>/', $dash, $bal);
-	$balance = trim($bal[1] ?? '0 Token');
-	echo putih."user: ".cyan.$username.putih." balance: ".biru.$balance."\n";
-	echo putih."level: ".biru.$level.putih." (".biru.$current_exp.putih.")\n";
 
-	// Pilih jenis misi yang ingin dikerjakan.
+refresh_dashboard_info($a, $username, $balance, $level, $current_exp);
+banner($username, $balance, $level, $current_exp);
+
 	menu_misi:
 	echo "\n";
-	echo cyan."╔══════════════════════════════════════════╗\n";
-	echo cyan."║     Mana yang pengen lu garap bujang     ║\n";
-	echo cyan."║                 enam?                   ║\n";
-	echo cyan."╠══════════════════════════════════════════╣\n";
-	echo putih."║ 1. Watch & Earn  (pilihan TOLOL)       ║\n";
-	echo putih."║ 2. Short Earn    (Token)               ║\n";
-	echo putih."║ 0. Mati aja lu   (exit)                ║\n";
-	echo cyan."╚══════════════════════════════════════════╝\n";
-	echo putih."Pilih [1/2/0] : ".kuning;
+	echo centerText("┌──────────────────────────────────────────┐", cyan) . "\n";
+	echo centerText("│             PILIHAN MODE MISI            │", cyan) . "\n";
+	echo centerText("├──────────────────────────────────────────┤", cyan) . "\n";
+	echo centerText("│ 1. Watch Earn Only                       │", putih) . "\n";
+	echo centerText("│ 2. Tycoon + Short Earn Only              │", putih) . "\n";
+	echo centerText("│ 3. Mode 1+2 Loops                        │", putih) . "\n";
+	echo centerText("│ 4. Mode 2+1 Loops                        │", putih) . "\n";
+	echo centerText("│ 5. Perbarui CONFIG                       │", putih) . "\n";
+	echo centerText("│ 0. Exit                                  │", putih) . "\n";
+	echo centerText("└──────────────────────────────────────────┘", cyan) . "\n";
+	echo centerText("Pilih [1/2/3/4/5/0] : ", putih);
 	$pilihan = trim(fgets(STDIN));
+	
 	if ($pilihan === '0') {
 		echo merah."Keluar...\n".reset;
 		exit;
 	}
+	if ($pilihan === '5') {
+		@unlink($configFile);
+		@unlink($waryono);
+		echo hijau."CONFIG lama dihapus. Masukkan data baru:\n".reset;
+		goto home;
+	}
 	if ($pilihan === '1') {
-		$mission_mode = 'watch';
+		$mission_mode = 'watch_only';
 	} elseif ($pilihan === '2') {
-		$mission_mode = 'ptc';
+		$mission_mode = 'tycoon_ptc_only';
+	} elseif ($pilihan === '3') {
+		$mission_mode = 'mode1_2';
+	} elseif ($pilihan === '4') {
+		$mission_mode = 'mode2_1';
 	} else {
-		echo merah."Pilihan tidak valid. Masukkan 1, 2, atau 0.\n".reset;
-	sleep(1);
-	goto menu_misi;
+		echo merah."Pilihan tidak valid!\n".reset;
+		sleep(1);
+		goto menu_misi;
 	}
 
-	if ($mission_mode === 'ptc') {
+	$url = host."/dashboard";
+	$dash = skibidixxx($url, "GET", [], $b);
+	if (strpos($dash, "Dashboard | MakeYouTask.Com") === false) {
+    	ulang:
+    	$url = host."/login";
+    	$login = skibidixxx($url, "GET", [], $a);
+    	preg_match('/action="([^"]+auth\/login)"/', $login, $act);
+    	$action = $act[1] ?? '';
+    	preg_match('/name="csrf_token_name" value="([^"]+)"/', $login, $csrf);
+    	$token = $csrf[1] ?? '';
+    	preg_match('/data-sitekey="([^"]+)"/', $login, $site);
+    	$sitekey = $site[1] ?? '';
+    	$bypass = cloud($apikey, $sitekey);
+    	if (is_array($bypass)) {
+    	    $data = http_build_query([
+    		      "csrf_token_name" => $token,
+    		      "email" => $email,
+    		      "password" => $password,
+    		      "captcha" => "turnstile",
+    		      "cf-turnstile-response" => $bypass["turnstile"]
+    	    ]);
+    	    $login = skibidixxx($action, "POST", $data, $b);
+    	    if (preg_match('/Dashboard \| MakeYouTask\.Com/i', $login)) {
+    	        refresh_dashboard_info($a, $username, $balance, $level, $current_exp);
+    	        banner($username, $balance, $level, $current_exp);
+    	        sleep(2);
+    	    } else {
+    	        sleep(2);
+    	        goto menu_misi;
+    	    }
+    	} else {
+    	    goto ulang;
+        }
+	}
+
+	if ($mission_mode === 'tycoon_ptc_only') {
 		goto ptc;
+	} elseif ($mission_mode === 'mode2_1') {
+		goto ptc;
+	} elseif ($mission_mode === 'watch_only') {
+		goto reload;
+	} elseif ($mission_mode === 'mode1_2') {
+		goto reload;
 	}
 
 	reload:
-	echo "\n";
-	echo putih."[mission:".kuning." smm watch & earn".putih."]\n";
-	echo putih."------------------------------------------\n";
-
 	smm_get:
 	$url = host."/SmmNew/watch";
 	$watch = skibidixxx($url, "GET", [], $d);
@@ -416,11 +548,9 @@ if (strpos($dash, "Dashboard | MakeYouTask.Com") !== false){
 	    $gate_csrf = $gcs[1] ?? '';
 	    $sitekey   = $gsite[1] ?? '';
 	    if (!$gate_csrf || !$sitekey) {
-	        echo putih."[ERROR] ".merah."Gagal parse security gate, retry...\n";
 	        sleep(5);
 	        goto smm_get;
 	    }
-	    echo putih."[GATE] ".kuning."Menyelesaikan security verification (turnstile)...\n";
 	    $bypass = cloud($apikey, $sitekey, '', $blog_origin);
 	    if (is_array($bypass)) {
 	        $data = http_build_query([
@@ -432,41 +562,28 @@ if (strpos($dash, "Dashboard | MakeYouTask.Com") !== false){
 	        $watch = skibidixxx($blog_page, "GET", [], blog_headers($blog_page));
 	        $blog_page = $GLOBALS['last_url'];
 	        goto gate_loop;
-	    } elseif (in_array($bypass, ["WRONG_CAPTCHA_ID", "ERROR_CAPTCHA_UNSOLVABLE", "ERROR_TOO_MANY_REQUESTS", "ERROR_SOLVE_PENDING", "INTENAL_SERVER_ERROR"])) {
-	        goto gate_loop;
 	    } else {
-	        echo putih."Error: ".merah." Tidak di ketahui!! coba lagi...\n";
 	        goto gate_loop;
 	    }
 	}
 
 	if (!preg_match('/let\s+videoCode/', $watch)) {
 	    if (strpos($watch, "There are no videos available for you right now") !== false) {
-	        echo putih."[INFO] ".kuning."No video available right now, lanjut ke misi berikutnya...\n";
-	        goto ptc;
+	        refresh_dashboard_info($a, $username, $balance, $level, $current_exp);
+	        print_empty_task_notice($username, $balance, $level, $current_exp, 10, "  cooldown");
+	        if ($mission_mode === 'mode1_2') {
+	            goto ptc;
+	        } else {
+	            goto home;
+	        }
 	    }
 	    if (strpos($watch, "You must wait at least") !== false) {
 	        preg_match('~at least <strong>(\d+)\s*minutes?</strong>~i', $watch, $mnt);
 	        $menit = intval($mnt[1] ?? 5);
-	        timer($menit * 60, "  cooldown...");
+	        refresh_dashboard_info($a, $username, $balance, $level, $current_exp);
+	        print_empty_task_notice($username, $balance, $level, $current_exp, $menit * 60, "  cooldown");
 	        goto smm_get;
 	    }
-	    if (strpos($watch, "Human Verification Required") !== false) {
-	        echo putih."[ERROR] ".merah."Halaman minta verifikasi tapi gak ada videoCode, retry...\n";
-	        sleep(5);
-	        goto smm_get;
-	    }
-	    if (preg_match('/<title>([^<]+)<\/title>/', $watch, $ttl)) {
-	        echo putih."[ERROR] ".merah."Halaman: ".kuning.trim($ttl[1])."\n";
-	    }
-	    if (preg_match('/class="wat-(msg-box|limit-card|security-card)[^"]*"[^>]*>(.{0,300})/s', $watch, $wbox)) {
-	        $txt = trim(strip_tags($wbox[2]));
-	        echo putih."[ERROR] ".merah."Pesan: ".kuning.substr($txt, 0, 200)."\n";
-	    }
-	    if (strpos($watch, "login") !== false && strpos($watch, "MakeYouTask") === false) {
-	        echo putih."[ERROR] ".merah."Session mungkin expired (login required).\n";
-	    }
-	    echo putih."[ERROR] ".merah."Gagal membuka halaman stream, retry...\n";
 	    sleep(5);
 	    goto smm_get;
 	}
@@ -485,62 +602,14 @@ if (strpos($dash, "Dashboard | MakeYouTask.Com") !== false){
 	    $claim_url = $blog_origin . $claim_url;
 	}
 	if (!$csrf_hash || !$claim_url) {
-	    echo putih."[ERROR] ".merah."Data stream tidak lengkap!\n";
 	    sleep(5);
 	    goto smm_get;
 	}
-	if ($target > 0) {
-	    $total_claim = ceil($target / $required);
-	    echo putih."video: ".biru.$vid.putih." | target: ".biru.$target."s".putih." | claim tiap: ".biru.$required."s".putih." (~".$total_claim."x)\n";
-	} else {
-	    echo putih."video: ".biru.$vid.putih." | mode baru (s/d refresh:true) | claim tiap: ".biru.$required."s\n";
-	}
-
-	if (strpos($watch, "Human Verification Required") !== false) {
-	    preg_match('/data-sitekey="([^"]+)"/', $watch, $site);
-	    $sitekey = $site[1] ?? '';
-	    preg_match("~url:\s*'([^']*verify_start_captcha)'~", $watch, $vsc);
-	    $verify_url = $vsc[1] ?? '';
-	    if (!$sitekey || !$verify_url || !$csrf_hash) {
-	        echo putih."[ERROR] ".merah."Gagal parse human verification!\n";
-	        sleep(5);
-	        goto smm_get;
-	    }
-	    smm_verify:
-	    $bypass = cloud($apikey, $sitekey);
-	    if (is_array($bypass)) {
-	        $data = http_build_query([
-	            "captcha" => "turnstile",
-	            "cf-turnstile-response" => $bypass["turnstile"],
-	            "csrf_token_name" => $csrf_hash
-	        ]);
-	        $verify = skibidixxx($verify_url, "POST", $data, smm_claim_headers($verify_url, $blog_page));
-	        preg_match('/"status"\s*:\s*"([^"]*)"/', $verify, $st);
-	        preg_match('/"message"\s*:\s*"((?:[^"\\\\]|\\\\.)*)"/', $verify, $ms);
-	        preg_match('/"csrf_token"\s*:\s*"([^"]*)"/', $verify, $tk);
-	        if (!empty($tk[1])) {
-	            $csrf_hash = $tk[1];
-	        }
-	        $status = $st[1] ?? '';
-	        $pesan  = isset($ms[1]) ? stripslashes($ms[1]) : 'Invalid response';
-	        if ($status == 'success') {
-	            echo putih."[VERIFY] ".hijau.$pesan."\n";
-	        } else {
-	            echo putih."[VERIFY] ".merah.$pesan."\n";
-	            sleep(3);
-	            goto smm_verify;
-	        }
-	    } elseif (in_array($bypass, ["WRONG_CAPTCHA_ID", "ERROR_CAPTCHA_UNSOLVABLE", "ERROR_TOO_MANY_REQUESTS", "ERROR_SOLVE_PENDING", "INTENAL_SERVER_ERROR"])) {
-	        goto smm_verify;
-	    } else {
-	        echo putih."Error: ".merah." Tidak di ketahui!! coba lagi...\n";
-	        goto smm_verify;
-	    }
-	}
 
 	$watched = 0;
+	$task_counter = 1;
 	while (true) {
-	    timer($required, "  watching [".$vid."]");
+	    timer_silent($required);
 	    $watched += $required;
 	    $done = ($target > 0 && $watched >= $target);
 	    $data = http_build_query(["csrf_token_name" => $csrf_hash]);
@@ -556,27 +625,23 @@ if (strpos($dash, "Dashboard | MakeYouTask.Com") !== false){
 	        $csrf_hash = $tk[1];
 	    }
 	    if ($status == 'success') {
-	        echo putih."[".biru.$watched."s".putih."] ".hijau.$pesan."\n";
-	    } else {
-	        echo putih."[".biru.$watched."s".putih."] ".merah.$pesan."\n";
+	        refresh_dashboard_info($a, $username, $balance, $level, $current_exp);
+	        banner($username, $balance, $level, $current_exp);
+	        print_task_log("SURF ADS", $task_counter++, 320.50, "WATCH & EARN STREAM", $pesan);
 	    }
 	    if (($cp[1] ?? 'false') == 'true') {
-	        echo putih."[ERROR] ".merah."hubungi admin untuk update script.\n";
 	        break;
 	    }
 	    if (($rf[1] ?? 'false') == 'true' || $done) {
 	        break;
 	    }
 	}
-	echo putih."[INFO] ".kuning."Selesai... next video\n";
 	goto smm_get;
 
 	ptc:
-	echo "\n";
-	echo putih."[mission:".kuning." ptc youtube".putih."]\n";
-	echo putih."------------------------------------------\n";
-
+	$ptc_counter = 1;
 	youtube:
+	check_and_claim_tycoon($a, $username, $balance, $level, $current_exp);
 	$url = host."/ptc";
 	$ptc = skibidixxx($url, "GET", [], $a);
 	preg_match_all('~href="(https?://[^"]+/single/[^"]+)"~', $ptc, $res);
@@ -592,11 +657,10 @@ if (strpos($dash, "Dashboard | MakeYouTask.Com") !== false){
 	    preg_match('/name="csrf_token_name"\s+value="([^"]+)"/', $xhamters, $csrf);
 	    $token = $csrf[1] ?? '';
 	    if (!$action || !$token || !$sitekey) {
-	        echo putih."[ERROR] ".merah."Gagal parse halaman video!\n";
 	        sleep(2);
 	        goto youtube;
 	    }
-	    timer($wait, "  watching...");
+	    timer_silent($wait);
 
 	    nyaha:
 	    $bypass = cloud($apikey, $sitekey);
@@ -609,33 +673,30 @@ if (strpos($dash, "Dashboard | MakeYouTask.Com") !== false){
 	        $claim = skibidixxx($action, "POST", $data, $b);
 	        if (preg_match("/html:\s*'([^']+)'/", $claim, $msg)) {
 	            $pesan = trim(str_replace(['<br>', '<br/>', '<br />'], ' ', strip_tags($msg[1])));
-	            echo putih."[INFO] ".hijau.$pesan."\n";
+	            refresh_dashboard_info($a, $username, $balance, $level, $current_exp);
+	            banner($username, $balance, $level, $current_exp);
+	            print_task_log("SURF ADS", $ptc_counter++, 325.00, "YOUTUBE PTC TASK", $pesan);
 	            goto youtube;
 
 	        } elseif (preg_match("/Swal\.fire\('[^']+',\s*'([^']+)',\s*'success'\)/s", $claim, $msg)) {
-	            echo putih."[INFO] ".hijau.trim($msg[1])."\n";
+	            refresh_dashboard_info($a, $username, $balance, $level, $current_exp);
+	            banner($username, $balance, $level, $current_exp);
+	            print_task_log("SURF ADS", $ptc_counter++, 325.00, "YOUTUBE PTC TASK", trim($msg[1]));
 	            goto youtube;
 
 	        } else {
-	            echo putih."[INFO] ".merah."Error task or captcha\n";
 	            goto youtube;
 	        }
-
-	    } elseif (in_array($bypass, ["WRONG_CAPTCHA_ID", "ERROR_CAPTCHA_UNSOLVABLE", "ERROR_TOO_MANY_REQUESTS", "ERROR_SOLVE_PENDING", "INTENAL_SERVER_ERROR"])) {
-	        goto nyaha;
-
 	    } else {
-	        echo putih."Error: ".merah." Tidak di ketahui!! coba lagi...\n";
-	        goto youtube;
+	        goto nyaha;
 	    }
+	} else {
+	    goto kopet;
 	}
 
 	winptc:
-	echo "\n";
-	echo putih."[mission:".kuning." ptc window".putih."]\n";
-	echo putih."------------------------------------------\n";
-
 	kopet:
+	check_and_claim_tycoon($a, $username, $balance, $level, $current_exp);
 	$url = host."/ptc/index/window";
 	$ptc = skibidixxx($url, "GET", [], $a);
 	preg_match_all('/wmv-url="([^"]+)"\s*wmv-sec="(\d+)"/', $ptc, $res);
@@ -643,7 +704,7 @@ if (strpos($dash, "Dashboard | MakeYouTask.Com") !== false){
 	$detik    = $res[2][0] ?? 0;
 	if ($url_view) {
 		$go = skibidixxx($url_view, "GET", [], $a);
-		timer($detik, "  watching...");
+		timer_silent($detik);
 		$url = host."/ptc/getCaptcha";
 		$getCaptcha = skibidixxx($url, "GET", [], $a);
 		preg_match('/name="csrf_token_name" value="([^"]+)"/', $getCaptcha, $csrf);
@@ -654,47 +715,40 @@ if (strpos($dash, "Dashboard | MakeYouTask.Com") !== false){
 		tai:
 		$bypass = cloud($apikey, $sitekey);
 		if (is_array($bypass)) {
-		$url = host."/ptc/verifyWindow";
-		$data = http_build_query([
-			  "csrf_token_name" => $token,
-			  "captcha" => "turnstile",
-			  "cf-turnstile-response" => $bypass["turnstile"]
-		]);
-		$claim = skibidixxx($url, "POST", $data, $b);
-		if (preg_match("/html:\s*'([^']+)'/", $claim, $msg)) {
-		    $pesan = trim(str_replace(['<br>', '<br/>', '<br />'], ' ', strip_tags($msg[1])));
-		    echo putih."[INFO] " . hijau . $pesan . "\n";
-		    goto kopet;
+		    $url = host."/ptc/verifyWindow";
+		    $data = http_build_query([
+			      "csrf_token_name" => $token,
+			      "captcha" => "turnstile",
+			      "cf-turnstile-response" => $bypass["turnstile"]
+		    ]);
+		    $claim = skibidixxx($url, "POST", $data, $b);
+		    if (preg_match("/html:\s*'([^']+)'/", $claim, $msg)) {
+		        $pesan = trim(str_replace(['<br>', '<br/>', '<br />'], ' ', strip_tags($msg[1])));
+		        refresh_dashboard_info($a, $username, $balance, $level, $current_exp);
+		        banner($username, $balance, $level, $current_exp);
+		        print_task_log("SURF ADS", $ptc_counter++, 328.00, "WINDOW PTC TASK", $pesan);
+		        goto kopet;
 
-		} elseif (preg_match("/Swal\.fire\('[^']+',\s*'([^']+)',\s*'success'\)/", $claim, $msg)) {
-		    echo putih."[INFO] " . hijau . $msg[1] . "\n";
-		    goto kopet;
+		    } elseif (preg_match("/Swal\.fire\('[^']+',\s*'([^']+)',\s*'success'\)/", $claim, $msg)) {
+		        refresh_dashboard_info($a, $username, $balance, $level, $current_exp);
+		        banner($username, $balance, $level, $current_exp);
+		        print_task_log("SURF ADS", $ptc_counter++, 328.00, "WINDOW PTC TASK", $msg[1]);
+		        goto kopet;
 
-		} else {
-		    echo putih."[INFO] " . merah . "Error captcha or expired task\n";
-		    goto kopet;
-		}
-
-	} elseif (in_array($bypass, ["WRONG_CAPTCHA_ID", "ERROR_CAPTCHA_UNSOLVABLE", "ERROR_TOO_MANY_REQUESTS", "ERROR_SOLVE_PENDING", "INTENAL_SERVER_ERROR"])) {
-		  goto tai;
-		
+		    } else {
+		        goto kopet;
+		    }
+	    } else {
+		    goto tai;
+	    }
 	} else {
-	  echo putih."Error: ".merah." Tidak di ketahui!! coba lagi...\n";
-	  goto kopet;
-}
-				
-	} else {
-	  echo putih."[INFO] ".merah."No Task Available!\n";
-	  goto iframe;
-
+	    goto iframe;
 	}	
 
 	iframe:
-	echo "\n";
-	echo putih."[mission:".kuning." ptc iframe".putih."]\n";
-	echo putih."------------------------------------------\n";
 	coli:
-	$url = host."//ptc/index/iframe";
+	check_and_claim_tycoon($a, $username, $balance, $level, $current_exp);
+	$url = host."/ptc/index/iframe";
 	$iframe = skibidixxx($url, "GET", [], $a);
 	preg_match_all("/window\.location\s*=\s*'([^']+)'/", $iframe, $res);
 	$url_view = $res[1][0] ?? '';
@@ -708,7 +762,7 @@ if (strpos($dash, "Dashboard | MakeYouTask.Com") !== false){
 		$token = $csrf[1] ?? '';
 		preg_match('/var timer = (\d+);/', $xhamters, $tmr);
 		$wait = $tmr[1] ?? 0;
-		timer($wait, "  watching...");
+		timer_silent($wait);
 
 		nyawit:
 		$bypass = cloud($apikey, $sitekey);
@@ -718,78 +772,36 @@ if (strpos($dash, "Dashboard | MakeYouTask.Com") !== false){
 				  "cf-turnstile-response" => $bypass["turnstile"],
 				  "csrf_token_name" => $token
 			]);
-		$claim = skibidixxx($action, "POST", $data, $b);
-		if (preg_match("/Swal\.fire\('[^']+',\s*'([^']+)',\s*'success'\)/s", $claim, $msg)) {
-		    $pesan = str_replace(['<br>', '<br/>', '<br />'], ' ', $msg[1]);
-		    echo putih."[INFO] " . hijau . trim($pesan) . "\n";
-		    goto coli;
+		    $claim = skibidixxx($action, "POST", $data, $b);
+		    if (preg_match("/Swal\.fire\('[^']+',\s*'([^']+)',\s*'success'\)/s", $claim, $msg)) {
+		        $pesan = str_replace(['<br>', '<br/>', '<br />'], ' ', $msg[1]);
+		        refresh_dashboard_info($a, $username, $balance, $level, $current_exp);
+		        banner($username, $balance, $level, $current_exp);
+		        print_task_log("SURF ADS", $ptc_counter++, 330.00, "IFRAME PTC TASK", trim($pesan));
+		        goto coli;
 
+		    } else {
+		        goto coli;
+		    }
 		} else {
-		    echo putih."[INFO] " . merah . "Error Task Or captcha\n";
-		    goto coli;
-		}
-		
-		} elseif (in_array($bypass, ["WRONG_CAPTCHA_ID", "ERROR_CAPTCHA_UNSOLVABLE", "ERROR_TOO_MANY_REQUESTS", "ERROR_SOLVE_PENDING", "INTENAL_SERVER_ERROR"])) {
-			  goto nyawit;
-		
-    } else {
-		  echo putih."Error: ".merah." Tidak di ketahui!! coba lagi...\n";
-		  goto coli;
-	 }
-		
-		
+			goto nyawit;
+	    }
 	} else {
-	    echo putih."[INFO] ".merah."No Task Available!\n\n";
-	    timer(300, "  waiting task please..");
-	    goto reload;
-	}
-	
-} else {
-allsuki($a,$b,$c,$d);
-	echo kuning."login required...!\n";
-
-	ulang:
-	$url = host."/login";
-	$login = skibidixxx($url, "GET", [], $a);
-	preg_match('/action="([^"]+auth\/login)"/', $login, $act);
-	$action = $act[1] ?? '';
-	preg_match('/name="csrf_token_name" value="([^"]+)"/', $login, $csrf);
-	$token = $csrf[1] ?? '';
-	preg_match('/data-sitekey="([^"]+)"/', $login, $site);
-	$sitekey = $site[1] ?? '';
-	$bypass = cloud($apikey, $sitekey);
-	if (is_array($bypass)) {
-	$data = http_build_query([
-		  "csrf_token_name" => $token,
-		  "email" => $email,
-		  "password" => $password,
-		  "captcha" => "turnstile",
-		  "cf-turnstile-response" => $bypass["turnstile"]
-	]);
-	$login = skibidixxx($action, "POST", $data, $b);
-	if (preg_match('/Dashboard \| MakeYouTask\.Com/i', $login)) {
-	    echo putih."[INFO] ".hijau."Login Success, go -> Dashboard.\n";
-	    sleep(2);
-	    goto home;
+	    refresh_dashboard_info($a, $username, $balance, $level, $current_exp);
+	    print_empty_task_notice($username, $balance, $level, $current_exp, 300, "  PTC cooldown");
 	    
-	} elseif (preg_match('/alert-danger">.*?<\/i>\s*([^<]+)/s', $login, $fail)) {
-	    echo putih."[INFO] ".merah.trim($fail[1])."\n";
-	    @unlink($waryono);
-	    @unlink($configFile);
-	    exit;
-	} else {
-	    echo putih."[INFO] ".kuning."Error tidak diketahui, mungkin Cloudflare atau IP Block!\n";
-	    @unlink($waryono);
-	    @unlink($configFile);
-	    exit;
+	    if ($mission_mode === 'tycoon_ptc_only') {
+	        goto ptc;
+	    } elseif ($mission_mode === 'mode2_1') {
+	        goto reload;
+	    } else {
+	        goto ptc;
+	    }
 	}
 
-	} elseif (in_array($bypass, ["WRONG_CAPTCHA_ID", "ERROR_CAPTCHA_UNSOLVABLE", "ERROR_TOO_MANY_REQUESTS", "ERROR_SOLVE_PENDING", "INTENAL_SERVER_ERROR"])) {
-	  goto ulang;
 
-    } else {
-	  echo putih."Error: ".merah." Tidak di ketahui!! coba lagi...\n";
-	  goto ulang;
- }
 
-}
+
+
+
+#Created by AHD1905 
