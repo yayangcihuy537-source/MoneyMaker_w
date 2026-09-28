@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-🥭 MANGO CASH AUTO WATCH BOT v2.0
-- Reward + limit aware (sesuai app)
-- Adsgram fix: cooldown ≤120s tunggu & retry (gak skip)
-- Skip network kalau error/limit, jangan spam
+🥭 MANGO CASH AUTO WATCH BOT v2.2
+- Reward + limit aware
+- Gagal 1x → kick dari rotasi (no retry, no spam)
 - Jeda 7s antar network
-- Auto-stop kalau semua limit harian kena
+- Auto-stop kalau semua DONE / KICKED
 """
 
 import requests
@@ -15,7 +14,6 @@ import urllib.parse
 import sys
 import os
 import json
-import random
 
 # ============================================================
 # WARNA
@@ -112,14 +110,10 @@ ORIGIN_URL = "https://mangocash.tech"
 # TUNING
 # ============================================================
 WATCH_DURATION         = 20
-DELAY_BETWEEN_NETWORKS = 7      # jeda antar network
-COOLDOWN_SHORT_MAX     = 120    # ≤ 120s → tunggu & retry
-TICKET_MAX_RETRY       = 3
-TICKET_RETRY_DELAY     = (3, 8)
+DELAY_BETWEEN_NETWORKS = 7
 
 # ============================================================
 # NETWORK MAP — MangoCash
-# { name: {reward, limit, label} }
 # ============================================================
 NETWORKS = {
     "adsgram":   {"reward": 30, "limit": 10, "label": "Adsgram"},
@@ -140,86 +134,37 @@ TAP_VALUE             = 5
 TICKET_AGING_INTERVAL = 15
 TICKET_AGING_MAX      = 180
 
-# Default bearer / apikey MangoCash (lu udah kasih)
 DEFAULT_APIKEY = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc4NTc3MjY4MCwiZXhwIjo0OTQxNDQ2MjgwLCJyb2xlIjoiYW5vbiJ9.X3wvaxDhs_ObrxK1UOPk57lyBKIh4jVEDVxfo3P98UU"
 
 
 # ============================================================
-# HELPERS — cooldown / limit detection
+# HELPERS
 # ============================================================
 def now_ms():
     return int(time.time() * 1000)
 
 
 def _norm_cooldown(cd_val):
-    """
-    Normalize cooldown dari server.
-    Server bisa balikin:
-      - epoch ms (1790578327802)
-      - epoch s  (1790578327)
-      - durasi s (90)
-      - 0
-    Return sisa detik (int >= 0).
-    """
     try:
         v = int(cd_val or 0)
     except Exception:
         return 0
     if v <= 0:
         return 0
-    if v > 10_000_000_000:        # epoch ms
+    if v > 10_000_000_000:
         return max(0, (v - now_ms()) // 1000)
-    if v > 10_000_000:            # epoch s
+    if v > 10_000_000:
         return max(0, v - int(time.time()))
-    return max(0, v)              # durasi detik
+    return max(0, v)
 
 
-def is_limit_error(err_str):
-    s = str(err_str).lower()
-    keys = ("ad_required", "no ads", "not available", "quota",
-            "limit reached", "daily limit", "exhausted",
-            "unavailable", "no ad", "habis", "batas")
-    return any(k in s for k in keys)
-
-
-def is_cooldown_error(err_str):
-    s = str(err_str).lower()
-    return ("cooldown" in s) or ("too_early" in s) or ("too early" in s) \
-           or ("try again" in s) or ("please wait" in s)
-
-
-def _issue_ticket_retry(net, max_retry=TICKET_MAX_RETRY):
-    """
-    Issue ticket dengan retry + backoff.
-    Return (ticket, err_type):
-      err_type = None       → sukses
-      err_type = 'limit'    → network abis, skip permanen
-      err_type = 'short_cd' → cooldown, masuk waiting
-      err_type = 'error'    → error lain, skip cycle ini
-    """
-    last_err = None
-    for attempt in range(1, max_retry + 1):
-        try:
-            t = issue_ticket(net)
-            if t:
-                return t, None
-            last_err = "empty ticket"
-        except Exception as e:
-            last_err = str(e)
-            if is_limit_error(last_err):
-                return None, "limit"
-        if attempt < max_retry:
-            d = random.uniform(*TICKET_RETRY_DELAY)
-            sys.stdout.write(f"\r  {Y}↻ ticket retry {attempt}/{max_retry} dalam {d:.1f}s...{RS}")
-            sys.stdout.flush()
-            time.sleep(d)
-            sys.stdout.write("\r" + " " * 55 + "\r")
-            sys.stdout.flush()
-    if last_err and is_limit_error(last_err):
-        return None, "limit"
-    if last_err and is_cooldown_error(last_err):
-        return None, "short_cd"
-    return None, "error"
+def human_wait(seconds, label="Wait"):
+    for i in range(seconds, 0, -1):
+        sys.stdout.write(f"\r  {Y}⌛ {label} {i:2d}s...{RS}   ")
+        sys.stdout.flush()
+        time.sleep(1)
+    sys.stdout.write("\r" + " " * 45 + "\r")
+    sys.stdout.flush()
 
 
 # ============================================================
@@ -371,7 +316,7 @@ def mining_start():  return supabase_request("mining_start", {})
 
 
 # ============================================================
-# FARMING v2.0 — reward+limit aware, adsgram cooldown fix, jeda 7s
+# FARMING v2.2 — One-Strike Kick
 # ============================================================
 def start_farming():
     if not HEADERS or not HEADERS.get("x-telegram-init-data"):
@@ -387,10 +332,9 @@ def start_farming():
     os.system('cls' if os.name == 'nt' else 'clear')
     print(BANNER)
     print(f"\n{G}🚀 Session OK. Auto watch dimulai.{RS}")
-    print(f"{Y}⏱  Jeda antar network    : {DELAY_BETWEEN_NETWORKS}s{RS}")
-    print(f"{Y}⏳ Cooldown ≤ {COOLDOWN_SHORT_MAX}s   : tunggu & retry network itu{RS}")
-    print(f"{Y}⏭  Cooldown > {COOLDOWN_SHORT_MAX}s   : skip, lanjut yang lain{RS}")
-    print(f"{Y}⏹ Auto-stop saat SEMUA network limit harian tercapai.{RS}")
+    print(f"{Y}⏱  Jeda antar network: {DELAY_BETWEEN_NETWORKS}s{RS}")
+    print(f"{Y}🛡  Gagal 1x → network di-KICK, lanjut yang lain (no retry).{RS}")
+    print(f"{Y}⏹ Auto-stop saat SEMUA network DONE atau KICKED.{RS}")
     print(f"{Y}⏹ Ctrl+C untuk berhenti manual.{RS}\n")
     time.sleep(2)
 
@@ -400,7 +344,17 @@ def start_farming():
     total_cloud_earned = 0
     cycle_count = 0
 
-    done_networks = set()
+    done_networks = set()        # limit harian tercapai
+    kicked_networks = {}         # {net: reason}
+
+    def all_finished(watched):
+        for net, cfg in NETWORKS.items():
+            if net in kicked_networks:
+                continue
+            cnt = int(watched.get(net, 0) or 0)
+            if cnt < cfg["limit"]:
+                return False
+        return True
 
     try:
         while True:
@@ -424,99 +378,88 @@ def start_farming():
             print(f"{DIM}  All-time: {G}✅ {grand_success}{RS}  "
                   f"{R}❌ {grand_failed}{RS}  "
                   f"{Y}⛔ {grand_exhausted}{RS}  "
+                  f"{R}🚫 {len(kicked_networks)}{RS}  "
                   f"| {G}+{total_cloud_earned} cloud{RS}\n")
 
             print(f"  {W}{'Network':<12}{'Reward':<9}{'Sisa':<6}{'Limit':<7}{'Status'}{RS}")
-            print(f"  {DIM}{'─'*58}{RS}")
+            print(f"  {DIM}{'─'*60}{RS}")
 
-            ready   = []
-            waiting = []
+            ready = []
+            server_cd = []
+
             for net, cfg in NETWORKS.items():
                 label  = cfg["label"]
                 reward = cfg["reward"]
                 limit  = cfg["limit"]
                 cnt    = int(watched.get(net, 0) or 0)
                 remaining = max(0, limit - cnt)
-                cd_left_s = _norm_cooldown(cooldowns.get(net, 0))
 
+                # kicked
+                if net in kicked_networks:
+                    print(f"  {R}{label:<12}{'+'+str(reward)+' 🥭':<9}{remaining:<6}{limit:<7}🚫 KICKED{RS}")
+                    continue
+
+                # done
                 if remaining <= 0:
                     done_networks.add(net)
                     print(f"  {G}{label:<12}{'+'+str(reward)+' 🥭':<9}{'0':<6}{limit:<7}✅ DONE{RS}")
                     continue
 
+                # server cooldown
+                cd_left_s = _norm_cooldown(cooldowns.get(net, 0))
                 if cd_left_s > 0:
-                    if cd_left_s <= COOLDOWN_SHORT_MAX:
-                        waiting.append((net, cd_left_s))
-                        print(f"  {Y}{label:<12}{'+'+str(reward)+' 🥭':<9}{remaining:<6}{limit:<7}⏳ CD {cd_left_s}s → WAIT{RS}")
-                    else:
-                        print(f"  {M}{label:<12}{'+'+str(reward)+' 🥭':<9}{remaining:<6}{limit:<7}⏭ CD {cd_left_s}s → SKIP{RS}")
+                    server_cd.append((net, cd_left_s))
+                    print(f"  {Y}{label:<12}{'+'+str(reward)+' 🥭':<9}{remaining:<6}{limit:<7}⏳ CD {cd_left_s}s{RS}")
                     continue
 
                 ready.append(net)
                 print(f"  {LC}{label:<12}{'+'+str(reward)+' 🥭':<9}{remaining:<6}{limit:<7}▶ READY{RS}")
 
-            print(f"\n  {DIM}Ready: {len(ready)} | Waiting: {len(waiting)} | Done: {len(done_networks)}/{len(NETWORKS)}{RS}")
+            print(f"\n  {DIM}Ready: {len(ready)} | ServerCD: {len(server_cd)} | "
+                  f"Done: {len(done_networks)}/{len(NETWORKS)} | Kicked: {len(kicked_networks)}{RS}")
 
-            # ===== CEK: SEMUA LIMIT? =====
-            all_done = all(
-                int(watched.get(n, 0) or 0) >= NETWORKS[n]["limit"]
-                for n in NETWORKS
-            )
-            if all_done:
-                print(f"\n{G}🏁 SEMUA network sudah limit harian! Bot stop.{RS}")
+            # ===== CEK: SEMUA SELESAI? =====
+            if all_finished(watched):
+                print(f"\n{G}🏁 SEMUA network DONE / KICKED. Bot stop.{RS}")
                 break
 
-            # ===== PROSES NETWORK READY =====
-            for net in ready:
-                if net in done_networks:
+            # ===== GAK ADA READY? TUNGGU =====
+            if not ready:
+                if server_cd:
+                    min_cd = min(cd for _, cd in server_cd)
+                    wait_s = min(min_cd + 3, 120)
+                    print(f"\n{Y}⏳ Server cooldown. Tunggu {wait_s}s...{RS}")
+                    human_wait(wait_s, "Cooldown")
                     continue
+                print(f"\n{Y}⚠ Gak ada ready. Tunggu 60s...{RS}")
+                human_wait(60, "Idle")
+                continue
 
+            # ===== PROSES NETWORK READY =====
+            for idx, net in enumerate(ready):
                 cfg    = NETWORKS[net]
                 label  = cfg["label"]
                 reward = cfg["reward"]
                 limit  = cfg["limit"]
 
-                # pre-check ulang
-                try:
-                    s2 = get_ad_stats()
-                    w2 = s2.get("data", {}) or {}
-                    c2 = s2.get("cooldowns", {}) or {}
-                    if int(w2.get(net, 0) or 0) >= limit:
-                        print(f"\n{G}  ✅ {label}: limit tercapai, skip.{RS}")
-                        done_networks.add(net)
-                        continue
-                    cd2 = _norm_cooldown(c2.get(net, 0))
-                    if cd2 > 0:
-                        if cd2 <= COOLDOWN_SHORT_MAX:
-                            waiting.append((net, cd2))
-                            print(f"\n{Y}  ⏳ {label}: cooldown {cd2}s → wait.{RS}")
-                        else:
-                            print(f"\n{M}  ⏭ {label}: cooldown {cd2}s → skip.{RS}")
-                        continue
-                except Exception:
-                    pass
-
                 print(f"\n{LC}  ▶ Nonton iklan: {label} (+{reward} 🥭){RS}")
 
-                # ===== ISSUE TICKET (retry) =====
-                ticket, err_type = _issue_ticket_retry(net)
-                print()
-
-                if not ticket:
-                    if err_type == "limit":
-                        print(f"  {Y}⛔ {label}: LIMIT/ABIS → skip permanen.{RS}")
-                        done_networks.add(net)
-                        grand_exhausted += 1
-                    elif err_type == "short_cd":
-                        print(f"  {Y}⏳ {label}: cooldown → masuk waiting.{RS}")
-                        waiting.append((net, 15))
-                    else:
-                        print(f"  {R}❌ {label}: ticket error → skip cycle ini.{RS}")
-                        grand_failed += 1
-                    time.sleep(DELAY_BETWEEN_NETWORKS)
+                # ===== ISSUE TICKET =====
+                try:
+                    ticket = issue_ticket(net)
+                    if not ticket:
+                        raise Exception("no ticket returned")
+                    print(f"  {Y}Ticket: {ticket}{RS}")
+                except Exception as e:
+                    err = str(e)
+                    print(f"  {R}🚫 {label}: KICKED — ticket error.{RS}")
+                    print(f"  {DIM}   {err[:120]}{RS}")
+                    kicked_networks[net] = "ticket_error"
+                    grand_failed += 1
+                    if idx < len(ready) - 1:
+                        print(f"  {DIM}   ⏱ jeda {DELAY_BETWEEN_NETWORKS}s...{RS}")
+                        time.sleep(DELAY_BETWEEN_NETWORKS)
                     continue
-
-                print(f"  {Y}Ticket: {ticket}{RS}")
 
                 # ===== NONTON AD =====
                 print(f"  {C}Nonton {WATCH_DURATION}s...{RS}")
@@ -537,75 +480,35 @@ def start_farming():
                     grand_success += 1
                     print(f"  {G}✅ {label}: +{got} 🥭{RS}")
 
-                    # refresh limit / cooldown
+                    # refresh limit
                     try:
                         s3 = get_ad_stats()
                         w3 = s3.get("data", {}) or {}
-                        c3 = s3.get("cooldowns", {}) or {}
                         cnt_now = int(w3.get(net, 0) or 0)
                         if cnt_now >= limit:
                             done_networks.add(net)
                             print(f"  {G}   {label} limit tercapai ({cnt_now}/{limit}).{RS}")
-                        else:
-                            cd3 = _norm_cooldown(c3.get(net, 0))
-                            if cd3 > 0:
-                                if cd3 <= COOLDOWN_SHORT_MAX:
-                                    waiting.append((net, cd3))
-                                print(f"  {Y}   {label} cooldown {cd3}s.{RS}")
                     except Exception:
                         pass
 
                 except Exception as e:
                     err = str(e)
-                    if is_limit_error(err):
-                        print(f"  {Y}⛔ {label}: LIMIT saat record → skip permanen.{RS}")
+                    err_lower = err.lower()
+
+                    if "ad_required" in err_lower or "no ads" in err_lower or "quota" in err_lower:
+                        print(f"  {Y}⛔ {label}: ABIS → skip permanen.{RS}")
                         done_networks.add(net)
                         grand_exhausted += 1
-                    elif is_cooldown_error(err):
-                        print(f"  {Y}⏳ {label}: cooldown saat record → tunggu.{RS}")
-                        waiting.append((net, 15))
-                        grand_failed += 1
                     else:
-                        print(f"  {R}❌ {label}: record error → skip.{RS}")
+                        print(f"  {R}🚫 {label}: KICKED — record error.{RS}")
                         print(f"  {DIM}   {err[:120]}{RS}")
+                        kicked_networks[net] = "record_error"
                         grand_failed += 1
 
-                # ===== JEDA 7 DETIK antar network =====
-                print(f"  {DIM}   ⏱ jeda {DELAY_BETWEEN_NETWORKS}s...{RS}")
-                time.sleep(DELAY_BETWEEN_NETWORKS)
-
-            # ===== PROSES NETWORK WAITING (cooldown pendek) =====
-            if waiting:
-                waiting.sort(key=lambda x: x[1])
-                min_wait = waiting[0][1]
-                to_wait = min(min_wait + 2, COOLDOWN_SHORT_MAX + 5)
-
-                print(f"\n{Y}⏳ Menunggu cooldown pendek: {len(waiting)} network...{RS}")
-                for i in range(to_wait, 0, -1):
-                    n_show = ", ".join(n for n, _ in waiting[:3])
-                    if len(waiting) > 3:
-                        n_show += f" +{len(waiting)-3}"
-                    sys.stdout.write(f"\r  {Y}⌛ {i:3d}s — next: {n_show}{RS}   ")
-                    sys.stdout.flush()
-                    time.sleep(1)
-                sys.stdout.write("\r" + " " * 75 + "\r")
-                sys.stdout.flush()
-
-            # ===== Kalau gak ada ready & gak ada waiting =====
-            if not ready and not waiting:
-                still = [
-                    n for n in NETWORKS
-                    if int(watched.get(n, 0) or 0) < NETWORKS[n]["limit"]
-                    and n not in done_networks
-                ]
-                if not still:
-                    break
-                print(f"\n{Y}⚠ Gak ada network ready/waiting. Cek ulang 60s...{RS}")
-                for i in range(60, 0, -1):
-                    sys.stdout.write(f"\r  {Y}⌛ recheck {i}s...{RS}   ")
-                    sys.stdout.flush()
-                    time.sleep(1)
-                print()
+                # ===== JEDA 7 DETIK =====
+                if idx < len(ready) - 1:
+                    print(f"  {DIM}   ⏱ jeda {DELAY_BETWEEN_NETWORKS}s...{RS}")
+                    time.sleep(DELAY_BETWEEN_NETWORKS)
 
             time.sleep(2)
 
@@ -625,6 +528,10 @@ def start_farming():
     print(f"  {Y}⛔ Limit/Abis : {grand_exhausted}{RS}")
     print(f"  {G}🥭 Cloud      : +{total_cloud_earned}{RS}")
     print(f"  {LC}🎯 Done net  : {len(done_networks)}/{len(NETWORKS)}{RS}")
+    print(f"  {R}🚫 Kicked net : {len(kicked_networks)}{RS}")
+    if kicked_networks:
+        for n, reason in kicked_networks.items():
+            print(f"     {DIM}• {n}: {reason}{RS}")
     print(f"{C}═══════════════════════════════════════════════════════════{RS}\n")
     input(f"{C}Tekan Enter untuk kembali ke menu...{RS}")
 
