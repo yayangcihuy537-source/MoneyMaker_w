@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-LiteBits.io Auto Claim Bot v3.6
-- 2 mode: [No Hcaptcha] & [Hcaptcha]
-- Payload FIXED: h-captcha-response + captchaProvider + tapTimings + fingerprint
-- Complete payload: {"token": "..."}
-- Waryono solver (mode hcaptcha)
-- JSON persistent + Telethon session permanen
+LiteBits.io Auto Claim Bot v3.9.1
+- Waryono solver: in.php + res.php only
+- Auto-detect hCaptcha sitekey
+- FIX v3.9.1: {RST} → {Col.R} di _solve_once
 """
 
 import time
@@ -17,6 +15,7 @@ import sys
 import random
 import urllib.parse
 import urllib.request
+import urllib.error
 import asyncio
 from datetime import datetime, timezone
 from collections import deque
@@ -28,7 +27,6 @@ if hasattr(sys.stdout, 'reconfigure'):
     except Exception:
         pass
 
-# ==================== COLORS ====================
 class Col:
     R='\033[0m'; B='\033[1m'; D='\033[2m'
     RED='\033[91m'; GRN='\033[92m'; YEL='\033[93m'; BLU='\033[94m'
@@ -40,14 +38,11 @@ class Col:
 def clear():
     os.system('cls' if os.name == 'nt' else 'clear')
 
-
-# ==================== ANIMATIONS ====================
 class Anim:
     @staticmethod
     def spinner(text, duration=2):
         frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-        end = time.time() + duration
-        i = 0
+        end = time.time() + duration; i = 0
         while time.time() < end:
             sys.stdout.write(f"\r {Col.NEON_C}{frames[i%len(frames)]}{Col.R} {Col.WHT}{text}{Col.R}")
             sys.stdout.flush(); time.sleep(0.08); i += 1
@@ -68,8 +63,7 @@ class Anim:
         end = time.time() + duration; total = duration
         while time.time() < end:
             elapsed = duration - (end - time.time())
-            pct = min(1.0, elapsed / total)
-            filled = int(pct * width)
+            pct = min(1.0, elapsed / total); filled = int(pct * width)
             bar = f"{Col.NEON_G}{'█'*filled}{Col.DIM_C}{'░'*(width-filled)}{Col.R}"
             sys.stdout.write(f"\r {Col.NEON_C}▶{Col.R} {Col.WHT}{text:<30}{Col.R} [{bar}] {Col.NEON_Y}{int(pct*100):>3}%{Col.R}")
             sys.stdout.flush(); time.sleep(0.05)
@@ -122,8 +116,6 @@ class Anim:
         print()
         time.sleep(0.4)
 
-
-# ==================== CONST ====================
 API_HASH   = 'fb06985ea797ac51aaa1e6d1168ceaaa'
 API_ID     = 35898257
 BASE_URL   = 'https://mini.litebits.io'
@@ -144,15 +136,12 @@ MAX_RUNTIME      = 6 * 3600
 CAPTCHA_TIMEOUT    = 180
 CAPTCHA_POLL_DELAY = 3
 
-WARYONO_IN  = 'https://api.waryono.my.id/createtask.php'
-WARYONO_RES = 'https://api.waryono.my.id/gettask.php'
+WARYONO_IN  = 'https://api.waryono.my.id/in.php'
+WARYONO_RES = 'https://api.waryono.my.id/res.php'
 
-# User-Agent persis kayak di capture (Android 16, Chrome 153, Telegram-Android 12.9.2)
-DEFAULT_UA = (
-    "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 "
+DEFAULT_UA = ("Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/153.0.8010.36 Mobile Safari/537.36 "
-    "Telegram-Android/12.9.2 (Samsung SM-A556E; Android 16; SDK 36; HIGH)"
-)
+    "Telegram-Android/12.9.2 (Samsung SM-A556E; Android 16; SDK 36; HIGH)")
 
 try:
     from telethon import TelegramClient, functions, types
@@ -160,27 +149,151 @@ try:
 except ImportError:
     HAS_TELETHON = False
 
-
-# ==================== HTTP HELPERS ====================
 def _post_json(url, payload, timeout=30):
-    req = urllib.request.Request(
-        url, data=json.dumps(payload).encode(),
-        headers={
-            'Content-Type': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Mobile)',
-            'Accept': 'application/json, text/plain, */*',
-        })
-    return urllib.request.urlopen(req, timeout=timeout).read().decode()
+    req = urllib.request.Request(url, data=json.dumps(payload).encode(),
+        headers={'Content-Type': 'application/json',
+                 'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Mobile)',
+                 'Accept': 'application/json, text/plain, */*'})
+    try:
+        return urllib.request.urlopen(req, timeout=timeout).read().decode()
+    except urllib.error.HTTPError as e:
+        body = ''
+        try: body = e.read().decode('utf-8', errors='ignore')
+        except Exception: pass
+        return json.dumps({"_http_error": e.code, "_body": body, "_reason": str(e.reason)})
+    except Exception as e:
+        return json.dumps({"_error": str(e)})
 
 def _get(url, timeout=30):
     req = urllib.request.Request(url, headers={
         'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Mobile)',
-        'Accept': 'application/json, text/plain, */*',
-    })
-    return urllib.request.urlopen(req, timeout=timeout).read().decode()
+        'Accept': 'application/json, text/plain, */*'})
+    try:
+        return urllib.request.urlopen(req, timeout=timeout).read().decode()
+    except urllib.error.HTTPError as e:
+        body = ''
+        try: body = e.read().decode('utf-8', errors='ignore')
+        except Exception: pass
+        return json.dumps({"_http_error": e.code, "_body": body, "_reason": str(e.reason)})
+    except Exception as e:
+        return json.dumps({"_error": str(e)})
 
+def extract_attr(html, attr_name, quote_chars='"\''):
+    results = []
+    if not html or not attr_name: return results
+    search = attr_name + '='
+    idx = 0
+    while True:
+        i = html.find(search, idx)
+        if i < 0: break
+        j = i + len(search)
+        while j < len(html) and html[j] in ' \t': j += 1
+        if j >= len(html): break
+        q = html[j]
+        if q in quote_chars:
+            k = html.find(q, j + 1)
+            if k > 0:
+                val = html[j + 1:k]
+                if val and len(val) >= 16: results.append(val.strip())
+            idx = k + 1 if k > 0 else j + 1
+        else:
+            k = j
+            while k < len(html) and html[k] not in ' \t\r\n>/': k += 1
+            val = html[j:k]
+            if val and len(val) >= 16: results.append(val.strip())
+            idx = k
+    return results
 
-# ==================== WARYONO SOLVER ====================
+def extract_meta_content(html, meta_name):
+    results = []
+    if not html: return results
+    idx = 0
+    while True:
+        i = html.find('<meta', idx)
+        if i < 0: break
+        j = html.find('>', i)
+        if j < 0: break
+        tag = html[i:j + 1]
+        if ('name=' + '"' + meta_name + '"') in tag or ("name='" + meta_name + "'") in tag:
+            c_idx = tag.find('content=')
+            if c_idx >= 0:
+                k = c_idx + len('content=')
+                while k < len(tag) and tag[k] in ' \t': k += 1
+                if k < len(tag) and tag[k] in '"\'':
+                    q = tag[k]
+                    end = tag.find(q, k + 1)
+                    if end > 0: results.append(tag[k + 1:end])
+        idx = j + 1
+    return results
+
+class SitekeyDetector:
+    def __init__(self, session, base_url):
+        self.session = session; self.base_url = base_url
+        self.detected = None; self.source = None
+
+    def detect(self):
+        json_endpoints = ['/api/app-settings', '/api/config', '/api/claim/captcha',
+                          '/api/captcha', '/api/captcha/config', '/api/captcha/sitekey']
+        for ep in json_endpoints:
+            try:
+                r = self.session.get(self.base_url + ep, timeout=8)
+                if r.status_code == 200:
+                    try: d = r.json()
+                    except Exception: continue
+                    if isinstance(d, dict):
+                        for key in ('sitekey','siteKey','hcaptchaSiteKey','hcaptcha_sitekey','hCaptchaSiteKey'):
+                            v = d.get(key)
+                            if v and isinstance(v, str) and len(v) >= 16:
+                                self.detected = v; self.source = f'json:{ep}'; return v
+                        for k1 in ('captcha', 'hcaptcha', 'config'):
+                            sub = d.get(k1)
+                            if isinstance(sub, dict):
+                                for key in ('sitekey','siteKey','key'):
+                                    v = sub.get(key)
+                                    if v and isinstance(v, str) and len(v) >= 16:
+                                        self.detected = v; self.source = f'json:{ep}.{k1}.{key}'; return v
+            except Exception: continue
+
+        html = None
+        for path in ('/?v3', '/', '/claim', '/dashboard'):
+            try:
+                r = self.session.get(self.base_url + path, timeout=10)
+                if r.status_code == 200:
+                    html = r.text if hasattr(r, 'text') else r.content.decode('utf-8', errors='ignore')
+                    break
+            except Exception: continue
+
+        if html:
+            vals = extract_attr(html, 'data-sitekey')
+            if vals: self.detected = vals[0]; self.source = 'html:data-sitekey'; return vals[0]
+            vals = extract_attr(html, 'data-hcaptcha-sitekey')
+            if vals: self.detected = vals[0]; self.source = 'html:data-hcaptcha-sitekey'; return vals[0]
+            for meta_name in ('hcaptcha-sitekey', 'hcaptcha_sitekey', 'sitekey'):
+                vals = extract_meta_content(html, meta_name)
+                if vals:
+                    for v in vals:
+                        if len(v) >= 16:
+                            self.detected = v; self.source = f'meta:{meta_name}'; return v
+            markers = ['sitekey=', 'siteKey=', 'SITE_KEY=', 'hcaptchaSiteKey']
+            for m in markers:
+                idx = 0
+                while True:
+                    i = html.find(m, idx)
+                    if i < 0: break
+                    j = i + len(m)
+                    if j < len(html) and html[j] in ('"', "'"):
+                        q = html[j]
+                        k = html.find(q, j + 1)
+                        if k > 0:
+                            v = html[j + 1:k]
+                            if 16 <= len(v) <= 60 and '/' not in v and ' ' not in v:
+                                self.detected = v; self.source = f'script:{m}'; return v
+                    idx = i + len(m)
+
+        self.detected = HCAPTCHA_SITEKEY_DEFAULT
+        self.source = 'default'
+        return self.detected
+
 class WaryonoSolver:
     def __init__(self, apikey, sitekey=None):
         self.apikey  = apikey or ''
@@ -191,32 +304,60 @@ class WaryonoSolver:
         if not self.apikey:
             print(f" {Col.RED}✗{Col.R} Waryono apikey kosong"); return None
         for attempt in range(1, max_retry + 1):
-            tok = self._solve_once()
+            print(f" {Col.NEON_C}[TRY {attempt}/{max_retry}]{Col.R} Waryono solve...")
+            tok, err_type = self._solve_once()
             if tok and isinstance(tok, str) and not tok.startswith('RETRY'):
                 return tok
-            if tok == 'RETRY':
+            if err_type == 'FATAL_KEY':
+                print(f" {Col.RED}✗{Col.R} API key SALAH. Update di config."); return None
+            if err_type == 'FATAL_BALANCE':
+                print(f" {Col.RED}✗{Col.R} SALDO Waryono HABIS. Top-up dulu."); return None
+            if err_type == 'RETRY':
                 time.sleep(4 * attempt); continue
-            return None
+            if attempt < max_retry: time.sleep(2 * attempt)
         return None
 
     def _solve_once(self):
-        print(f" {Col.NEON_Y}[CAPTCHA]{Col.R} Waryono | sitekey: {Col.DIM_C}{self.sitekey[:24]}...{Col.R}")
-        try:
-            resp = _post_json(WARYONO_IN, {
-                "apikey": self.apikey, "methods": "hcaptcha",
-                "domain": self.pageurl, "sitekey": self.sitekey,
-                "action": "submit", "json": 1,
-            })
-            j = json.loads(resp)
-        except Exception as e:
-            print(f" {Col.RED}✗{Col.R} submit: {e}"); return None
-        if j.get("status") != 1:
-            req = str(j.get("request", ""))
-            print(f" {Col.RED}✗{Col.R} {req}")
-            if "UNSOLVABLE" in req or "TOO_MANY" in req: return "RETRY"
-            return None
-        tid = j.get("request")
-        print(f" {Col.NEON_C}•{Col.R} task: {Col.WHT}{tid}{Col.R}")
+        payload = {"apikey": self.apikey, "methods": "hcaptcha",
+                   "domain": self.pageurl, "sitekey": self.sitekey, "json": 1}
+        raw = _post_json(WARYONO_IN, payload)
+        print(f" {Col.DIM_C}→ POST in.php{Col.R}")
+
+        try: j = json.loads(raw)
+        except Exception:
+            print(f" {Col.RED}✗{Col.R} Response bukan JSON: {raw[:100]}"); return None, 'ERROR'
+
+        if '_http_error' in j:
+            code = j['_http_error']; body = j.get('_body',''); reason = j.get('_reason','')
+            if code == 402:
+                print(f" {Col.RED}✗{Col.R} Waryono HTTP 402: Payment Required (saldo habis)")
+                if body: print(f" {Col.DIM_C}  body: {body[:120]}{Col.R}")
+                return None, 'FATAL_BALANCE'
+            if code in (401, 403):
+                print(f" {Col.RED}✗{Col.R} Waryono HTTP {code}: API key salah"); return None, 'FATAL_KEY'
+            print(f" {Col.RED}✗{Col.R} Waryono HTTP {code}: {reason[:80]}"); return None, 'ERROR'
+
+        if '_error' in j:
+            print(f" {Col.RED}✗{Col.R} Network: {j['_error'][:80]}"); return None, 'RETRY'
+
+        status = j.get('status'); req_msg = str(j.get('request', ''))
+
+        if status == 1 and req_msg:
+            tid = req_msg
+        else:
+            if 'ERROR_WRONG_USER_KEY' in req_msg or 'ERROR_KEY_DOES_NOT_EXIST' in req_msg:
+                print(f" {Col.RED}✗{Col.R} {req_msg}"); return None, 'FATAL_KEY'
+            if 'ERROR_ZERO_BALANCE' in req_msg:
+                print(f" {Col.RED}✗{Col.R} {req_msg}"); return None, 'FATAL_BALANCE'
+            if 'ERROR_IP_NOT_ALLOWED' in req_msg:
+                print(f" {Col.RED}✗{Col.R} {req_msg}"); return None, 'FATAL_KEY'
+            if 'ERROR_TOO_MANY_REQUESTS' in req_msg:
+                print(f" {Col.YEL}!{Col.R} {req_msg} → tunggu 30s"); time.sleep(30)
+                return None, 'RETRY'
+            print(f" {Col.RED}✗{Col.R} Submit resp: {req_msg[:100]}"); return None, 'ERROR'
+
+        print(f" {Col.NEON_G}✓{Col.R} Task ID: {Col.WHT}{tid}{Col.R}")
+
         elapsed = 0; last_print = -1
         while elapsed < CAPTCHA_TIMEOUT:
             time.sleep(CAPTCHA_POLL_DELAY); elapsed += CAPTCHA_POLL_DELAY
@@ -225,26 +366,64 @@ class WaryonoSolver:
                 bar = f"{Col.NEON_G}{'█'*filled}{Col.DIM_C}{'░'*(20-filled)}{Col.R}"
                 sys.stdout.write(f"\r {Col.NEON_Y}[WAIT]{Col.R} {Col.WHT}{elapsed}s{Col.R} [{bar}]   ")
                 sys.stdout.flush(); last_print = elapsed
-            try:
-                pj = json.loads(_get(f"{WARYONO_RES}?apikey={self.apikey}&action=get&id={tid}&json=1"))
+
+            url = f"{WARYONO_RES}?apikey={urllib.parse.quote(self.apikey)}&action=get&id={urllib.parse.quote(str(tid))}&json=1"
+            raw = _get(url)
+            try: pj = json.loads(raw)
             except Exception: continue
-            if pj.get("status") == 1:
+
+            if '_http_error' in pj:
+                code = pj['_http_error']
+                if code == 402:
+                    sys.stdout.write("\r" + " "*70 + "\r")
+                    print(f" {Col.RED}✗{Col.R} Poll HTTP 402 (saldo habis)")
+                    return None, 'FATAL_BALANCE'
+                continue
+            if '_error' in pj: continue
+
+            if pj.get('status') == 1:
+                token = pj.get('request', '')
                 sys.stdout.write("\r" + " "*70 + "\r")
-                print(f" {Col.NEON_G}✓{Col.R} solved ({elapsed}s)")
-                return pj.get("request", "")
-            rs = str(pj.get("request", ""))
-            if "CAPCHA_NOT_READY" in rs: continue
-            if "UNSOLVABLE" in rs or "TOO_MANY" in rs:
-                sys.stdout.write("\r" + " "*70 + "\r"); return "RETRY"
-            if "ERROR" in rs:
-                sys.stdout.write("\r" + " "*70 + "\r"); print(f" {Col.RED}✗{Col.R} {rs}"); return None
+                print(f" {Col.NEON_G}✓{Col.R} Solved ({elapsed}s)")
+                return token, None
+
+            rs = str(pj.get('request', ''))
+            if 'CAPCHA_NOT_READY' in rs: continue
+            if 'ERROR_CAPTCHA_UNSOLVABLE' in rs or 'UNSOLVABLE' in rs:
+                sys.stdout.write("\r" + " "*70 + "\r")
+                print(f" {Col.YEL}!{Col.R} UNSOLVABLE → retry"); return None, 'RETRY'
+            if 'ERROR_ZERO_BALANCE' in rs:
+                sys.stdout.write("\r" + " "*70 + "\r"); return None, 'FATAL_BALANCE'
+            if 'ERROR_WRONG_USER_KEY' in rs:
+                sys.stdout.write("\r" + " "*70 + "\r"); return None, 'FATAL_KEY'
+            if 'ERROR_TOO_MANY_REQUESTS' in rs:
+                sys.stdout.write("\r" + " "*70 + "\r"); time.sleep(30); return None, 'RETRY'
+            if 'ERROR' in rs:
+                sys.stdout.write("\r" + " "*70 + "\r")
+                print(f" {Col.RED}✗{Col.R} Poll: {rs}"); return None, 'ERROR'
+
         sys.stdout.write("\r" + " "*70 + "\r")
-        print(f" {Col.RED}✗{Col.R} timeout"); return "RETRY"
+        print(f" {Col.YEL}!{Col.R} Timeout"); return None, 'RETRY'
 
+    def test_apikey(self):
+        payload = {"apikey": self.apikey, "methods": "hcaptcha",
+                   "domain": self.pageurl, "sitekey": self.sitekey, "json": 1}
+        raw = _post_json(WARYONO_IN, payload)
+        try: j = json.loads(raw)
+        except Exception: return False, "Response tidak valid"
+        if '_http_error' in j:
+            code = j['_http_error']
+            if code == 402: return False, "SALDO HABIS (HTTP 402)"
+            if code in (401, 403): return False, f"API key SALAH (HTTP {code})"
+            return False, f"HTTP {code}"
+        if '_error' in j: return False, j['_error']
+        req = str(j.get('request', ''))
+        if 'ERROR_WRONG_USER_KEY' in req: return False, "API key SALAH"
+        if 'ERROR_ZERO_BALANCE' in req: return False, "SALDO HABIS"
+        if j.get('status') == 1: return True, f"OK (test task: {req})"
+        return False, req or "Unknown error"
 
-# ==================== BOT ====================
 class LiteBitsBot:
-
     def __init__(self):
         self.session = None
         self.init_data = ''
@@ -253,10 +432,9 @@ class LiteBitsBot:
         self.referral_code = DEFAULT_REFERRAL
         self.user_agent = DEFAULT_UA
         self.captcha_apikey = ''
-
-        # MODE: 'no_hcaptcha' | 'hcaptcha'
+        self.hcaptcha_sitekey = HCAPTCHA_SITEKEY_DEFAULT
+        self.sitekey_source = 'default'
         self.mode = 'no_hcaptcha'
-
         self.session_earned = 0.0
         self.cycles = 0
         self.cycles_failed = 0
@@ -269,25 +447,20 @@ class LiteBitsBot:
         self.running = True
         self.claim_state = 'IDLE'
         self.start_time = time.time()
-
         self.balance_history = deque(maxlen=30)
         self.last_claim_time = None
         self.streak = 0
-
         self.cycle_logs = []
         self.base_dir = os.path.dirname(os.path.abspath(__file__))
         self.config_path = os.path.join(self.base_dir, CONFIG_FILE)
         self.tg_session_path = os.path.join(self.base_dir, SESSION_FILE)
 
-    # ---------- session file ----------
     def has_telethon_session(self):
         p = self.tg_session_path + '.session'
         return os.path.exists(p) and os.path.getsize(p) > 0
 
-    # ---------- sparkline ----------
     def sparkline(self, values, width=30):
-        if not values or len(values) < 2:
-            return f"{Col.DIM_C}{'·'*width}{Col.R}"
+        if not values or len(values) < 2: return f"{Col.DIM_C}{'·'*width}{Col.R}"
         blocks = "▁▂▃▄▅▆▇█"
         vmin = min(values); vmax = max(values)
         span = vmax - vmin if vmax > vmin else 1
@@ -322,18 +495,14 @@ class LiteBitsBot:
             time.sleep(1)
         self.cooldown_left = 0; self.claim_state = 'IDLE'
 
-    # ---------- dashboard ----------
     def render_dashboard(self):
-        name = str(self.user_info.get('telegramUsername')
-                   or self.user_info.get('username')
+        name = str(self.user_info.get('telegramUsername') or self.user_info.get('username')
                    or self.user_info.get('first_name') or 'User')
         if not name.startswith('@') and (self.user_info.get('telegramUsername')
                                           or self.user_info.get('username')):
             name = '@' + name
-        try:
-            bal_str = f"{float(str(self.user_info.get('balance', '0'))):.2f} Coins"
-        except Exception:
-            bal_str = f"{self.user_info.get('balance', '0.00')} Coins"
+        try: bal_str = f"{float(str(self.user_info.get('balance', '0'))):.2f} Coins"
+        except Exception: bal_str = f"{self.user_info.get('balance', '0.00')} Coins"
         earned_str = f"+{self.session_earned:.2f} Coins"
         total_cyc = self.cycles + self.cycles_failed
         rate = (self.cycles / total_cyc * 100) if total_cyc > 0 else 100.0
@@ -349,6 +518,9 @@ class LiteBitsBot:
         print(f"{Col.NEON_C}│{Col.R} {Col.NEON_V}Balance{Col.R}   : {Col.NEON_Y}{bal_str:<46}{Col.NEON_C}│{Col.R}")
         print(f"{Col.NEON_C}│{Col.R} {Col.NEON_V}Earned{Col.R}    : {Col.NEON_G}{earned_str:<46}{Col.NEON_C}│{Col.R}")
         print(f"{Col.NEON_C}│{Col.R} {Col.NEON_V}Mode{Col.R}      : {mode_s:<51}{Col.NEON_C}│{Col.R}")
+        if self.mode == 'hcaptcha':
+            sk = self.hcaptcha_sitekey[:20] + '...' if len(self.hcaptcha_sitekey) > 20 else self.hcaptcha_sitekey
+            print(f"{Col.NEON_C}│{Col.R} {Col.NEON_V}Sitekey{Col.R}   : {Col.DIM_C}{sk:<46}{Col.NEON_C}│{Col.R}")
         print(f"{Col.NEON_C}│{Col.R} {Col.NEON_V}Cycles{Col.R}    : {Col.WHT}{str(self.cycles):<46}{Col.NEON_C}│{Col.R}")
         print(f"{Col.NEON_C}│{Col.R} {Col.NEON_V}Success{Col.R}   : {Col.NEON_G if rate >= 90 else Col.NEON_Y}{f'{rate:.1f}%':<46}{Col.NEON_C}│{Col.R}")
         print(f"{Col.NEON_C}│{Col.R} {Col.NEON_V}Captcha{Col.R}   : {Col.NEON_G}{f'{self.captcha_solved} solved / {self.captcha_failed} failed':<46}{Col.NEON_C}│{Col.R}")
@@ -362,8 +534,7 @@ class LiteBitsBot:
                 delta = cur - prev
                 dc = Col.NEON_G if delta >= 0 else Col.NEON_R
                 ds = f"+{delta:.2f}" if delta >= 0 else f"{delta:.2f}"
-            except Exception:
-                ds = "?"; dc = Col.WHT
+            except Exception: ds = "?"; dc = Col.WHT
             print(f"{Col.NEON_C}┌─ {Col.NEON_Y}BALANCE TREND{Col.NEON_C} " + "─"*43 + f"┐{Col.R}")
             print(f"{Col.NEON_C}│{Col.R} {spark}  {dc}{ds:>8}{Col.R} {Col.NEON_C}│{Col.R}")
             print(f"{Col.NEON_C}└" + "─"*60 + f"┘{Col.R}")
@@ -374,12 +545,13 @@ class LiteBitsBot:
         return f"""
 {Col.NEON_C}=============================================================={Col.R}
 {Col.NEON_Y}                    ⚡ {Col.NEON_G}LITEBITS{Col.NEON_Y} ⚡{Col.R}
-{Col.NEON_C}                 {Col.WHT}AUTO CLAIM SYSTEM v3.6{Col.R}
+{Col.NEON_C}                 {Col.WHT}AUTO CLAIM SYSTEM v3.9.1{Col.R}
 {Col.NEON_C}=============================================================={Col.R}
 {Col.NEON_V} Bot         : {Col.NEON_C}@{self.bot_username}{Col.R}
 {Col.NEON_V} Referral    : {Col.NEON_Y}{self.referral_code}{Col.R}
 {Col.NEON_V} Mode        : {mode_c}{self.mode.upper()}{Col.R}
 {Col.NEON_V} API Key     : {Col.DIM_C}{(self.captcha_apikey[:10] + '...') if self.captcha_apikey else '(kosong)'}{Col.R}
+{Col.NEON_V} Sitekey src : {Col.DIM_C}{self.sitekey_source}{Col.R}
 {Col.NEON_V} Auto-stop   : {Col.NEON_O}{MAX_RUNTIME // 3600} hours{Col.R}
 {Col.NEON_V} Status      : {Col.NEON_G}● ONLINE{Col.R}
 {Col.NEON_C}=============================================================={Col.R}
@@ -391,8 +563,7 @@ class LiteBitsBot:
         self.render_dashboard()
         print(f"{Col.NEON_C}========================= {Col.NEON_Y}LIVE LOGS{Col.NEON_C} ==========================={Col.R}")
         print()
-        for entry in self.cycle_logs[-12:]:
-            print(entry)
+        for entry in self.cycle_logs[-12:]: print(entry)
         print()
         if live_line:
             print(live_line); print()
@@ -413,7 +584,6 @@ class LiteBitsBot:
         self.cycle_logs.append(f"{Col.DIM_C}[{ts}]{Col.R} {icons.get(level, f'{Col.NEON_C}·{Col.R}')} {Col.WHT}{msg}{Col.R}")
         self.render_view()
 
-    # ---------- HTTP ----------
     def init_http_session(self):
         try:
             from curl_cffi import requests as cr
@@ -428,7 +598,6 @@ class LiteBitsBot:
         self.apply_headers()
 
     def apply_headers(self):
-        # HEADER PERSIS DARI CAPTURE
         headers = {
             'User-Agent': self.user_agent,
             'Accept': 'application/json, text/plain, */*',
@@ -447,10 +616,8 @@ class LiteBitsBot:
         }
         if self.auth_token: headers['Authorization'] = f"Bearer {self.auth_token}"
         if self.init_data:  headers['x-telegram-init-data'] = self.init_data
-        if hasattr(self.session, 'headers'):
-            self.session.headers.update(headers)
+        if hasattr(self.session, 'headers'): self.session.headers.update(headers)
 
-    # ---------- config io ----------
     def load_config(self):
         if not os.path.exists(self.config_path): return False
         try:
@@ -463,6 +630,8 @@ class LiteBitsBot:
             self.captcha_apikey = c.get('captcha_apikey', '')
             self.user_agent     = c.get('user_agent', DEFAULT_UA)
             self.mode           = c.get('mode', 'no_hcaptcha')
+            self.hcaptcha_sitekey = c.get('hcaptcha_sitekey', HCAPTCHA_SITEKEY_DEFAULT)
+            self.sitekey_source = c.get('sitekey_source', 'default')
             self.session_earned = float(c.get('total_earned', 0) or 0)
             self.cycles         = int(c.get('total_cycles', 0) or 0)
             self.cycles_failed  = int(c.get('total_failed', 0) or 0)
@@ -477,32 +646,24 @@ class LiteBitsBot:
         try:
             with open(self.config_path, 'w', encoding='utf-8') as f:
                 json.dump({
-                    'init_data': self.init_data,
-                    'auth_token': self.auth_token,
-                    'bot_username': self.bot_username,
-                    'referral_code': self.referral_code,
-                    'captcha_apikey': self.captcha_apikey,
-                    'user_agent': self.user_agent,
-                    'mode': self.mode,
+                    'init_data': self.init_data, 'auth_token': self.auth_token,
+                    'bot_username': self.bot_username, 'referral_code': self.referral_code,
+                    'captcha_apikey': self.captcha_apikey, 'user_agent': self.user_agent,
+                    'mode': self.mode, 'hcaptcha_sitekey': self.hcaptcha_sitekey,
+                    'sitekey_source': self.sitekey_source,
                     'total_earned': round(self.session_earned, 4),
-                    'total_cycles': self.cycles,
-                    'total_failed': self.cycles_failed,
-                    'captcha_solved': self.captcha_solved,
-                    'captcha_failed': self.captcha_failed,
+                    'total_cycles': self.cycles, 'total_failed': self.cycles_failed,
+                    'captcha_solved': self.captcha_solved, 'captcha_failed': self.captcha_failed,
                     'user_info': self.user_info,
                     'saved_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 }, f, indent=2)
-        except Exception:
-            pass
+        except Exception: pass
 
-    # ---------- auth ----------
     def validate_telegram_auth(self):
         if not self.init_data: return False
         try:
-            r = self.session.post(
-                f"{BASE_URL}/api/auth/telegram/validate",
-                json={'initData': self.init_data, 'referralCode': self.referral_code},
-                timeout=12)
+            r = self.session.post(f"{BASE_URL}/api/auth/telegram/validate",
+                json={'initData': self.init_data, 'referralCode': self.referral_code}, timeout=12)
             if r.status_code == 200:
                 d = r.json()
                 if d.get('success'):
@@ -510,8 +671,7 @@ class LiteBitsBot:
                     if d.get('user'): self.user_info.update(d['user'])
                     self.apply_headers(); self.save_config()
                     return True
-        except Exception:
-            pass
+        except Exception: pass
         return False
 
     def fetch_app_settings(self):
@@ -521,8 +681,7 @@ class LiteBitsBot:
                 d = r.json()
                 self.cooldown_seconds = max(60, int(float(d.get('claimInterval', 0.0825)) * 3600))
                 return True
-        except Exception:
-            pass
+        except Exception: pass
         return False
 
     def fetch_user_profile(self):
@@ -536,16 +695,14 @@ class LiteBitsBot:
                     try:
                         bal = float(str(d.get('balance', 0)))
                         self.balance_history.append(bal)
-                    except Exception:
-                        pass
+                    except Exception: pass
                     return True
             elif r.status_code == 401:
                 if self.validate_telegram_auth():
                     r2 = self.session.get(f"{BASE_URL}/api/user/profile", timeout=12)
                     if r2.status_code == 200:
                         self.user_info.update(r2.json()); return True
-        except Exception:
-            pass
+        except Exception: pass
         return bool(self.user_info)
 
     def get_server_cooldown_left(self):
@@ -554,19 +711,25 @@ class LiteBitsBot:
             try:
                 nca_dt = datetime.fromisoformat(nca.replace('Z', '+00:00'))
                 now = datetime.now(timezone.utc)
-                left = int((nca_dt - now).total_seconds())
-                return max(0, left)
-            except Exception:
-                pass
+                return max(0, int((nca_dt - now).total_seconds()))
+            except Exception: pass
         lc = self.user_info.get('lastClaim')
         if not lc: return 0
         try:
             ld = datetime.fromisoformat(lc.replace('Z', '+00:00'))
             return max(0, self.cooldown_seconds - int((datetime.now(timezone.utc) - ld).total_seconds()))
-        except Exception:
-            return 0
+        except Exception: return 0
 
-    # ---------- Telegram ----------
+    def detect_sitekey(self, force=False):
+        if not force and self.hcaptcha_sitekey and self.hcaptcha_sitekey != HCAPTCHA_SITEKEY_DEFAULT:
+            return self.hcaptcha_sitekey
+        detector = SitekeyDetector(self.session, BASE_URL)
+        sk = detector.detect()
+        self.hcaptcha_sitekey = sk
+        self.sitekey_source = detector.source
+        self.save_config()
+        return sk
+
     async def extract_init_data_async(self, interactive=True):
         if not HAS_TELETHON:
             if interactive: print(f"\n {Col.RED}✗ Telethon not found. pip install telethon{Col.R}\n")
@@ -575,7 +738,7 @@ class LiteBitsBot:
         if interactive:
             clear(); print()
             Anim.typewriter(f"{Col.NEON_C}╔════════════════════════════════════════════════════════════╗", 0.001)
-            Anim.typewriter(f"{Col.NEON_C}║{Col.R}          ⚡ {Col.NEON_Y}LITEBITS SECURE LOGIN v3.6{Col.NEON_Y} ⚡{Col.R}          {Col.NEON_C}║", 0.001)
+            Anim.typewriter(f"{Col.NEON_C}║{Col.R}          ⚡ {Col.NEON_Y}LITEBITS SECURE LOGIN v3.9.1{Col.NEON_Y} ⚡{Col.R}          {Col.NEON_C}║", 0.001)
             Anim.typewriter(f"{Col.NEON_C}╚════════════════════════════════════════════════════════════╝", 0.001)
             print()
             Anim.scan("Scanning secure environment", 1.5)
@@ -650,8 +813,7 @@ class LiteBitsBot:
                 Anim.progress("Extracting token", 1.2)
                 print(f"\n {Col.NEON_G}✓{Col.R} Session token acquired! ({len(init_data)} chars)\n")
             return init_data
-        except Exception:
-            return None
+        except Exception: return None
         finally:
             try: await client.disconnect()
             except Exception: pass
@@ -668,7 +830,6 @@ class LiteBitsBot:
             if interactive: print(f" {Col.RED}✗ Telegram error: {e}{Col.R}")
             return False
 
-    # ---------- setup ----------
     def setup_interactive(self):
         Anim.opening_sequence()
         self.load_config()
@@ -685,12 +846,15 @@ class LiteBitsBot:
                 valid_auth = True
                 print(f" {Col.NEON_G}✓{Col.R} {Col.WHT}Auto-refreshed!{Col.R}\n")
 
+        print(f" {Col.NEON_C}•{Col.R} Detecting hCaptcha sitekey...")
+        sk = self.detect_sitekey(force=True)
+        print(f" {Col.NEON_G}✓{Col.R} Sitekey: {Col.WHT}{sk}{Col.R} {Col.DIM_C}(source: {self.sitekey_source}){Col.R}")
+        print()
+
         if valid_auth:
             name = self.user_info.get('telegramUsername') or self.user_info.get('username') or 'User'
-            try:
-                bal_str = f"{float(str(self.user_info.get('balance', 0))):.2f}"
-            except Exception:
-                bal_str = str(self.user_info.get('balance', '0.00'))
+            try: bal_str = f"{float(str(self.user_info.get('balance', 0))):.2f}"
+            except Exception: bal_str = str(self.user_info.get('balance', '0.00'))
             print()
             print(f" {Col.NEON_G}✓{Col.R} Active session: {Col.NEON_C}@{name}{Col.R}")
             print(f" {Col.NEON_Y}💰{Col.R} Balance: {Col.NEON_Y}{bal_str} Coins{Col.R}")
@@ -698,14 +862,16 @@ class LiteBitsBot:
             print()
 
             print(f"{Col.NEON_C}┌─ {Col.NEON_Y}SELECT MODE{Col.NEON_C} " + "─"*46 + f"┐{Col.R}")
-            print(f"{Col.NEON_C}│{Col.R}  {Col.NEON_G}[1]{Col.R} {Col.WHT}No Hcaptcha {Col.DIM_C}(claim kosong, gak ada captcha){Col.R}  {Col.NEON_C}│{Col.R}")
-            print(f"{Col.NEON_C}│{Col.R}  {Col.NEON_Y}[2]{Col.R} {Col.WHT}Hcaptcha    {Col.DIM_C}(solve captcha dulu baru claim){Col.R}   {Col.NEON_C}│{Col.R}")
+            print(f"{Col.NEON_C}│{Col.R}  {Col.NEON_G}[1]{Col.R} {Col.WHT}No Hcaptcha {Col.DIM_C}(claim kosong){Col.R}              {Col.NEON_C}│{Col.R}")
+            print(f"{Col.NEON_C}│{Col.R}  {Col.NEON_Y}[2]{Col.R} {Col.WHT}Hcaptcha    {Col.DIM_C}(solve captcha dulu){Col.R}        {Col.NEON_C}│{Col.R}")
             print(f"{Col.NEON_C}├" + "─"*60 + f"┤{Col.R}")
             print(f"{Col.NEON_C}│{Col.R}  {Col.NEON_C}[3]{Col.R} {Col.WHT}Re-login Telegram Phone{Col.R}                        {Col.NEON_C}│{Col.R}")
             print(f"{Col.NEON_C}│{Col.R}  {Col.NEON_V}[4]{Col.R} {Col.WHT}Ganti Waryono API Key{Col.R}                          {Col.NEON_C}│{Col.R}")
             print(f"{Col.NEON_C}│{Col.R}  {Col.NEON_O}[5]{Col.R} {Col.WHT}Force refresh init_data{Col.R}                        {Col.NEON_C}│{Col.R}")
+            print(f"{Col.NEON_C}│{Col.R}  {Col.NEON_P}[6]{Col.R} {Col.WHT}Re-detect sitekey{Col.R}                              {Col.NEON_C}│{Col.R}")
+            print(f"{Col.NEON_C}│{Col.R}  {Col.NEON_G}[7]{Col.R} {Col.WHT}Test Waryono API Key{Col.R}                          {Col.NEON_C}│{Col.R}")
             print(f"{Col.NEON_C}└" + "─"*60 + f"┘{Col.R}")
-            ch = input(f"\n{Col.WHT} ➜ Pilih [1-5] (default: current mode): {Col.NEON_G}").strip()
+            ch = input(f"\n{Col.WHT} ➜ Pilih [1-7] (default: current mode): {Col.NEON_G}").strip()
             print(Col.R, end='')
         else:
             print()
@@ -713,32 +879,26 @@ class LiteBitsBot:
             ch = '3'
 
         if ch == '1':
-            self.mode = 'no_hcaptcha'
-            self.save_config()
+            self.mode = 'no_hcaptcha'; self.save_config()
             Anim.spinner("Mode set: NO HCAPTCHA", 1.0)
         elif ch == '2':
-            self.mode = 'hcaptcha'
-            self.save_config()
+            self.mode = 'hcaptcha'; self.save_config()
             Anim.spinner("Mode set: HCAPTCHA", 1.0)
-            # minta apikey kalau belum ada
             if not self.captcha_apikey:
                 print()
                 key = input(f" {Col.NEON_G}➜{Col.R} {Col.WHT}Waryono API Key{Col.NEON_C} »{Col.R} ").strip()
                 print(Col.R, end='')
                 if key:
-                    self.captcha_apikey = key
-                    self.save_config()
+                    self.captcha_apikey = key; self.save_config()
                     Anim.spinner("API key saved", 1.0)
         elif ch == '3':
-            if not self.do_telegram_login(interactive=True):
-                return False
+            if not self.do_telegram_login(interactive=True): return False
             self.validate_telegram_auth()
         elif ch == '4':
             nk = input(f" {Col.WHT}Waryono API Key baru: {Col.NEON_G}").strip()
             print(Col.R, end='')
             if nk:
-                self.captcha_apikey = nk
-                self.save_config()
+                self.captcha_apikey = nk; self.save_config()
                 Anim.spinner("API key updated", 1.0)
         elif ch == '5':
             if not self.has_telethon_session():
@@ -747,51 +907,56 @@ class LiteBitsBot:
                 print(f" {Col.NEON_G}✓{Col.R} refreshed")
             else:
                 print(f" {Col.RED}✗{Col.R} refresh gagal."); return False
+        elif ch == '6':
+            print(f" {Col.NEON_C}•{Col.R} Re-detecting sitekey...")
+            sk = self.detect_sitekey(force=True)
+            print(f" {Col.NEON_G}✓{Col.R} Sitekey: {Col.WHT}{sk}{Col.R} {Col.DIM_C}(source: {self.sitekey_source}){Col.R}")
+        elif ch == '7':
+            if not self.captcha_apikey:
+                print(f" {Col.RED}✗{Col.R} API key belum di-set. Set dulu via menu [4].")
+            else:
+                print(f" {Col.NEON_C}•{Col.R} Testing Waryono API key...")
+                print(f" {Col.DIM_C}  key: {self.captcha_apikey[:8]}...{self.captcha_apikey[-4:] if len(self.captcha_apikey) > 12 else ''}{Col.R}")
+                print(f" {Col.DIM_C}  sitekey: {self.hcaptcha_sitekey}{Col.R}")
+                solver = WaryonoSolver(self.captcha_apikey, self.hcaptcha_sitekey)
+                ok, msg = solver.test_apikey()
+                if ok: print(f" {Col.NEON_G}✓{Col.R} Waryono: {msg}")
+                else: print(f" {Col.RED}✗{Col.R} Waryono: {msg}")
 
         return True
 
-    # ---------- claim flow (FIXED PAYLOAD) ----------
     def do_claim_flow(self):
         self.add_log('info', f"Mode: {Col.NEON_Y}{self.mode}{Col.R}")
-
-        # HOLD phase
         self.add_log('info', f"Holding button {Col.NEON_Y}({HOLD_DURATION}s){Col.R}...")
         self._progress_wait(HOLD_DURATION, label="HOLD")
 
-        # ===== SOLVE CAPTCHA (only in hcaptcha mode) =====
         captcha_token = ""
         if self.mode == 'hcaptcha':
             self.claim_state = 'SOLVING'
-            self.add_log('cap', "Solving hCaptcha via Waryono...")
-            solver = WaryonoSolver(self.captcha_apikey, HCAPTCHA_SITEKEY_DEFAULT)
+            self.add_log('cap', f"Solving hCaptcha via Waryono (sitekey: {self.hcaptcha_sitekey[:20]}...)")
+            solver = WaryonoSolver(self.captcha_apikey, self.hcaptcha_sitekey)
             tok = solver.solve()
             if not tok:
                 self.captcha_failed += 1
                 self.add_log('err', "Solver FAILED")
-                self.cycles_failed += 1
-                self.save_config()
+                self.cycles_failed += 1; self.save_config()
                 return False, 'captcha_failed'
             captcha_token = tok
-            self.captcha_solved += 1
-            self.save_config()
+            self.captcha_solved += 1; self.save_config()
             self.add_log('ok', f"Token: {tok[:24]}...")
         else:
             self.add_log('info', "No hcaptcha mode — using empty token")
 
-        # ===== BUILD PAYLOAD (PERSIS CAPTURE) =====
         start_payload = {
-            "h-captcha-response": captcha_token,   # "" kalau no_hcaptcha, token kalau hcaptcha
+            "h-captcha-response": captcha_token,
             "captchaProvider": "hcaptcha",
             "tapTimings": [],
             "fingerprint": ""
         }
-
         self.add_log('net', "POST /api/claim/start...")
-        self.add_log('info', f"Payload: {json.dumps(start_payload)[:90]}...")
 
         try:
-            r = self.session.post(f"{BASE_URL}/api/claim/start",
-                                  json=start_payload, timeout=20)
+            r = self.session.post(f"{BASE_URL}/api/claim/start", json=start_payload, timeout=20)
             sd = r.json()
         except Exception as e:
             self.add_log('err', f"Net: {e}")
@@ -807,9 +972,8 @@ class LiteBitsBot:
                 return True, int(rt)
             msg = sd.get('message', 'Claim rejected')
             self.add_log('err', f"Server: {msg}")
-            # detect kalau minta captcha tapi mode no_hcaptcha → suggest switch
-            if self.mode == 'no_hcaptcha' and any(k in str(msg).lower() for k in ('captcha', 'verif', 'human')):
-                self.add_log('warn', "Server minta captcha! Coba ganti ke mode [2] HCAPTCHA")
+            if self.mode == 'no_hcaptcha' and any(k in str(msg).lower() for k in ('captcha','verif','human')):
+                self.add_log('warn', "Server minta captcha! Ganti ke mode [2] HCAPTCHA")
             self.cycles_failed += 1; self.save_config()
             return False, msg
 
@@ -819,7 +983,6 @@ class LiteBitsBot:
         if ad_info.get('title'):
             self.add_log('info', f"Ad: {Col.DIM_C}{ad_info.get('title')}{Col.R}")
 
-        # ===== GET ADS TOKEN =====
         ad_token = None
         try:
             r_ads = self.session.get(f"{BASE_URL}/api/claim/{claim_id}/ads", timeout=15)
@@ -827,26 +990,12 @@ class LiteBitsBot:
                 aj = r_ads.json()
                 if aj.get('success') and aj.get('adsUrl'):
                     ad_token = aj['adsUrl'].get('token')
-                    min_sec = 10
-                    try:
-                        sdk = aj['adsUrl'].get('sdkAd') or {}
-                        min_sec = int(sdk.get('min_seconds', 10))
-                    except Exception:
-                        pass
-                    if min_sec > AD_VIEW_WAIT:
-                        self.add_log('info', f"Ad min_seconds={min_sec}, adjust wait")
-        except Exception:
-            pass
+        except Exception: pass
 
-        # ===== WATCH AD =====
         self.claim_state = 'WATCHING'
         self.add_log('wait', f"Watching ad {Col.NEON_Y}({AD_VIEW_WAIT}s){Col.R}...")
         self._progress_wait(AD_VIEW_WAIT, label="AD")
 
-        if not ad_token:
-            self.add_log('warn', "No ad token acquired, trying complete anyway...")
-
-        # ===== COMPLETE (PERSIS CAPTURE) =====
         self.add_log('net', "POST /api/claim/{id}/complete...")
         complete_payload = {"token": ad_token or ""}
 
@@ -868,7 +1017,6 @@ class LiteBitsBot:
             self.cycles_failed += 1; self.save_config()
             return False, 'unconfirmed'
 
-        # ===== SUCCESS =====
         time.sleep(1)
         self.fetch_user_profile()
         try: self.session_earned += float(amount)
@@ -895,7 +1043,6 @@ class LiteBitsBot:
         time.sleep(1.5)
         return True, "Success"
 
-    # ---------- cooldown ----------
     def live_cooldown(self, wait_seconds=None):
         if wait_seconds is not None:
             total_sec = int(wait_seconds)
@@ -915,7 +1062,6 @@ class LiteBitsBot:
             self.render_view(live_line=f" {Col.NEON_G}[✓ READY]{Col.R} Cooldown finished.")
             time.sleep(1)
 
-    # ---------- report ----------
     def generate_report(self, reason="TIME LIMIT REACHED"):
         runtime = int(time.time() - self.start_time)
         h, r = divmod(runtime, 3600); m, s = divmod(r, 60)
@@ -928,14 +1074,14 @@ class LiteBitsBot:
         rate = (self.cycles / total_cyc * 100) if total_cyc > 0 else 0.0
         finish_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         start_str = datetime.fromtimestamp(self.start_time).strftime("%Y-%m-%d %H:%M:%S")
-        lines = [
-            "",
+        lines = ["",
             f"{Col.NEON_C}╔══════════════════════════════════════════════════════════════╗{Col.R}",
-            f"{Col.NEON_C}║{Col.R}           {Col.NEON_Y}⚡ SESSION REPORT · LITEBITS v3.6 ⚡{Col.R}          {Col.NEON_C}║{Col.R}",
+            f"{Col.NEON_C}║{Col.R}           {Col.NEON_Y}⚡ SESSION REPORT · LITEBITS v3.9.1 ⚡{Col.R}          {Col.NEON_C}║{Col.R}",
             f"{Col.NEON_C}╚══════════════════════════════════════════════════════════════╝{Col.R}",
             "",
             f"{Col.NEON_V}  Reason          : {Col.WHT}{reason}{Col.R}",
             f"{Col.NEON_V}  Mode            : {Col.NEON_Y}{self.mode.upper()}{Col.R}",
+            f"{Col.NEON_V}  Sitekey source  : {Col.WHT}{self.sitekey_source}{Col.R}",
             f"{Col.NEON_V}  Started         : {Col.WHT}{start_str}{Col.R}",
             f"{Col.NEON_V}  Finished        : {Col.WHT}{finish_time}{Col.R}",
             f"{Col.NEON_V}  Runtime         : {Col.NEON_C}{h:02d}h {m:02d}m {s:02d}s{Col.R}",
@@ -949,8 +1095,7 @@ class LiteBitsBot:
             f"{Col.NEON_V}  Captcha Failed  : {Col.NEON_R}{self.captcha_failed}{Col.R}",
             "",
             f"{Col.NEON_C}══════════════════════════════════════════════════════════════{Col.R}",
-            "",
-        ]
+            ""]
         for line in lines: print(line)
         plain = re.sub(r'\x1b\[[0-9;]*m', '', "\n".join(lines))
         try:
@@ -959,7 +1104,6 @@ class LiteBitsBot:
             print(f" {Col.NEON_G}✓{Col.R} Report: {REPORT_FILE}\n")
         except Exception: pass
 
-    # ---------- main loop ----------
     def run(self):
         self.init_http_session()
         if not self.setup_interactive(): sys.exit(1)
@@ -969,6 +1113,7 @@ class LiteBitsBot:
 
         self.add_log('info', f"Auto-stop after {Col.NEON_Y}{max_h}h{Col.R}")
         self.add_log('info', f"Mode: {Col.NEON_Y}{self.mode}{Col.R}")
+        self.add_log('info', f"Sitekey: {Col.DIM_C}{self.hcaptcha_sitekey[:24]}...{Col.R}")
         time.sleep(1)
 
         while self.running:
@@ -1023,7 +1168,6 @@ class LiteBitsBot:
 
         self.save_config()
         self.generate_report(reason=stop_reason)
-
 
 if __name__ == '__main__':
     bot = LiteBitsBot()
