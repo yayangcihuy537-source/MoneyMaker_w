@@ -14,7 +14,7 @@
           "runner": "python3"
         },
         "3": {
-          "label": "ClaimX 🟢",
+          "label": "ClaimX 🔴",
           "file": "ClaimX.php",
           "runner": "php"
         },
@@ -44,16 +44,11 @@
           "runner": "python3"
         },
         "9": {
-          "label": "Soon 🔴",
-          "file": "comingsoon.php",
-          "runner": "php"
-        },
-        "10": {
           "label": "CryptoCrops 🟢",
           "file": "cc.py",
           "runner": "python3"
         },
-        "11": {
+        "10": {
           "label": "Coming Soon 🔒",
           "file": "comingsoon.php",
           "runner": "php"
@@ -99,7 +94,7 @@
           "runner": "python3"
         },
         "8": {
-          "label": "99Faucet 🟢",
+          "label": "99Faucet 🔴",
           "file": "99faucet.php",
           "runner": "php"
         },
@@ -119,12 +114,12 @@
           "runner": "python3"
         },
         "12": {
-          "label": "Pitasks 🟢",
+          "label": "Pitasks 🔴",
           "file": "Pitasks.py",
           "runner": "python3"
         },
         "13": {
-          "label": "LimeFaucet 🟢",
+          "label": "LimeFaucet 🔴",
           "file": "lime.php",
           "runner": "php"
         },
@@ -149,12 +144,12 @@
       "name": "Telegram / MiniApp ",
       "items": {
         "1": {
-          "label": "Watch Ad Gamerle Vipfaucet MiniappFaucet&Crypto 🟢",
+          "label": "Watch Ad Gamerle Vipfaucet MiniappFaucet&Crypto 🔴",
           "file": "4in1.py",
           "runner": "python3"
         },
         "2": {
-          "label": "CoinFree X FaucetMini X Coinplay X FaucetFi 🟢",
+          "label": "CoinFree X FaucetMini X Coinplay X FaucetFi 🔴",
           "file": "4in1.php",
           "runner": "php"
         },
@@ -174,7 +169,7 @@
           "runner": "python3"
         },
         "6": {
-          "label": "Zentorno 🟢",
+          "label": "Zentorno 🔴",
           "file": "zentorno.py",
           "runner": "python3"
         },
@@ -229,7 +224,7 @@
           "runner": "python3"
         },
         "17": {
-          "label": "FarmingMatesBot 🟢",
+          "label": "FarmingMatesBot 🔴",
           "file": "FarmingMatesBot.py",
           "runner": "python3"
         },
@@ -239,7 +234,7 @@
           "runner": "python3"
         },
         "19": {
-          "label": "MangoCash 🟢",
+          "label": "MangoCash 🔴",
           "file": "Mango.py",
           "runner": "python3"
         },
@@ -254,7 +249,7 @@
           "runner": "python3"
         },
         "22": {
-          "label": "TReward 🟢",
+          "label": "TReward 🔴",
           "file": "tr.py",
           "runner": "python3"
         },
