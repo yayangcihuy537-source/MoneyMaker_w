@@ -14,7 +14,7 @@
           "runner": "python3"
         },
         "3": {
-          "label": "ClaimX 🔴",
+          "label": "ClaimX 🟡",
           "file": "ClaimX.php",
           "runner": "php"
         },
@@ -94,7 +94,7 @@
           "runner": "python3"
         },
         "8": {
-          "label": "99Faucet 🔴",
+          "label": "99Faucet 🟡",
           "file": "99faucet.php",
           "runner": "php"
         },
@@ -114,12 +114,12 @@
           "runner": "python3"
         },
         "12": {
-          "label": "Pitasks 🔴",
+          "label": "Pitasks 🟡",
           "file": "Pitasks.py",
           "runner": "python3"
         },
         "13": {
-          "label": "LimeFaucet 🔴",
+          "label": "LimeFaucet 🟡",
           "file": "lime.php",
           "runner": "php"
         },
@@ -149,7 +149,7 @@
           "runner": "python3"
         },
         "2": {
-          "label": "CoinFree X FaucetMini X Coinplay X FaucetFi 🔴",
+          "label": "CoinFree X FaucetMini X Coinplay X FaucetFi 🟡",
           "file": "4in1.php",
           "runner": "php"
         },
