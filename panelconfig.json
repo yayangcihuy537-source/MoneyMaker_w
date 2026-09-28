@@ -164,7 +164,7 @@
           "runner": "python3"
         },
         "5": {
-          "label": "CloudEarnBot 🔴",
+          "label": "CloudEarnBot 🟢",
           "file": "Cloud.py",
           "runner": "python3"
         },
@@ -234,7 +234,7 @@
           "runner": "python3"
         },
         "19": {
-          "label": "MangoCash 🔴",
+          "label": "MangoCash 🟢",
           "file": "Mango.py",
           "runner": "python3"
         },
@@ -249,7 +249,7 @@
           "runner": "python3"
         },
         "22": {
-          "label": "TReward 🔴",
+          "label": "TReward 🟢",
           "file": "tr.py",
           "runner": "python3"
         },
