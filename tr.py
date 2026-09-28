@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-🎁 TREWARDS AUTO WATCH BOT v1.1
-- Auto watch 4 ad blocks (loop sampai abis)
-- Auto-stop kalau semua block sudah watched
-- Hacker theme + animation
+🎁 TREWARDS AUTO WATCH BOT v1.2
+- Human-like delay & jitter (gak robotik)
+- Limit detection → skip block, jangan spam
+- Backoff per-block, session break random
 - ScriptMaker: MoneyMaker_w
 """
 
-import os, sys, time, json, random
+import os, sys, time, json, random, re
 import requests
 from datetime import datetime
 
@@ -39,11 +39,59 @@ AD_BLOCKS = [
     {"id": "adCounter4", "reward": "0.0005 TON"},
 ]
 
-AD_DURATION = 20
-DELAY_BETWEEN = 25
-CYCLE_DELAY = 60            # jeda antar cycle kalau masih ada block ready
-MAX_CYCLES = 999            # safety
+# ==================== HUMAN-LIKE TIMING ====================
+AD_DURATION_RANGE      = (18, 28)      # detik nonton ad (random)
+DELAY_BETWEEN_RANGE    = (20, 45)      # jeda antar block
+CYCLE_DELAY_RANGE      = (60, 180)     # jeda antar cycle kalau masih ada ready
+ALL_LIMITED_SLEEP      = (300, 900)    # 5-15 menit kalau semua block limited
+SESSION_BREAK_EVERY    = (4, 6)        # tiap 4-6 cycle istirahat
+SESSION_BREAK_LEN      = (180, 600)    # 3-10 menit
 
+MAX_CYCLES = 999
+
+# limit detection keywords (lowercase)
+LIMIT_KEYWORDS = (
+    'limit', 'max', 'cooldown', 'wait', 'too many', 'rate',
+    'exceeded', 'try again', 'habis', 'sudah', 'batas', 'nanti',
+    'slow down', 'please wait', 'not ready',
+)
+# backoff stages (detik)
+LIMIT_BACKOFF = [300, 900, 1800, 3600, 7200]  # 5m, 15m, 30m, 60m, 120m
+
+
+def human_pause(min_s, max_s, label=None, color=NY):
+    """Jeda random yang keliatan manusia — gak flat."""
+    total = random.uniform(min_s, max_s)
+    # pecah jadi 3-6 segmen biar ritmenya gak konstan
+    segments = random.randint(3, 6)
+    seg_time = total / segments
+    for i in range(segments):
+        jitter = random.uniform(0.7, 1.3)
+        t = seg_time * jitter
+        if label:
+            remain = total - sum([seg_time] * i)
+            row = f"  {color}⏳ {label} {remain:5.1f}s{R}"
+            sys.stdout.write('\r' + CLEAR + row)
+            sys.stdout.flush()
+        time.sleep(t)
+    if label:
+        sys.stdout.write('\r' + CLEAR)
+        sys.stdout.flush()
+
+
+def micro_pause():
+    """Pause super pendek — biar keliatan mikir."""
+    time.sleep(random.uniform(0.4, 2.2))
+
+
+def is_limit_error(msg):
+    if not msg:
+        return False
+    m = str(msg).lower()
+    return any(k in m for k in LIMIT_KEYWORDS)
+
+
+# ==================== BANNER ====================
 BANNER = f"""{NC}{B}
 ╔══════════════════════════════════════════════════════════════════╗
 ║                                                                  ║
@@ -54,13 +102,14 @@ BANNER = f"""{NC}{B}
 ║     ██║   ██║  ██║███████╗╚███╔███╔╝██║  ██║██║  ██║██████╔╝███████║
 ║     ╚═╝   ╚═╝  ╚═╝╚══════╝ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝
 ║                                                                  ║
-║  {NY}🎁 TREWARDS AUTO WATCH  {NC}│ {NG}v1.1 {NC}│ {NP}Auto Loop{R}
+║  {NY}🎁 TREWARDS AUTO WATCH  {NC}│ {NG}v1.2 {NC}│ {NP}Human Mode{R}
 ║                                                                  ║
 ║  {NG}▸ ScriptMaker : {NC}MoneyMaker_w
 ║  {NG}▸ Channel     : {NC}https://t.me/ScriptyXSouu
 ║                                                                  ║
 ╚══════════════════════════════════════════════════════════════════╝{R}
 """
+
 
 class Anim:
     @staticmethod
@@ -145,11 +194,11 @@ class Anim:
         sys.stdout.write('\r' + CLEAR + f"  {NC}{text}{R}\n")
         sys.stdout.flush()
 
+
 def clear():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 def strip_ansi(s):
-    import re
     return re.sub(r'\033\[[0-9;]*m', '', s)
 
 def print_box(title, lines, color=NC, w=62):
@@ -191,6 +240,7 @@ def get_user_id():
         save_config(cfg)
     return uid
 
+
 class TRewardsBot:
     def __init__(self):
         self.user_id = None
@@ -212,10 +262,13 @@ class TRewardsBot:
             "tr_earned": 0,
             "ton_earned": 0.0,
             "failed": 0,
+            "skipped": 0,
             "cycles": 0,
             "start_time": datetime.now(),
         }
         self.user_data = None
+        # block_id -> { "until": ts, "stage": int, "reason": str }
+        self.block_cooldown = {}
 
     def _req(self, method, path, json_data=None, timeout=30):
         url = f"{BASE}{path}"
@@ -226,7 +279,9 @@ class TRewardsBot:
                 else:
                     r = self.session.post(url, json=json_data, timeout=timeout)
                 if r.status_code == 429:
-                    time.sleep(int(r.headers.get('Retry-After', 5)))
+                    wait = int(r.headers.get('Retry-After', random.randint(10, 30)))
+                    print(f"\n{NY}  ⚠ 429 rate limit — tunggu {wait}s{R}")
+                    time.sleep(wait)
                     continue
                 try:
                     return r.json()
@@ -235,7 +290,8 @@ class TRewardsBot:
             except Exception as e:
                 if attempt == 2:
                     return {"_error": str(e)}
-                time.sleep(2)
+                # backoff acak biar gak pattern
+                time.sleep(random.uniform(2, 6))
         return None
 
     def sync_user(self):
@@ -260,14 +316,43 @@ class TRewardsBot:
         })
 
     def watch_ad(self, block_id):
+        # durasi & timestamp random biar gak keliatan robot
+        duration = random.randint(*AD_DURATION_RANGE)
+        # jitter timestamp ±3s
+        ts_jitter = random.randint(-3000, 3000)
         payload = {
             "user_id": int(self.user_id),
             "ad_block_id": block_id,
-            "duration_sec": AD_DURATION,
-            "client_timestamp": int(time.time() * 1000)
+            "duration_sec": duration,
+            "client_timestamp": int(time.time() * 1000) + ts_jitter
         }
         return self._req('POST', f"/api/ad/watch?_t={int(time.time()*1000)}", payload)
 
+    # ---------- limit tracking ----------
+    def is_block_limited(self, block_id):
+        cd = self.block_cooldown.get(block_id)
+        if not cd:
+            return False
+        return time.time() < cd['until']
+
+    def block_limited_left(self, block_id):
+        cd = self.block_cooldown.get(block_id)
+        if not cd:
+            return 0
+        return max(0, int(cd['until'] - time.time()))
+
+    def mark_block_limited(self, block_id, reason=""):
+        cur = self.block_cooldown.get(block_id, {"stage": -1, "reason": ""})
+        stage = min(cur.get('stage', -1) + 1, len(LIMIT_BACKOFF) - 1)
+        wait = LIMIT_BACKOFF[stage]
+        self.block_cooldown[block_id] = {
+            "until": time.time() + wait,
+            "stage": stage,
+            "reason": reason[:80],
+        }
+        return wait
+
+    # ---------- UI ----------
     def _show_user_info(self):
         user = self.get_user()
         print()
@@ -290,37 +375,95 @@ class TRewardsBot:
         lines = []
         for b in AD_BLOCKS:
             cnt = today.get(b['id'], 0)
-            status = f"{NG}✅ DONE{R}" if cnt >= 1 else f"{NY}⭕ READY{R}"
+            if self.is_block_limited(b['id']):
+                left = self.block_limited_left(b['id'])
+                m, s = divmod(left, 60)
+                status = f"{NR}🔒 LIMITED {m}m{s}s{R}"
+            elif cnt >= 1:
+                status = f"{NG}✅ DONE{R}"
+            else:
+                status = f"{NY}⭕ READY{R}"
             lines.append(f"{NC}{b['id']:<12}{R} : {status} {DG}({b['reward']}){R}")
         print_box("📺 AD BLOCKS", lines, NC)
 
     def _get_ready_blocks(self):
+        """Block yang (a) belum watched today, (b) gak lagi kena limit."""
         user = self.get_user()
         today = user.get('today_ads_watched', {}) if isinstance(user, dict) else {}
-        return [b for b in AD_BLOCKS if today.get(b['id'], 0) == 0]
+        ready = []
+        for b in AD_BLOCKS:
+            if today.get(b['id'], 0) >= 1:
+                continue
+            if self.is_block_limited(b['id']):
+                continue
+            ready.append(b)
+        return ready
+
+    def _all_blocks_limited_or_done(self):
+        """True kalau semua block either done atau limited."""
+        user = self.get_user()
+        today = user.get('today_ads_watched', {}) if isinstance(user, dict) else {}
+        for b in AD_BLOCKS:
+            if today.get(b['id'], 0) >= 1:
+                continue
+            if not self.is_block_limited(b['id']):
+                return False
+        return True
 
     # ============ MAIN LOOP ============
     def auto_watch_loop(self):
         Anim.dots("sync user", 1.5)
+        human_pause(0.5, 1.5)
         if not self.sync_user():
             print(f"{NR}❌ Sync user gagal!{R}")
             return
 
         Anim.dots("verify channels", 1.0)
+        human_pause(0.5, 1.5)
         self.verify_channels()
         self.sync_user()
 
         self._show_user_info()
         self._show_blocks()
 
-        # ==== LOOP CONTINUOUS ====
+        next_break_at = random.randint(*SESSION_BREAK_EVERY)
+
         while self.stats['cycles'] < MAX_CYCLES:
             self.stats['cycles'] += 1
+
+            # ==== session break (istirahat random) ====
+            if self.stats['cycles'] >= next_break_at and self.stats['cycles'] > 1:
+                brk = random.randint(*SESSION_BREAK_LEN)
+                m, s = divmod(brk, 60)
+                print(f"\n{NY}☕ Session break — istirahat {m}m {s}s biar keliatan manusia...{R}")
+                # progress bar santai
+                start = time.time()
+                while time.time() - start < brk:
+                    el = time.time() - start
+                    rem = brk - el
+                    pct = el / brk
+                    bar_len = 24
+                    filled = int(bar_len * pct)
+                    bar = '█' * filled + '░' * (bar_len - filled)
+                    sys.stdout.write(f"\r  {NC}☕ {NG}[{bar}]{R} {NY}{rem:5.0f}s{R}")
+                    sys.stdout.flush()
+                    time.sleep(1)
+                sys.stdout.write('\r' + ' ' * 60 + '\r')
+                next_break_at = self.stats['cycles'] + random.randint(*SESSION_BREAK_EVERY)
+                # refresh pas bangun
+                self.sync_user()
+                self._show_blocks()
+
             ready = self._get_ready_blocks()
 
+            # kalau gak ada yang ready
             if not ready:
-                print(f"\n{NG}✅ Semua block sudah selesai! Bot stop.{R}")
-                break
+                if self._all_blocks_limited_or_done():
+                    print(f"\n{NG}✅ Semua block done atau lagi limit. Bot stop.{R}")
+                    break
+                else:
+                    print(f"\n{NY}⚠ Gak ada block ready — tunggu...{R}")
+                    human_pause(60, 180, label="idle wait")
 
             print(f"\n{NP}{'═' * 60}{R}")
             print(f"{NP}  🔄 CYCLE #{self.stats['cycles']}  |  {len(ready)} block ready{R}")
@@ -329,11 +472,28 @@ class TRewardsBot:
             total = len(ready)
             cycle_success = 0
             cycle_fail = 0
+            cycle_skip = 0
 
             for idx, block in enumerate(ready, 1):
+                # cek ulang — mungkin udah kena limit pas di loop sebelumnya
+                if self.is_block_limited(block['id']):
+                    left = self.block_limited_left(block['id'])
+                    print(f"\n{NY}  ┌─ [{idx:02d}/{total:02d}] {block['id']} — SKIP (limited {left}s){R}")
+                    cycle_skip += 1
+                    continue
+
                 print(f"\n{NC}  ┌─ [{idx:02d}/{total:02d}] {block['id']} {DG}({block['reward']}){R}")
 
-                Anim.watch_bar(block['id'], AD_DURATION)
+                # micro pause sebelum "nonton" — kayak buka ad dulu
+                micro_pause()
+
+                # durasi nonton random tiap block
+                watch_sec = random.randint(*AD_DURATION_RANGE)
+                Anim.watch_bar(block['id'], watch_sec)
+
+                # micro pause setelah nonton sebelum POST
+                micro_pause()
+
                 result = self.watch_ad(block['id'])
 
                 if result and result.get('success'):
@@ -353,42 +513,66 @@ class TRewardsBot:
 
                     print(f"{NG}  ✅ {block['id']}: +{reward} {currency} | bal: {user_new.get('tr_balance',0):,} TR | {user_new.get('ton_balance',0):.4f} TON{R}")
 
+                    # jeda antar block — random, gak fix
                     if idx < total:
-                        for i in range(DELAY_BETWEEN, 0, -1):
-                            sys.stdout.write(f"\r  {NY}⏳ Next in {i:2d}s...{R}   ")
-                            sys.stdout.flush()
-                            time.sleep(1)
-                        sys.stdout.write('\r' + ' ' * 40 + '\r')
+                        human_pause(*DELAY_BETWEEN_RANGE, label=f"next block in")
                 else:
                     err = (result or {}).get('error', (result or {}).get('message', 'unknown'))
-                    print(f"{NR}  ❌ {block['id']}: {err}{R}")
-                    self.stats['failed'] += 1
-                    cycle_fail += 1
-                    time.sleep(3)
 
-            # refresh
+                    if is_limit_error(err):
+                        wait = self.mark_block_limited(block['id'], str(err))
+                        m, w = divmod(wait, 60)
+                        print(f"{NY}  🔒 {block['id']}: LIMIT — skip, cooldown {m}m{w}s{R}")
+                        print(f"{DG}      reason: {str(err)[:70]}{R}")
+                        self.stats['skipped'] += 1
+                        cycle_skip += 1
+                        # jeda kecil aja biar cepet lanjut block lain
+                        human_pause(2, 6)
+                    else:
+                        print(f"{NR}  ❌ {block['id']}: {str(err)[:80]}{R}")
+                        self.stats['failed'] += 1
+                        cycle_fail += 1
+                        human_pause(3, 8)
+
+            # ==== refresh ====
             print()
             Anim.dots("refresh user", 1.0)
+            human_pause(1, 3)
             self.sync_user()
 
-            # cek lagi siap atau stop
+            # ==== evaluasi ====
             remaining = self._get_ready_blocks()
+
             if not remaining:
-                print(f"\n{NG}🏁 Semua block sudah habis! Bot stop.{R}")
+                if self._all_blocks_limited_or_done():
+                    print(f"\n{NG}🏁 Semua block done/limited. Bot stop.{R}")
+                    break
+                else:
+                    # gak ada yang ready tapi belum done semua — tunggu panjang
+                    wait = random.randint(*ALL_LIMITED_SLEEP)
+                    m, s = divmod(wait, 60)
+                    print(f"\n{NY}⏳ {len(AD_BLOCKS)} block, gak ada ready. Tunggu {m}m {s}s...{R}")
+                    human_pause(wait - 5, wait + 5, label="waiting")
+
+            # kalau cycle gagal total & gak ada skip → stop biar gak spam
+            if cycle_success == 0 and cycle_skip == 0 and cycle_fail > 0:
+                print(f"\n{NR}⚠ Cycle gagal total, stop biar gak spam.{R}")
                 break
 
-            # kalau cycle_success == 0 dan cycle_fail > 0 → stop biar gak spam
-            if cycle_success == 0:
-                print(f"\n{NY}⚠️  Cycle gagal total, stop untuk hindari spam.{R}")
-                break
+            # kalau semua sisa di-skip (limit), tidur panjang
+            if cycle_success == 0 and cycle_skip > 0 and not remaining:
+                wait = random.randint(*ALL_LIMITED_SLEEP)
+                m, s = divmod(wait, 60)
+                print(f"\n{NY}⏳ Semua sisa block kena limit — tunggu {m}m {s}s...{R}")
+                human_pause(wait - 5, wait + 5, label="limit wait")
+                continue
 
-            # kalau masih ada ready (mungkin reset) — tunggu cycle delay
-            print(f"\n{NY}⏳ {len(remaining)} block masih ready — cycle berikutnya dalam {CYCLE_DELAY}s...{R}")
-            for i in range(CYCLE_DELAY, 0, -1):
-                sys.stdout.write(f"\r  {NC}⏳ Next cycle in {i:3}s...{R}   ")
-                sys.stdout.flush()
-                time.sleep(1)
-            sys.stdout.write('\r' + ' ' * 45 + '\r')
+            # masih ada ready → cycle delay random
+            if remaining:
+                wait = random.randint(*CYCLE_DELAY_RANGE)
+                m, s = divmod(wait, 60)
+                print(f"\n{NY}⏳ {len(remaining)} block ready — cycle berikutnya {m}m {s}s...{R}")
+                human_pause(wait - 3, wait + 3, label="next cycle")
 
         self._show_summary()
 
@@ -401,6 +585,7 @@ class TRewardsBot:
             f"{NG}📺 Ads Watched   : {DW}{self.stats['ads_watched']}{R}",
             f"{NG}💰 TR Earned     : {NY}{self.stats['tr_earned']:,} TR{R}",
             f"{NG}💎 TON Earned    : {NY}{self.stats['ton_earned']:.4f} TON{R}",
+            f"{NY}🔒 Skipped/Limit : {DW}{self.stats['skipped']}{R}",
             f"{NR}❌ Failed        : {DW}{self.stats['failed']}{R}",
             f"{NC}⏱  Duration      : {DW}{int(dur//60)}m {int(dur%60)}s{R}",
             f"{NM}💰 TR Balance    : {NY}{user.get('tr_balance', 0):,} TR{R}",
@@ -408,11 +593,12 @@ class TRewardsBot:
         ]
         print_box("🏁 FINAL SUMMARY", lines, NG)
 
+
 def main():
     clear()
     Anim.matrix_rain(lines=5, width=60, duration=1.2)
     print()
-    Anim.glitch("TREWARDS AUTO WATCH v1.1", 0.5)
+    Anim.glitch("TREWARDS AUTO WATCH v1.2", 0.5)
     Anim.boot(1.5)
     clear()
     print(BANNER)
@@ -426,7 +612,7 @@ def main():
     bot.user_id = user_id
 
     print()
-    Anim.glitch("STARTING AUTO WATCH (LOOP)", 0.4)
+    Anim.glitch("STARTING AUTO WATCH (HUMAN MODE)", 0.4)
 
     try:
         bot.auto_watch_loop()
@@ -435,8 +621,10 @@ def main():
         bot._show_summary()
     except Exception as e:
         print(f"\n{NR}❌ Error: {e}{R}")
+        import traceback; traceback.print_exc()
 
     input(f"\n{NC}Press Enter to exit...{R}")
+
 
 if __name__ == "__main__":
     try:
