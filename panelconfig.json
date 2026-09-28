@@ -229,7 +229,7 @@
           "runner": "python3"
         },
         "18": {
-          "label": "LiteBitsFaucet 🔴",
+          "label": "LiteBitsFaucet 🟢",
           "file": "Litebits.py",
           "runner": "python3"
         },
