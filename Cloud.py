@@ -1,3 +1,13 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+☁️ CLOUDEARN AUTO WATCH BOT v2.0
+- Reward + limit aware (sesuai app)
+- Skip network kalau error/limit, jangan spam
+- Jeda 7s antar network
+- Auto-stop kalau semua limit kena
+"""
+
 import requests
 import time
 import urllib.parse
@@ -18,6 +28,7 @@ W = '\033[97m'
 BLD = '\033[1m'
 RS = '\033[0m'
 DIM = '\033[2m'
+M = '\033[95m'
 
 # ============================================================
 # BANNER
@@ -38,17 +49,6 @@ BANNER = f"""
 ╚══════════════════════════════════════════════════════════╝{RS}
 """
 
-WATCH_BANNER = f"""
-{C}╔══════════════════════════════════════════════╗
-║              {LC}📺 WATCH ADS MODE{RS}{C}              ║
-╠══════════════════════════════════════════════╣
-║  {Y}🤖 Bot        :{RS} ☁️ CloudEarn                ║
-║  {Y}⏳ Status     :{RS} {LC}Watching Advertisement...{RS}  ║
-║  {Y}🎯 Reward     :{RS} {G}Waiting...{RS}                 ║
-║  {R}⚡ Please Wait, Don't Close Script{RS}         ║
-╚══════════════════════════════════════════════╝{RS}
-"""
-
 MENU = f"""
 {C}╔══════════════════════════════════════════════╗
 ║              {Y}☁️ @CloudEarnBot ☁️{RS}{C}            ║
@@ -64,27 +64,6 @@ MENU = f"""
 ╚══════════════════════════════════════════════╝{RS}
 """
 
-TAPTAP_BANNER = f"""
-{C}╔══════════════════════════════════════════════╗
-║              {LC}👆 TAPTAP AUTO MODE{RS}{C}           ║
-╠══════════════════════════════════════════════╣
-║  {Y}🤖 Bot        :{RS} ☁️ CloudEarn                ║
-║  {Y}👆 Tap Rate   :{RS} {LC}100 taps/request{RS}         ║
-║  {Y}🎯 Reward     :{RS} {G}5 credits/tap{RS}             ║
-║  {Y}🔓 Unlock     :{RS} {G}Ticket Aging Mode{RS}         ║
-╚══════════════════════════════════════════════╝{RS}
-"""
-
-MINING_BANNER = f"""
-{C}╔══════════════════════════════════════════════╗
-║              {LC}⛏️  MINING MODE{RS}{C}                ║
-╠══════════════════════════════════════════════╣
-║  {Y}🤖 Bot        :{RS} ☁️ CloudEarn                ║
-║  {Y}⛏️  Status     :{RS} {LC}Auto Start & Maintain{RS}    ║
-║  {Y}💎 Rate       :{RS} {G}40 cloud/hour{RS}             ║
-╚══════════════════════════════════════════════╝{RS}
-"""
-
 CONFIG_FILE = "cloud.json"
 
 INIT_DATA = ""
@@ -94,21 +73,35 @@ START_PARAM = ""
 SUPABASE_URL = "https://supabase.cloudearn.org"
 ORIGIN_URL = "https://cloudearn.org"
 WATCH_DURATION = 20
+DELAY_BETWEEN_NETWORKS = 7          # ⏱ jeda 7s antar network
 
-NETWORKS = [
-    "adsgram", "monetag", "richads", "onclicka", "gigapup",
-    "towerads", "adexium", "adloop", "monetix", "tads",
-]
+# ============================================================
+# NETWORK MAP — dari screenshot app
+# { name: {reward, limit} }
+# ============================================================
+NETWORKS = {
+    "adsgram":   {"reward": 30, "limit": 10, "label": "Adsgram"},
+    "monetag":   {"reward": 10, "limit": 8,  "label": "Monetag"},
+    "towerads":  {"reward": 10, "limit": 10, "label": "TowerAds"},
+    "monetix":   {"reward": 5,  "limit": 15, "label": "Monetix"},
+    "tads":      {"reward": 5,  "limit": 10, "label": "Tads"},
+    "richads":   {"reward": 5,  "limit": 8,  "label": "RichAds"},
+    "onclicka":  {"reward": 5,  "limit": 7,  "label": "OnClickA"},
+    "gigapup":   {"reward": 5,  "limit": 5,  "label": "GigaPup"},
+    "adexium":   {"reward": 5,  "limit": 10, "label": "Adexium"},
+    "adsgalaxy": {"reward": 5,  "limit": 5,  "label": "AdsGalaxy"},
+    "adloop":    {"reward": 5,  "limit": 3,  "label": "Adloop"},
+}
 
-MAX_RETRY = 1
 HEADERS = {}
 TAPS_PER_REQUEST = 100
 TAP_VALUE = 5
 TICKET_AGING_INTERVAL = 15
 TICKET_AGING_MAX = 180
 
+
 # ============================================================
-# FUNGSI CONFIG
+# CONFIG
 # ============================================================
 def load_config():
     if os.path.exists(CONFIG_FILE):
@@ -122,6 +115,7 @@ def load_config():
 def save_config(data):
     with open(CONFIG_FILE, 'w') as f:
         json.dump(data, f, indent=4)
+
 
 def set_data(force=False):
     global INIT_DATA, AUTH_TOKEN, APIKEY, START_PARAM, HEADERS
@@ -184,17 +178,20 @@ def set_data(force=False):
     time.sleep(1.5)
     return True
 
+
 # ============================================================
 # SUPABASE
 # ============================================================
-def supabase_request(action, payload=None):
+def supabase_request(action, payload=None, timeout=30):
     url = f"{SUPABASE_URL}/functions/v1/api"
-    resp = requests.post(url, params={"action": action}, json=payload or {}, headers=HEADERS)
+    resp = requests.post(url, params={"action": action}, json=payload or {},
+                         headers=HEADERS, timeout=timeout)
     if resp.status_code != 200:
         try: err = resp.json()
         except: err = resp.text
         raise Exception(f"{resp.status_code}: {err}")
     return resp.json()
+
 
 def _init_payload():
     return {
@@ -228,7 +225,7 @@ def issue_ticket(network):
     return data.get("ticket")
 
 def record_ad_view(network, ticket):
-    supabase_request("record_ad_view", {"network": network, "ad_ticket_id": ticket})
+    return supabase_request("record_ad_view", {"network": network, "ad_ticket_id": ticket})
 
 # TAPTAP
 def taptap_status(): return supabase_request("taptap_status", {})
@@ -241,12 +238,40 @@ def issue_taptap_ticket(network="adsgram"):
 def mining_status(): return supabase_request("mining_status", {})
 def mining_start(): return supabase_request("mining_start", {})
 
+
 # ============================================================
-# FARMING — LOOP SAMPAI SEMUA NETWORK ABIS (limit server)
+# HELPERS
+# ============================================================
+def is_limit_error(err_str):
+    """Deteksi error yang artinya network abis / gak available."""
+    s = str(err_str).lower()
+    keys = ("ad_required", "no ads", "not available", "quota", "limit reached",
+            "daily limit", "exhausted", "unavailable", "no ad")
+    return any(k in s for k in keys)
+
+
+def is_cooldown_error(err_str):
+    s = str(err_str).lower()
+    return ("cooldown" in s) or ("too_early" in s) or ("too early" in s) or ("try again" in s)
+
+
+def now_ms():
+    return int(time.time() * 1000)
+
+
+def human_wait(seconds, label="Wait"):
+    for i in range(seconds, 0, -1):
+        sys.stdout.write(f"\r  {Y}⌛ {label} {i:2d}s...{RS}   ")
+        sys.stdout.flush()
+        time.sleep(1)
+    sys.stdout.write("\r" + " " * 45 + "\r")
+    sys.stdout.flush()
+
+
+# ============================================================
+# FARMING v2.0 — reward+limit aware, skip on fail, jeda 7s
 # ============================================================
 def start_farming():
-    global HEADERS
-
     if not HEADERS or not HEADERS.get("x-telegram-init-data"):
         print(f"{R}❌ Init_Data belum diset!{RS}")
         time.sleep(2)
@@ -259,184 +284,233 @@ def start_farming():
 
     os.system('cls' if os.name == 'nt' else 'clear')
     print(BANNER)
-    print(f"\n{G}🚀 Inisialisasi session...{RS}")
-    print(f"{G}✅ Session OK. Auto watch dimulai.{RS}")
-    print(f"{Y}⏹ Bot stop OTOMATIS saat SEMUA network abis (limit server).{RS}")
-    print(f"{Y}⏹ Tekan Ctrl+C untuk berhenti manual.{RS}\n")
+    print(f"\n{G}🚀 Session OK. Auto watch dimulai.{RS}")
+    print(f"{Y}⏱  Jeda antar network: {DELAY_BETWEEN_NETWORKS}s{RS}")
+    print(f"{Y}⏹ Auto-stop saat SEMUA network limit harian tercapai.{RS}")
+    print(f"{Y}⏹ Network error/limit → SKIP, lanjut yang lain.{RS}")
+    print(f"{Y}⏹ Ctrl+C untuk berhenti manual.{RS}\n")
     time.sleep(2)
 
+    # all-time stats
     grand_success = 0
     grand_failed = 0
     grand_exhausted = 0
+    total_cloud_earned = 0
     cycle_count = 0
 
-    # Set yang persisten lintas cycle: network yang bener-bener ABIS dari server
-    exhausted_networks = set()
-    # Set network yang gagal (error), coba lagi di cycle berikutnya
-    # success di 1 cycle belum tentu habis, jadi di cycle berikutnya bisa dicoba lagi
+    # network yang sudah DONE hari ini (limit tercapai)
+    done_networks = set()
 
-    while True:
-        try:
+    try:
+        while True:
             cycle_count += 1
 
-            # Tiap cycle, reset status success/failed — biar dicoba ulang
-            # Yang persisten cuma exhausted_networks
-            cycle_success = set()
-            cycle_failed = set()
-            cycle_done = set()
-
-            cycle_start_time = time.time()
-
-            while True:
-                os.system('cls' if os.name == 'nt' else 'clear')
-                print(BANNER)
-                print(WATCH_BANNER)
-                print(f"\n{C}═══ CYCLE #{cycle_count} ═══{RS}")
-                print(f"{DIM}  Cycle ini  : "
-                      f"{G}✅ {len(cycle_success)}{RS}  "
-                      f"{R}❌ {len(cycle_failed)}{RS}  "
-                      f"{Y}⛔ {len(exhausted_networks)}{RS}  "
-                      f"| Selesai: {len(cycle_done)}/{len(NETWORKS)}{RS}")
-                print(f"{DIM}  All-time    : "
-                      f"{G}✅ {grand_success}{RS}  "
-                      f"{R}❌ {grand_failed}{RS}  "
-                      f"{Y}⛔ {grand_exhausted}{RS}\n")
-
+            # ==== Ambil stats server ====
+            try:
                 stats = get_ad_stats()
-                cooldowns = stats.get("cooldowns", {})
+            except Exception as e:
+                print(f"{R}❌ Gagal ambil ad_stats: {e}{RS}")
+                time.sleep(15)
+                continue
 
-                ready_networks = []
-                for net in NETWORKS:
-                    cd = cooldowns.get(net, 0)
-                    if net in exhausted_networks:
-                        print(f"  {Y}⛔ {net} — ABIS (limit server){RS}")
-                        continue
-                    if net in cycle_success:
-                        print(f"  {G}✅ {net} — BERHASIL cycle ini{RS}")
-                        continue
-                    if net in cycle_failed:
-                        print(f"  {R}❌ {net} — GAGAL cycle ini{RS}")
-                        continue
-                    if cd == 0:
-                        ready_networks.append(net)
-                        print(f"  {LC}▶  {net} — READY{RS}")
-                    else:
-                        print(f"  {Y}⏳ {net} — COOLDOWN{RS}")
+            watched = stats.get("data", {}) or {}
+            cooldowns = stats.get("cooldowns", {}) or {}
 
-                # ═══ CEK: APAKAH SEMUA SUDAH ABIS? ═══
-                # Stop HANYA kalau semua network masuk exhausted_networks
-                if len(exhausted_networks) >= len(NETWORKS):
-                    print(f"\n{G}✅ SEMUA network sudah ABIS (limit server)!{RS}")
-                    print(f"{Y}🏁 Bot berhenti.{RS}")
-                    break
+            # ==== Render status table ====
+            os.system('cls' if os.name == 'nt' else 'clear')
+            print(BANNER)
+            print(f"{C}═══ CYCLE #{cycle_count} ═══{RS}")
+            print(f"{DIM}  All-time: {G}✅ {grand_success}{RS}  "
+                  f"{R}❌ {grand_failed}{RS}  "
+                  f"{Y}⛔ {grand_exhausted}{RS}  "
+                  f"| {G}+{total_cloud_earned} cloud{RS}\n")
 
-                # ═══ Kalau gak ada yang ready, tunggu ═══
-                if not ready_networks:
-                    # Kalau ada network di cycle_success/cycle_failed tapi belum di-exhaust,
-                    # berarti mesti di-reset cycle, tapi tunggu cooldown dulu
-                    if (len(cycle_success) + len(cycle_failed) + len(exhausted_networks)) >= len(NETWORKS):
-                        # Semua network udah dicoba di cycle ini, reset cycle
-                        # Tapi HANYA kalau masih ada yang belum exhausted
-                        still_available = len(exhausted_networks) < len(NETWORKS)
-                        if still_available:
-                            print(f"\n{Y}🔄 Cycle #{cycle_count} selesai, tapi masih ada network belum abis.{RS}")
-                            print(f"{Y}🔄 Reset cycle, tunggu 60s biar cooldown server lewat...{RS}")
-                            grand_success += len(cycle_success)
-                            grand_failed += len(cycle_failed)
+            print(f"  {W}{'Network':<12}{'Reward':<8}{'Sisa':<8}{'Limit':<8}{'Status'}{RS}")
+            print(f"  {DIM}{'─'*58}{RS}")
 
-                            for i in range(60, 0, -1):
-                                sys.stdout.write(f"\r  {Y}⌛ Restart cycle in {i}s...{RS}   ")
-                                sys.stdout.flush()
-                                time.sleep(1)
-                            print()
-                            break  # break inner while → mulai cycle baru
-                        else:
-                            break
+            # ==== Klasifikasi per network ====
+            ready = []           # bisa ditonton sekarang
+            cooldown_list = []   # lagi cooldown sementara
+            for net, cfg in NETWORKS.items():
+                label = cfg["label"]
+                reward = cfg["reward"]
+                limit = cfg["limit"]
+                cnt = int(watched.get(net, 0) or 0)
+                remaining = max(0, limit - cnt)
 
-                    print(f"\n{Y}Semua cooldown. Tunggu 30s...{RS}")
-                    time.sleep(30)
+                cd_until = int(cooldowns.get(net, 0) or 0)
+                cd_left_s = max(0, (cd_until - now_ms()) // 1000) if cd_until else 0
+
+                # sudah kena limit harian
+                if remaining <= 0:
+                    done_networks.add(net)
+                    print(f"  {G}{label:<12}{'+'+str(reward)+' ☁':<8}{'0':<8}{limit:<8}✅ DONE{RS}")
                     continue
 
-                # ═══ Proses network ready ═══
-                for net in ready_networks:
-                    print(f"\n{LC}>>> Nonton iklan: {net}{RS}")
+                # cooldown sementara
+                if cd_left_s > 0:
+                    cooldown_list.append(net)
+                    print(f"  {Y}{label:<12}{'+'+str(reward)+' ☁':<8}{remaining:<8}{limit:<8}⏳ CD {cd_left_s}s{RS}")
+                    continue
 
-                    for attempt in range(1, MAX_RETRY + 2):
-                        print(f"  {Y}Percobaan {attempt}/{MAX_RETRY+1}{RS}")
+                # ready
+                ready.append(net)
+                print(f"  {LC}{label:<12}{'+'+str(reward)+' ☁':<8}{remaining:<8}{limit:<8}▶ READY{RS}")
 
-                        try:
-                            ticket = issue_ticket(net)
-                            print(f"  {Y}Ticket: {ticket}{RS}")
-                            print(f"  {C}Nonton {WATCH_DURATION} detik...{RS}")
+            print(f"\n  {DIM}Ready: {len(ready)} | Cooldown: {len(cooldown_list)} | Done: {len(done_networks)}/{len(NETWORKS)}{RS}")
 
-                            for i in range(WATCH_DURATION):
-                                time.sleep(1)
-                                sys.stdout.write(f"\r  {G}[{'#' * (i+1)}{' ' * (WATCH_DURATION - i - 1)}] {i+1}/{WATCH_DURATION}s{RS}")
-                                sys.stdout.flush()
-                            print()
-
-                            record_ad_view(net, ticket)
-                            print(f"  {G}✅ {net} BERHASIL{RS}")
-                            cycle_success.add(net)
-                            cycle_done.add(net)
-                            break
-
-                        except Exception as e:
-                            err_str = str(e)
-
-                            # ─── LIMIT/HABIS → masuk exhausted, PERMANEN skip ───
-                            if ("ad_required" in err_str or
-                                "no ads" in err_str.lower() or
-                                "limit" in err_str.lower() or
-                                "not available" in err_str.lower() or
-                                "quota" in err_str.lower()):
-                                print(f"  {Y}⛔ {net}: ABIS / limit server → masuk EXHAUSTED{RS}")
-                                exhausted_networks.add(net)
-                                cycle_done.add(net)
-                                grand_exhausted += 1
-                                break
-
-                            # ─── Cooldown sementara → bukan exhausted ───
-                            if "cooldown" in err_str.lower() or "too_early" in err_str.lower():
-                                print(f"  {Y}⏳ {net}: cooldown sementara → SKIP cycle ini{RS}")
-                                cycle_failed.add(net)
-                                cycle_done.add(net)
-                                break
-
-                            # ─── Error lain → retry ───
-                            print(f"  {R}❌ Gagal: {e}{RS}")
-
-                            if attempt <= MAX_RETRY:
-                                print(f"  {Y}🔄 Retry 3s...{RS}")
-                                time.sleep(3)
-                                continue
-                            else:
-                                print(f"  {R}⚠️ {net} gagal {MAX_RETRY+1}x → SKIP cycle ini (dicoba lagi nanti){RS}")
-                                cycle_failed.add(net)
-                                cycle_done.add(net)
-
-                # Cek lagi apakah semua abis
-                if len(exhausted_networks) >= len(NETWORKS):
+            # ==== Cek: semua udah limit? ====
+            all_done = True
+            for net in NETWORKS:
+                cnt = int(watched.get(net, 0) or 0)
+                if cnt < NETWORKS[net]["limit"]:
+                    all_done = False
                     break
 
-        except KeyboardInterrupt:
-            print(f"\n{R}⏹ Dihentikan user.{RS}")
-            break
-        except Exception as e:
-            print(f"{R}❌ Error: {e}{RS}")
-            time.sleep(10)
+            if all_done:
+                print(f"\n{G}🏁 SEMUA network sudah limit harian! Bot stop.{RS}")
+                break
 
-    # ═══ SUMMARY ═══
+            # ==== Kalau gak ada ready (cuma cooldown atau done) ====
+            if not ready:
+                if cooldown_list:
+                    # tunggu cooldown terpendek
+                    min_cd = min(
+                        max(0, (int(cooldowns.get(n, 0) or 0) - now_ms()) // 1000)
+                        for n in cooldown_list
+                    )
+                    wait_s = min(min_cd + 3, 120)
+                    print(f"\n{Y}⏳ Semua kena cooldown. Tunggu {wait_s}s...{RS}")
+                    human_wait(wait_s, "Cooldown")
+                    continue
+                else:
+                    print(f"\n{Y}⚠ Gak ada network ready. Tunggu 60s...{RS}")
+                    human_wait(60, "Idle")
+                    continue
+
+            # ==== Proses network ready satu-satu ====
+            for net in ready:
+                cfg = NETWORKS[net]
+                label = cfg["label"]
+                reward = cfg["reward"]
+                limit = cfg["limit"]
+
+                print(f"\n{LC}  ▶ Nonton iklan: {label} (+{reward} ☁){RS}")
+
+                # re-check limit / cooldown sebelum action (bisa berubah)
+                try:
+                    stats2 = get_ad_stats()
+                    w2 = stats2.get("data", {}) or {}
+                    c2 = stats2.get("cooldowns", {}) or {}
+                    if int(w2.get(net, 0) or 0) >= limit:
+                        print(f"  {G}✅ {label}: udah limit harian, skip.{RS}")
+                        done_networks.add(net)
+                        grand_exhausted += 1
+                        continue
+                    cd_until = int(c2.get(net, 0) or 0)
+                    if cd_until and cd_until > now_ms():
+                        left = (cd_until - now_ms()) // 1000
+                        print(f"  {Y}⏳ {label}: cooldown {left}s, skip.{RS}")
+                        continue
+                except Exception:
+                    pass
+
+                # ==== Issue ticket ====
+                try:
+                    ticket = issue_ticket(net)
+                    if not ticket:
+                        print(f"  {R}❌ {label}: no ticket, skip.{RS}")
+                        grand_failed += 1
+                        time.sleep(DELAY_BETWEEN_NETWORKS)
+                        continue
+                    print(f"  {Y}Ticket: {ticket}{RS}")
+                except Exception as e:
+                    err = str(e)
+                    if is_limit_error(err):
+                        print(f"  {Y}⛔ {label}: LIMIT/ABIS → skip permanen.{RS}")
+                        done_networks.add(net)
+                        grand_exhausted += 1
+                    elif is_cooldown_error(err):
+                        print(f"  {Y}⏳ {label}: cooldown → skip cycle ini.{RS}")
+                        grand_failed += 1
+                    else:
+                        print(f"  {R}❌ {label}: ticket error → skip.{RS}")
+                        print(f"  {DIM}   {err[:120]}{RS}")
+                        grand_failed += 1
+                    # JEDA 7s walau gagal — jangan spam
+                    time.sleep(DELAY_BETWEEN_NETWORKS)
+                    continue
+
+                # ==== Nonton ad ====
+                print(f"  {C}Nonton {WATCH_DURATION}s...{RS}")
+                for i in range(WATCH_DURATION):
+                    time.sleep(1)
+                    bar_len = 20
+                    filled = int((i + 1) / WATCH_DURATION * bar_len)
+                    bar = '█' * filled + '░' * (bar_len - filled)
+                    sys.stdout.write(f"\r  {G}[{bar}] {i+1:2d}/{WATCH_DURATION}s{RS}")
+                    sys.stdout.flush()
+                print()
+
+                # ==== Record ====
+                try:
+                    res = record_ad_view(net, ticket)
+                    got = int(res.get("reward", reward) or reward)
+                    total_cloud_earned += got
+                    grand_success += 1
+                    print(f"  {G}✅ {label}: +{got} ☁{RS}")
+
+                    # refresh stats biar limit ke-update
+                    try:
+                        s3 = get_ad_stats()
+                        w3 = s3.get("data", {}) or {}
+                        cnt_now = int(w3.get(net, 0) or 0)
+                        if cnt_now >= limit:
+                            done_networks.add(net)
+                            print(f"  {G}   {label} limit tercapai ({cnt_now}/{limit}).{RS}")
+                    except Exception:
+                        pass
+                except Exception as e:
+                    err = str(e)
+                    if is_limit_error(err):
+                        print(f"  {Y}⛔ {label}: LIMIT saat record → skip permanen.{RS}")
+                        done_networks.add(net)
+                        grand_exhausted += 1
+                    elif is_cooldown_error(err):
+                        print(f"  {Y}⏳ {label}: cooldown saat record → skip cycle ini.{RS}")
+                        grand_failed += 1
+                    else:
+                        print(f"  {R}❌ {label}: record error → skip.{RS}")
+                        print(f"  {DIM}   {err[:120]}{RS}")
+                        grand_failed += 1
+
+                # ==== JEDA 7 DETIK antar network ====
+                if net != ready[-1]:
+                    print(f"  {DIM}   ⏱ jeda {DELAY_BETWEEN_NETWORKS}s...{RS}")
+                    time.sleep(DELAY_BETWEEN_NETWORKS)
+
+            # ==== Loop berikutnya langsung (stats baru di-refresh di atas) ====
+            time.sleep(2)
+
+    except KeyboardInterrupt:
+        print(f"\n{R}⏹ Dihentikan user.{RS}")
+    except Exception as e:
+        print(f"{R}❌ Error: {e}{RS}")
+        import traceback; traceback.print_exc()
+
+    # ===== SUMMARY =====
     print(f"\n{C}═══════════════════════════════════════════════════════════{RS}")
-    print(f"{G}              🏁 FARMING SUMMARY (ALL-TIME){RS}")
+    print(f"{G}              🏁 FARMING SUMMARY{RS}")
     print(f"{C}═══════════════════════════════════════════════════════════{RS}")
-    print(f"  Total cycle    : {cycle_count}")
-    print()
-    print(f"  {G}✅ Berhasil    : {grand_success}{RS}")
-    print(f"  {R}❌ Gagal       : {grand_failed}{RS}")
-    print(f"  {Y}⛔ Abis (limit): {grand_exhausted}{RS}")
+    print(f"  Cycles         : {cycle_count}")
+    print(f"  {G}✅ Berhasil   : {grand_success}{RS}")
+    print(f"  {R}❌ Gagal      : {grand_failed}{RS}")
+    print(f"  {Y}⛔ Limit/Abis : {grand_exhausted}{RS}")
+    print(f"  {G}☁  Cloud      : +{total_cloud_earned}{RS}")
+    print(f"  {LC}🎯 Done net  : {len(done_networks)}/{len(NETWORKS)}{RS}")
     print(f"{C}═══════════════════════════════════════════════════════════{RS}\n")
     input(f"{C}Tekan Enter untuk kembali ke menu...{RS}")
+
 
 # ============================================================
 # BALANCE
@@ -471,11 +545,11 @@ def check_balance():
         print(f"{R}❌ Error: {e}{RS}")
     input(f"\n{C}Enter untuk kembali...{RS}")
 
+
 # ============================================================
 # TAPTAP
 # ============================================================
 def start_taptap():
-    global HEADERS
     if not HEADERS or not HEADERS.get("x-telegram-init-data"):
         print(f"{R}❌ Init_Data belum diset!{RS}")
         time.sleep(2)
@@ -486,7 +560,6 @@ def start_taptap():
 
     os.system('cls' if os.name == 'nt' else 'clear')
     print(BANNER)
-    print(TAPTAP_BANNER)
     print(f"{Y}⏹ Ctrl+C untuk stop.{RS}\n")
 
     def wait_cd(sec, label):
@@ -570,11 +643,11 @@ def start_taptap():
         print(f"\n{R}⏹ Stop.{RS}")
         time.sleep(1.5)
 
+
 # ============================================================
 # MINING
 # ============================================================
 def start_mining():
-    global HEADERS
     if not HEADERS or not HEADERS.get("x-telegram-init-data"):
         print(f"{R}❌ Init_Data belum diset!{RS}")
         time.sleep(2)
@@ -585,7 +658,6 @@ def start_mining():
 
     os.system('cls' if os.name == 'nt' else 'clear')
     print(BANNER)
-    print(MINING_BANNER)
     print(f"{Y}⏹ Ctrl+C untuk stop.{RS}\n")
 
     try:
@@ -630,6 +702,7 @@ def start_mining():
         print(f"\n{R}⏹ Stop.{RS}")
         time.sleep(1.5)
 
+
 # ============================================================
 # MAIN
 # ============================================================
@@ -669,6 +742,7 @@ def main():
         else:
             print(f"{R}❌ Invalid!{RS}")
             time.sleep(1)
+
 
 if __name__ == "__main__":
     main()
