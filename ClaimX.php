@@ -1,7 +1,7 @@
 <?php
 /**
- * CLAIMX AUTO CLAIM BOT v8.1
- * Fixed: icon captcha parser, cooldown 2s, verify-ad header
+ * CLAIMX AUTO CLAIM BOT v8.2
+ * Fixed: fetch fail detection + auto re-login + retry
  */
 
 error_reporting(E_ALL & ~E_WARNING & ~E_NOTICE & ~E_DEPRECATED);
@@ -29,7 +29,7 @@ const CONFIG_FILE = 'claimx_config.json';
 const COOKIE_FILE = 'claimx_cookie.txt';
 const DAILY_FILE  = 'claimx_daily.txt';
 const AD_VIEW_SECONDS = 6;
-const MIN_CLAIM_DELAY = 3;   // detik minimal antar claim (server cuma 2s)
+const MIN_CLAIM_DELAY = 3;
 const MAX_CLAIM_DELAY = 6;
 
 // ═══════════════ UTILS ═══════════════
@@ -38,7 +38,7 @@ function clearScreen() { (PHP_OS == "Linux") ? system('clear') : pclose(popen('c
 function printBanner() {
     clearScreen();
     echo B_CYAN . "==================================================\n";
-    echo B_CYAN . "  " . B_WHITE . "ClaimX Auto Claim Bot v8.1" . B_CYAN . "  \n";
+    echo B_CYAN . "  " . B_WHITE . "ClaimX Auto Claim Bot v8.2" . B_CYAN . "  \n";
     echo B_CYAN . "==================================================\n";
     echo B_CYAN . "  Icon Captcha + Ad-Verify API\n";
     echo B_CYAN . "  Limit: " . MAX_DAILY_CLAIMS . " claim/day\n";
@@ -89,14 +89,23 @@ function req($url, $method = 'GET', $post = null, $extra = []) {
         curl_setopt($ch, CURLOPT_POSTFIELDS, $post);
     }
     $r = curl_exec($ch);
-    $err = curl_errno($ch);
+    $errno = curl_errno($ch);
+    $errmsg = curl_error($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
-    return $err ? false : $r;
+
+    $GLOBALS['LAST_REQ'] = [
+        'url' => $url,
+        'errno' => $errno,
+        'errmsg' => $errmsg,
+        'code' => $httpCode,
+        'len' => is_string($r) ? strlen($r) : 0,
+    ];
+
+    if ($errno) return false;
+    return $r;
 }
 
-/**
- * Only for /faucet/verify-ad — NO redirect follow.
- */
 function reqNoFollow($url, $post = null, $extra = []) {
     $ch = curl_init();
     $headers = array_merge([
@@ -125,9 +134,9 @@ function reqNoFollow($url, $post = null, $extra = []) {
         curl_setopt($ch, CURLOPT_POSTFIELDS, $post);
     }
     $r = curl_exec($ch);
-    $err = curl_errno($ch);
+    $errno = curl_errno($ch);
     curl_close($ch);
-    return $err ? false : $r;
+    return $errno ? false : $r;
 }
 
 // ═══════════════ PARSERS ═══════════════
@@ -137,20 +146,13 @@ function parseCSRF($html) {
     return null;
 }
 
-/**
- * Parse icon captcha — versi baru yang lebih toleran.
- * Target: cari <div class="...border-warning...">...<i class="bi bi-XXX"></i></div>
- * Choices: semua <button ... data-key="...">...<i class="bi bi-YYY"></i>...</button>
- */
 function parseIconCaptcha($html) {
     $target = null;
     $choices = [];
 
-    // ── TARGET ICON ──
-    // Cari div dengan class border-warning, ambil i class bi-xxx
+    // Target icon
     if (preg_match_all('/<div[^>]*class=["\'][^"\']*border-warning[^"\']*["\'][^>]*>\s*<i[^>]*class=["\']([^"\']+)["\'][^>]*>\s*<\/i>/si', $html, $ms)) {
         foreach ($ms[1] as $cls) {
-            // filter cuma yang ada bi-XXX (bukan btn-warning dll)
             if (preg_match('/\bbi-[a-z0-9\-]+/i', $cls, $ic)) {
                 $target = $ic[0];
                 break;
@@ -158,7 +160,6 @@ function parseIconCaptcha($html) {
         }
     }
 
-    // Fallback: cari text-warning dengan i bi-*
     if (!$target) {
         if (preg_match('/<div[^>]*class=["\'][^"\']*text-warning[^"\']*["\'][^>]*>\s*<i[^>]*class=["\']([^"\']+)["\'][^>]*>\s*<\/i>/si', $html, $m)) {
             if (preg_match('/\bbi-[a-z0-9\-]+/i', $m[1], $ic)) {
@@ -167,14 +168,12 @@ function parseIconCaptcha($html) {
         }
     }
 
-    // ── CHOICES ──
-    // Cari semua <button ... data-key="..." ...>...<i class="bi bi-YYY"></i>...</button>
+    // Choices
     if (preg_match_all('/<button[^>]*data-key=["\']([^"\']+)["\'][^>]*>(.*?)<\/button>/si', $html, $ms, PREG_SET_ORDER)) {
         foreach ($ms as $m) {
             $key = $m[1];
             $inner = $m[2];
             if (preg_match('/<i[^>]*class=["\']([^"\']*bi-[a-z0-9\-]+[^"\']*)["\']/i', $inner, $ic)) {
-                // ambil class bi-XXX yang utama
                 if (preg_match('/\bbi-[a-z0-9\-]+/i', $ic[1], $only)) {
                     $choices[] = ['key' => $key, 'icon' => $only[0]];
                 }
@@ -188,7 +187,6 @@ function parseIconCaptcha($html) {
 function matchIcon($target, $choices) {
     if (!$target || empty($choices)) return null;
 
-    // target format: "bi bi-umbrella-fill" atau "bi-umbrella-fill"
     $targetIcon = null;
     if (preg_match('/\bbi-[a-z0-9\-]+/i', $target, $m)) {
         $targetIcon = $m[0];
@@ -197,19 +195,13 @@ function matchIcon($target, $choices) {
     }
 
     foreach ($choices as $c) {
-        // choices icon format: "bi-umbrella-fill"
-        if (strcasecmp($targetIcon, $c['icon']) === 0) {
-            return $c['key'];
-        }
+        if (strcasecmp($targetIcon, $c['icon']) === 0) return $c['key'];
     }
 
-    // Fallback: cocokin part nama setelah "bi-"
     $targetPart = preg_replace('/^bi-/', '', $targetIcon);
     foreach ($choices as $c) {
         $choicePart = preg_replace('/^bi-/', '', $c['icon']);
-        if (strcasecmp($targetPart, $choicePart) === 0) {
-            return $c['key'];
-        }
+        if (strcasecmp($targetPart, $choicePart) === 0) return $c['key'];
     }
 
     return null;
@@ -322,7 +314,6 @@ function doLogin($email, $password) {
     ]);
     if ($r === false) { echo B_RED . "  [ERROR] POST login gagal\n" . RESET; return false; }
 
-    // Cek sukses: redirect ke /dashboard atau ada "Welcome back"
     if (strpos($r, 'Welcome back') !== false || strpos($r, 'Dashboard') !== false) {
         echo B_GREEN . "  [SUCCESS] Login OK\n" . RESET;
         return true;
@@ -352,8 +343,35 @@ function fetchAdToken($csrf) {
 
 // ═══════════════ CLAIM ═══════════════
 function claimFaucet(&$info) {
-    $html = req(HOST . '/faucet');
-    if (!$html) return 'fetch_fail';
+    // ── Fetch /faucet dengan retry 3x ──
+    $html = false;
+    for ($try = 1; $try <= 3; $try++) {
+        $html = req(HOST . '/faucet');
+        if ($html && strlen($html) > 500) break;
+
+        $dbg = $GLOBALS['LAST_REQ'] ?? [];
+        echo "  " . B_YELLOW . "[fetch] try {$try}/3 gagal | "
+             . "errno=" . ($dbg['errno'] ?? '?') . " code=" . ($dbg['code'] ?? '?')
+             . " len=" . ($dbg['len'] ?? '?')
+             . " msg=" . substr($dbg['errmsg'] ?? '-', 0, 60) . RESET . "\n";
+
+        if ($try < 3) sleep(rand(3, 5));
+    }
+
+    if (!$html || strlen($html) < 500) {
+        $dbg = $GLOBALS['LAST_REQ'] ?? [];
+        $code = (int)($dbg['code'] ?? 0);
+        if ($code == 0 || $code >= 500) {
+            echo B_RED . "  [NETWORK] server gak respon / 5xx → tunggu 30s" . RESET . "\n";
+            return ['cooldown' => 30];
+        }
+        // HTTP 200 tapi body kosong → kemungkinan cookie expired / Cloudflare
+        if ($code == 200 && ($dbg['len'] ?? 0) < 500) {
+            echo B_RED . "  [FETCH] response kosong → re-login attempt" . RESET . "\n";
+            return 'session_invalid';
+        }
+        return 'fetch_fail';
+    }
 
     if (isLoginPage($html)) return 'session_invalid';
     if (checkDailyLimit($html)) return 'limit_reached';
@@ -363,7 +381,7 @@ function claimFaucet(&$info) {
         if (isCooldownPage($html)) {
             $s = parseCooldownSeconds($html);
             if ($s > 0) return ['cooldown' => $s];
-            return ['cooldown' => 3]; // fallback cooldown pendek
+            return ['cooldown' => 3];
         }
         return 'no_form';
     }
@@ -373,18 +391,17 @@ function claimFaucet(&$info) {
 
     echo B_CYAN . "  [FAUCET] Processing...\n" . RESET;
 
-    // ── 1. Ad view 6s ──
+    // ── Ad view ──
     for ($i = AD_VIEW_SECONDS; $i > 0; $i--) {
         echo "\r  " . B_CYAN . "[AD] Viewing sponsored ad: " . B_WHITE . "{$i}s" . RESET . "   ";
         sleep(1);
     }
     echo "\r" . str_repeat(' ', 50) . "\r";
 
-    // ── 2. Fetch ad-token ──
+    // ── Fetch ad-token ──
     echo B_CYAN . "  [AD] Requesting verify-ad token...\n" . RESET;
     $tokRes = fetchAdToken($csrf);
 
-    // Retry sekali kalau server minta 5s+
     if (!$tokRes['ok'] && stripos($tokRes['raw'], 'at least 5 seconds') !== false) {
         echo "  " . B_YELLOW . "[AD] Server minta 5s+, tunggu 4s lagi..." . RESET . "\n";
         sleep(4);
@@ -399,7 +416,7 @@ function claimFaucet(&$info) {
     $token = $tokRes['token'];
     echo B_CYAN . "  [AD] token: " . substr($token, 0, 16) . "...\n" . RESET;
 
-    // ── 3. Icon captcha ──
+    // ── Icon captcha ──
     $postArr = [
         'csrf_token' => $csrf,
         'ad_verification_token' => $token,
@@ -419,7 +436,7 @@ function claimFaucet(&$info) {
         echo B_CYAN . "  [CAPTCHA] kosong di page, skip" . RESET . "\n";
     }
 
-    // ── 4. POST /faucet/claim ──
+    // ── POST /faucet/claim ──
     $r = req(HOST . '/faucet/claim', 'POST', http_build_query($postArr), [
         'Content-Type: application/x-www-form-urlencoded',
         'Origin: ' . HOST,
@@ -430,7 +447,7 @@ function claimFaucet(&$info) {
     if (isLoginPage($r)) return 'session_invalid';
     if (checkDailyLimit($r)) return 'limit_reached';
 
-    // ── 5. Parse result ──
+    // ── Parse result ──
     $amount = null;
     if (preg_match('/Claim successful!\s*Received\s*\+?([0-9.]+)\s*USDT/i', $r, $m)) {
         $amount = $m[1];
@@ -444,7 +461,6 @@ function claimFaucet(&$info) {
         return true;
     }
 
-    // Server error
     if (preg_match('/alert-(?:danger|warning)[^>]*>([^<]+)</i', $r, $m)) {
         $err = trim($m[1]);
         echo B_RED . "  [SERVER] {$err}\n" . RESET;
@@ -478,7 +494,8 @@ function startFarming($email, $password) {
     echo B_CYAN . "  [START] Bot jalan...\n\n" . RESET;
 
     $claims = 0; $failures = 0; $skips = 0;
-    $maxFailures = 10;
+    $maxFailures = 15;
+    $sessionInvalidCount = 0;
 
     while (true) {
         if (resetDailyIfNeeded()) $dailyCount = 0;
@@ -500,12 +517,17 @@ function startFarming($email, $password) {
             break;
         }
         elseif ($res === 'session_invalid') {
-            echo "  " . B_YELLOW . "[!] Session expired, re-login..." . RESET . "\n";
+            $sessionInvalidCount++;
+            echo "  " . B_YELLOW . "[!] Session expired ({$sessionInvalidCount}x), re-login..." . RESET . "\n";
             sleep(5);
+
             if (!doLogin($email, $password)) {
                 echo "  " . B_RED . "[STOP] Re-login gagal." . RESET . "\n";
-                break;
+                if ($sessionInvalidCount >= 3) break;
+                sleep(30);
+                continue;
             }
+            $sessionInvalidCount = 0;
             $balance = getBalance();
             echo B_CYAN . "  [BALANCE] " . B_WHITE . $balance . " USDT\n" . RESET;
             sleep(5);
@@ -517,8 +539,8 @@ function startFarming($email, $password) {
             sleep(rand(3, 6));
         }
         elseif ($res === 'no_form' || $res === 'no_csrf') {
-            echo "  " . B_YELLOW . "form kosong, tunggu 3s" . RESET . "\n";
-            sleep(3);
+            echo "  " . B_YELLOW . "form kosong, tunggu 5s" . RESET . "\n";
+            sleep(5);
         }
         elseif ($res === 'fetch_fail') {
             $failures++;
@@ -546,7 +568,6 @@ function startFarming($email, $password) {
             echo B_CYAN . "  [DAILY] " . B_WHITE . $dailyCount . "/" . MAX_DAILY_CLAIMS . "\n" . RESET;
             echo B_GREEN . "  [TOTAL] {$claims} success" . RESET . "\n";
 
-            // Jeda singkat: server cooldown 2s + buffer random
             $waitS = rand(MIN_CLAIM_DELAY, MAX_CLAIM_DELAY);
             sleep($waitS);
         }
