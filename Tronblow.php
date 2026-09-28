@@ -1,301 +1,231 @@
+#!/usr/bin/env php
 <?php
 /**
  * ═══════════════════════════════════════════════════════════════
- *  TronBlow.site Auto Claim Bot v4.0
- *  - Max Claim: 200/day (info di banner)
- *  - Full Hacker Animation Pack terintegrasi
- *  - Fix: hapus curl_close (PHP 8.0+ native)
+ *  TRONBLOW.site Auto Claim Bot v4.1 (Clean UI Edition)
+ *  - No animation, static box UI
+ *  - Max Claim: 200/day
+ *  - Health check: faucet masih bayar atau gak
+ *  - Accurate parser: alert-success / alert-error
+ *  - STOP kalau "insufficient funds"
  * ═══════════════════════════════════════════════════════════════
  */
 
 if (PHP_VERSION_ID < 80000) {
-    echo "ERROR: PHP 8.0+ required.\n";
+    fwrite(STDERR, "ERROR: PHP 8.0+ required.\n");
     exit(1);
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  ANIMATION PACK (Hacker Style)
+//  COLOR + BOX HELPERS
 // ═══════════════════════════════════════════════════════════════
+const RST = "\033[0m";
+const BOLD = "\033[1m";
+const DIM  = "\033[2m";
+const RED  = "\033[38;5;196m";
+const GRN  = "\033[38;5;46m";
+const YEL  = "\033[38;5;226m";
+const CYN  = "\033[38;5;51m";
+const MAG  = "\033[38;5;201m";
+const ORG  = "\033[38;5;208m";
+const WHT  = "\033[38;5;15m";
+const GRY  = "\033[38;5;240m";
+const VIO  = "\033[38;5;141m";
 
-define('RESET',   "\033[0m");
-define('BOLD',    "\033[1m");
-define('DIM',     "\033[2m");
-define('RED',     "\033[1;31m");
-define('GREEN',   "\033[1;32m");
-define('YELLOW',  "\033[1;33m");
-define('BLUE',    "\033[1;34m");
-define('MAGENTA', "\033[1;35m");
-define('CYAN',    "\033[1;36m");
-define('WHITE',   "\033[1;37m");
-define('GRAY',    "\033[0;90m");
-define('NEON',    "\033[38;5;46m");
-define('NEON_P',  "\033[38;5;201m");
-define('NEON_C',  "\033[38;5;51m");
-define('NEON_Y',  "\033[38;5;226m");
-define('ORANGE',  "\033[38;5;208m");
-define('PURPLE',  "\033[38;5;135m");
-
-function clear_screen() {
-    (PHP_OS == "Linux") ? system('clear') : pclose(popen('cls', 'w'));
+function vlen(string $s): int {
+    return mb_strlen(preg_replace('/\033\[[0-9;]*m/', '', $s));
 }
 
-function matrix_rain($width = 70, $height = 8, $duration = 2.0) {
-    $chars = "ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉ01010101TRONBLOW";
-    $charsArr = preg_split('//u', $chars, -1, PREG_SPLIT_NO_EMPTY);
-    $start = microtime(true);
-    $lines = array_fill(0, $height, array_fill(0, $width, ' '));
+function pad_to(string $s, int $w): string {
+    $len = vlen($s);
+    return $s . str_repeat(' ', max(0, $w - $len));
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  GLOBAL STATE (dipakai untuk render box)
+// ═══════════════════════════════════════════════════════════════
+$STATE = [
+    'email'         => '-',
+    'username'      => 'Unknown',
+    'balance'       => 0,
+    'currency'      => 'SAT',
+    'claims'        => 0,
+    'rewards'       => 0.0,
+    'failures'      => 0,
+    'max_failures'  => 5,
+    'runtime_start' => time(),
+    'max_runtime'   => 3 * 3600,   // 3 jam
+    'logs'          => [],         // max 6 entry
+    'faucet_status' => 'checking', // checking | ok | suspect | dead
+    'last_payment'  => null,
+    'daily_count'   => 0,
+    'daily_limit'   => 200,
+];
+
+function state_log(string $msg, string $level = 'INFO'): void {
+    global $STATE;
+    $ts = date('H:i:s');
+    $tag = '';
+    switch (strtoupper($level)) {
+        case 'OK':     $tag = GRN  . "◈ OK    " . RST; break;
+        case 'ERR':    $tag = RED  . "◈ ERR   " . RST; break;
+        case 'WARN':   $tag = YEL  . "◈ WARN  " . RST; break;
+        case 'CLAIM':  $tag = MAG  . "⬢ CLAIM " . RST; break;
+        case 'SOLVE':  $tag = CYN  . "⬢ SOLVER" . RST; break;
+        case 'VERIFY': $tag = VIO  . "◈ VERIFY" . RST; break;
+        case 'HEALTH': $tag = ORG  . "◈ HEALTH" . RST; break;
+        case 'WAIT':   $tag = YEL  . "⬢ WAIT  " . RST; break;
+        default:       $tag = GRY  . "◈ INFO  " . RST; break;
+    }
+    $STATE['logs'][] = GRY . "[{$ts}] " . RST . $tag . " " . WHT . $msg . RST;
+    if (count($STATE['logs']) > 6) {
+        array_shift($STATE['logs']);
+    }
+}
+
+function fmt_duration(int $sec): string {
+    $h = floor($sec / 3600);
+    $m = floor(($sec % 3600) / 60);
+    $s = $sec % 60;
+    return sprintf('%02d:%02d:%02d', $h, $m, $s);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  RENDER BOX
+// ═══════════════════════════════════════════════════════════════
+function render_box(): void {
+    global $STATE;
+
+    $W = 62;  // lebar dalam
+    $bdr = CYN;
+    $top    = $bdr . "╔" . str_repeat('═', $W) . "╗" . RST;
+    $mid    = $bdr . "╠" . str_repeat('═', $W) . "╣" . RST;
+    $bot    = $bdr . "╚" . str_repeat('═', $W) . "╝" . RST;
+    $line = function(string $content) use ($bdr, $W) {
+        return $bdr . "║" . RST . pad_to(" " . $content, $W) . $bdr . "║" . RST;
+    };
 
     echo "\n";
-    for ($i = 0; $i < $height; $i++) echo "\n";
+    echo $top . "\n";
+    echo $line(BOLD . WHT . "TRONBLOW AUTO CLAIM" . RST) . "\n";
+    echo $line(DIM . "─────── SOUU ENGINE ───────" . RST) . "\n";
+    echo $mid . "\n";
 
-    while ((microtime(true) - $start) < $duration) {
-        for ($i = 0; $i < 5; $i++) {
-            $col = random_int(0, $width - 1);
-            $lines[0][$col] = $charsArr[random_int(0, count($charsArr) - 1)];
-        }
-        for ($y = $height - 1; $y > 0; $y--) {
-            $lines[$y] = $lines[$y - 1];
-        }
-        $lines[0] = array_fill(0, $width, ' ');
-
-        echo "\033[" . $height . "A";
-        foreach ($lines as $y => $row) {
-            $color = $y < 1 ? NEON : ($y < 2 ? GREEN : (DIM . GREEN));
-            echo $color . implode('', $row) . RESET . "\n";
-        }
-        usleep(80000);
+    // ── HEALTH ──
+    $hs_label = '';
+    $hs_color = GRY;
+    switch ($STATE['faucet_status']) {
+        case 'ok':       $hs_label = 'ONLINE';   $hs_color = GRN; break;
+        case 'suspect':  $hs_label = 'SUSPECT';  $hs_color = YEL; break;
+        case 'dead':     $hs_label = 'DEAD';     $hs_color = RED; break;
+        default:         $hs_label = 'CHECKING'; $hs_color = GRY; break;
     }
-}
-
-function loading_bar($label = "LOADING", $duration = 1.5) {
-    $frames = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
-    $start = microtime(true);
-    $i = 0;
-    $barLen = 30;
-    while ((microtime(true) - $start) < $duration) {
-        $progress = (microtime(true) - $start) / $duration;
-        $filled = (int)($barLen * $progress);
-        $bar = str_repeat('█', $filled) . str_repeat('░', $barLen - $filled);
-        $frame = $frames[$i % count($frames)];
-        $hex = '';
-        for ($h = 0; $h < 4; $h++) $hex .= dechex(random_int(0, 15));
-        $pct = (int)($progress * 100);
-        echo "\r" . PURPLE . "  ┃" . RESET . " " . NEON_P . $frame . RESET . " "
-            . NEON_C . str_pad($label, 24) . RESET
-            . " " . PURPLE . "[" . $bar . "]" . RESET
-            . " " . NEON . sprintf("%3d%%", $pct) . RESET
-            . " " . DIM . "0x" . strtoupper($hex) . RESET;
-        usleep(60000);
-        $i++;
+    echo $line(VIO . "FAUCET" . RST) . "\n";
+    echo $line("├─ Status     : " . $hs_color . $hs_label . RST) . "\n";
+    if ($STATE['last_payment']) {
+        $age = (int) floor((time() - $STATE['last_payment']) / 60);
+        echo $line("├─ Last Pay   : " . DIM . $age . " min ago" . RST) . "\n";
     }
-    echo "\r" . str_repeat(' ', 110) . "\r";
-}
+    echo $line("└─ Daily      : " . CYN . $STATE['daily_count'] . RST . " / " . $STATE['daily_limit']) . "\n";
+    echo $mid . "\n";
 
-function scan_line($label = "SCANNING", $steps = 50) {
-    for ($i = 0; $i <= $steps; $i++) {
-        $bar = str_repeat('█', $i) . str_repeat('░', $steps - $i);
-        $noise = '';
-        for ($n = 0; $n < 16; $n++) $noise .= random_int(0, 1);
-        echo "\r" . PURPLE . "  ┃" . RESET . " " . NEON_C . $label . RESET
-            . " " . NEON . $bar . RESET
-            . " " . NEON_P . "[" . $noise . "]" . RESET;
-        usleep(30000);
+    // ── ACCOUNT ──
+    echo $line(VIO . "ACCOUNT" . RST) . "\n";
+    echo $line("├─ User       : " . CYN . $STATE['username'] . RST) . "\n";
+    echo $line("├─ Email      : " . $STATE['email']) . "\n";
+    echo $line("└─ Balance    : " . YEL . $STATE['balance'] . " " . $STATE['currency'] . RST) . "\n";
+    echo $mid . "\n";
+
+    // ── SYSTEM ──
+    $runtime = time() - $STATE['runtime_start'];
+    echo $line(VIO . "SYSTEM" . RST) . "\n";
+    echo $line("├─ Claims     : " . GRN . $STATE['claims'] . RST) . "\n";
+    echo $line("├─ Rewards    : " . GRN . sprintf('+%.4f', $STATE['rewards']) . RST) . "\n";
+    echo $line("├─ Failures   : " . RED . $STATE['failures'] . RST . " / " . $STATE['max_failures']) . "\n";
+    echo $line("└─ Runtime    : " . CYN . fmt_duration($runtime) . RST . " / " . DIM . fmt_duration($STATE['max_runtime']) . RST) . "\n";
+    echo $mid . "\n";
+
+    // ── LOGS ──
+    $logs = $STATE['logs'];
+    if (empty($logs)) {
+        echo $line(DIM . "─ no activity yet ─" . RST) . "\n";
+    } else {
+        foreach ($logs as $l) {
+            echo $line($l) . "\n";
+        }
     }
+    echo $bot . "\n";
+
+    // ── FOOTER ──
     echo "\n";
+    echo "   " . GRN . "BOT RUNNING" . RST . " " . DIM . "•" . RST . " " . CYN . date('H:i:s') . RST . "\n";
+    echo "   " . DIM . "By Power @SouuXso • TronBlow Edition" . RST . "\n\n";
 }
 
-function hacking_boot($steps = null) {
-    $steps = $steps ?? [
-        "Initializing kernel module...",
-        "Loading anti-bot engine...",
-        "Rotating device fingerprint...",
-        "Injecting stealth headers...",
-        "Connecting to remote server...",
-        "Bypassing security layers...",
-        "Loading session cookies...",
-        "System ready.",
-    ];
-
-    echo NEON_C . "  ⚡ SYSTEM BOOT SEQUENCE" . RESET . "\n\n";
-    foreach ($steps as $s) {
-        echo NEON . "[✓]" . RESET . " " . $s;
-        usleep(random_int(60000, 90000));
-        echo "\n";
+function render_box_clear(): void {
+    // Pindah kursor ke atas untuk redraw in-place
+    // hitung tinggi box: 3 top + 6 header lines + 3 per section (health 4, account 4, system 5) + logs 7 + 3 bottom
+    // Simple: hapus layar
+    if (PHP_OS_FAMILY === 'Windows') {
+        pclose(popen('cls', 'w'));
+    } else {
+        system('clear');
     }
-    echo NEON_Y . "[⚡]" . RESET . "   Status: " . NEON . "SECURE" . RESET . "\n";
-    echo NEON_P . "[★]" . RESET . "   Welcome, Operative." . RESET . "\n";
-}
-
-function decrypt_text($target, $duration = 1.0) {
-    $chars = "!@#$%^&*()_+-=[]{}|;:,.<>?~ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    $len = strlen($target);
-    $start = microtime(true);
-    $result = str_split(str_repeat(' ', $len));
-
-    while ((microtime(true) - $start) < $duration) {
-        $progress = (microtime(true) - $start) / $duration;
-        $lockCount = (int)($len * $progress);
-        for ($i = 0; $i < $len; $i++) {
-            if ($i < $lockCount) {
-                $result[$i] = $target[$i];
-            } else {
-                $result[$i] = $target[$i] === ' ' ? ' ' : $chars[random_int(0, strlen($chars) - 1)];
-            }
-        }
-        echo "\r  " . NEON . implode('', $result) . RESET;
-        usleep(50000);
-    }
-    echo "\r  " . NEON_C . $target . RESET . "\n";
-}
-
-function glitch_text($text, $duration = 0.8) {
-    $start = microtime(true);
-    $glitchChars = "░▒▓█▄▀■□▪▫";
-    while ((microtime(true) - $start) < $duration) {
-        $out = '';
-        for ($i = 0; $i < strlen($text); $i++) {
-            if (random_int(0, 10) < 2 && $text[$i] !== ' ') {
-                $out .= $glitchChars[random_int(0, strlen($glitchChars) - 1)];
-            } else {
-                $out .= $text[$i];
-            }
-        }
-        echo "\r  " . NEON_P . $out . RESET;
-        usleep(60000);
-    }
-    echo "\r  " . NEON_C . $text . RESET . "\n";
-}
-
-function faucet_progress($label = "Claiming reward", $duration = 3.0) {
-    $barLen = 40;
-    $start = microtime(true);
-    $waves = ['░', '▒', '▓', '█'];
-    while ((microtime(true) - $start) < $duration) {
-        $progress = (microtime(true) - $start) / $duration;
-        $filled = (int)($barLen * $progress);
-        $bar = '';
-        for ($i = 0; $i < $barLen; $i++) {
-            if ($i < $filled) {
-                $bar .= '█';
-            } elseif ($i === $filled) {
-                $bar .= $waves[random_int(0, 3)];
-            } else {
-                $bar .= '░';
-            }
-        }
-        $pct = (int)($progress * 100);
-        echo "\r  " . NEON_C . "⚡ " . str_pad($label, 22) . RESET
-            . " " . NEON . "[" . $bar . "]" . RESET
-            . " " . NEON_Y . sprintf("%3d%%", $pct) . RESET;
-        usleep(50000);
-    }
-    echo "\r  " . NEON . "✓ " . str_pad($label . " — DONE", 22) . RESET
-        . " " . NEON . "[" . str_repeat('█', $barLen) . "]" . RESET
-        . " " . NEON_Y . "100%" . RESET . "\n";
-}
-
-function spinner_wait($seconds, $prefix = "Waiting") {
-    $frames = ['⣾', '⣽', '⣻', '⢿', '⡿', '⣟', '⣯', '⣷'];
-    $fc = count($frames);
-    $cf = 0;
-    $wait = (int)$seconds;
-    while ($wait > 0) {
-        $start = microtime(true);
-        while ((microtime(true) - $start) < 1) {
-            $h = floor($wait / 3600);
-            $m = floor(($wait % 3600) / 60);
-            $s = $wait % 60;
-            $t = sprintf('%02d:%02d:%02d', $h, $m, $s);
-            echo "\r  " . NEON_C . "⏳ " . $prefix . RESET . " : " . NEON . $t . " " . $frames[$cf] . RESET . "  ";
-            usleep(100000);
-            $cf = ($cf + 1) % $fc;
-            if ((microtime(true) - $start) >= 1) break;
-        }
-        $wait--;
-    }
-    echo "\r" . str_repeat(' ', 70) . "\r";
-}
-
-function success_banner($title = "SUCCESS", $lines = []) {
-    $w = 58;
-    echo "\n" . NEON . BOLD . "╔" . str_repeat('═', $w) . "╗" . RESET . "\n";
-    echo NEON . BOLD . "║" . RESET . str_pad("  ✓ " . $title, $w) . NEON . BOLD . "║" . RESET . "\n";
-    echo NEON . BOLD . "╠" . str_repeat('═', $w) . "╣" . RESET . "\n";
-    foreach ($lines as $k => $v) {
-        $line = "  " . str_pad($k, 15) . ": " . $v;
-        echo NEON . BOLD . "║" . RESET . str_pad($line, $w) . NEON . BOLD . "║" . RESET . "\n";
-    }
-    echo NEON . BOLD . "╚" . str_repeat('═', $w) . "╝" . RESET . "\n\n";
-}
-
-function hack_progress($label = "Bypassing security", $duration = 2.5) {
-    $steps = [
-        "Analyzing target...",
-        "Scanning open ports...",
-        "Injecting payload...",
-        "Bypassing firewall...",
-        "Escalating privileges...",
-        "Access granted!",
-    ];
-    foreach ($steps as $i => $s) {
-        echo "  " . NEON_C . "[>]" . RESET . " " . $s;
-        $dots = 0;
-        while ($dots < 3) {
-            echo ".";
-            usleep(random_int(80000, 150000));
-            $dots++;
-        }
-        echo " " . NEON . "[OK]" . RESET . "\n";
-    }
+    render_box();
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  KONFIGURASI & FUNGSI BOT
+//  CONFIG
 // ═══════════════════════════════════════════════════════════════
-
 $CONFIG_FILE  = __DIR__ . "/tronblow_config.json";
 $COOKIE_FILE  = __DIR__ . "/cookies_tronblow.txt";
 $COUNTER_FILE = __DIR__ . "/tronblow_counter.json";
 
 const DAILY_LIMIT = 200;
+const BASE_URL    = 'https://tronblow.site';
+const USER_AGENT  = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36';
 
-function log_msg(string $msg, string $type = "INFO"): void {
-    $colors = [
-        "SUCCESS" => "\033[32m",
-        "ERROR"   => "\033[31m",
-        "WARN"    => "\033[33m",
-        "INPUT"   => "\033[36m",
-        "DEBUG"   => "\033[35m",
-        "INFO"    => "\033[0m"
-    ];
-    $color = $colors[$type] ?? "\033[0m";
-    echo $color . "[" . date("H:i:s") . "] [$type] $msg\033[0m\n";
-}
-
+// ═══════════════════════════════════════════════════════════════
+//  IO HELPERS
+// ═══════════════════════════════════════════════════════════════
 function read_line(string $prompt = ""): string {
     if ($prompt) echo $prompt;
-    $handle = fopen("php://stdin", "r");
-    $line = fgets($handle);
-    fclose($handle);
-    return trim($line);
+    $line = fgets(STDIN);
+    return trim((string) $line);
 }
 
-// ── Counter 200/day ──────────────────────────────────────────
+function load_config(): ?array {
+    global $CONFIG_FILE;
+    if (!file_exists($CONFIG_FILE)) return null;
+    $json = @file_get_contents($CONFIG_FILE);
+    $cfg  = json_decode((string) $json, true);
+    if (is_array($cfg) && !empty($cfg['email'])) {
+        $cfg['base_url'] = $cfg['base_url'] ?? BASE_URL;
+        $cfg['delay']    = $cfg['delay']    ?? 65;
+        $cfg['cookie']   = $cfg['cookie']   ?? '';
+        return $cfg;
+    }
+    return null;
+}
+
+function save_config(array $cfg): void {
+    global $CONFIG_FILE;
+    @file_put_contents($CONFIG_FILE, json_encode($cfg, JSON_PRETTY_PRINT));
+}
+
 function load_counter(): array {
     global $COUNTER_FILE;
-    $today = date("Y-m-d");
+    $today = date('Y-m-d');
     if (file_exists($COUNTER_FILE)) {
-        $data = json_decode(file_get_contents($COUNTER_FILE), true);
-        if (is_array($data) && ($data['date'] ?? '') === $today) {
-            return $data;
-        }
+        $d = json_decode((string) file_get_contents($COUNTER_FILE), true);
+        if (is_array($d) && ($d['date'] ?? '') === $today) return $d;
     }
     return ['date' => $today, 'count' => 0];
 }
 
-function save_counter(array $counter): void {
+function save_counter(array $c): void {
     global $COUNTER_FILE;
-    file_put_contents($COUNTER_FILE, json_encode($counter, JSON_PRETTY_PRINT));
+    @file_put_contents($COUNTER_FILE, json_encode($c, JSON_PRETTY_PRINT));
 }
 
 function increment_counter(): array {
@@ -305,33 +235,13 @@ function increment_counter(): array {
     return $c;
 }
 
-// ── Config ───────────────────────────────────────────────────
-function load_config(): ?array {
-    global $CONFIG_FILE;
-    if (file_exists($CONFIG_FILE)) {
-        $json = file_get_contents($CONFIG_FILE);
-        $config = json_decode($json, true);
-        if (is_array($config) && !empty($config['email'])) {
-            if (!isset($config['base_url'])) $config['base_url'] = 'https://tronblow.site';
-            if (!isset($config['delay']))    $config['delay']    = 65;
-            if (!isset($config['cookie']))   $config['cookie']   = '';
-            return $config;
-        }
-    }
-    return null;
-}
-
-function save_config(array $config): void {
-    global $CONFIG_FILE;
-    file_put_contents($CONFIG_FILE, json_encode($config, JSON_PRETTY_PRINT));
-    log_msg("Config saved!", "SUCCESS");
-}
-
-// ── HTTP ─────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+//  HTTP
+// ═══════════════════════════════════════════════════════════════
 function fetch_page(string $url, string $cookie_file): array {
     $ch = curl_init($url);
     $headers = [
-        'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language: en-GB,en;q=0.9',
         'Sec-Ch-Ua: "Chromium";v="127", "Not)A;Brand";v="99"',
         'Sec-Ch-Ua-Mobile: ?1',
@@ -339,49 +249,42 @@ function fetch_page(string $url, string $cookie_file): array {
         'Sec-Fetch-Dest: document',
         'Sec-Fetch-Mode: navigate',
         'Sec-Fetch-Site: none',
-        'Sec-Fetch-User: ?1',
-        'Upgrade-Insecure-Requests: 1'
+        'Upgrade-Insecure-Requests: 1',
     ];
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_TIMEOUT => 30,
+        CURLOPT_TIMEOUT        => 30,
         CURLOPT_SSL_VERIFYPEER => false,
         CURLOPT_SSL_VERIFYHOST => false,
-        CURLOPT_ENCODING => '',
-        CURLOPT_USERAGENT => 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36',
-        CURLOPT_HTTPHEADER => $headers,
-        CURLOPT_COOKIEJAR => $cookie_file,
-        CURLOPT_COOKIEFILE => $cookie_file,
+        CURLOPT_ENCODING       => '',
+        CURLOPT_USERAGENT      => USER_AGENT,
+        CURLOPT_HTTPHEADER     => $headers,
+        CURLOPT_COOKIEJAR      => $cookie_file,
+        CURLOPT_COOKIEFILE     => $cookie_file,
     ]);
-
     $html = curl_exec($ch);
-    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $error = curl_error($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $err  = curl_error($ch);
 
-    if ($error) {
-        log_msg("cURL Error: $error", "ERROR");
-        return ['html' => false, 'http_code' => 0];
+    if ($err || $code !== 200 || empty($html)) {
+        return ['html' => false, 'http_code' => $code];
     }
-    if ($http_code !== 200 || empty($html)) {
-        log_msg("HTTP $http_code", "ERROR");
-        return ['html' => false, 'http_code' => $http_code];
-    }
-    return ['html' => $html, 'http_code' => $http_code];
+    return ['html' => $html, 'http_code' => $code];
 }
 
-function submit_claim(string $url, string $cookie_file, string $email, string $csrf_token, int $math_answer): array {
-    $post_data = http_build_query([
+function submit_claim(string $url, string $cookie_file, string $email, string $csrf, int $answer): array {
+    $post = http_build_query([
         'action'      => 'claim',
-        'csrf_token'  => $csrf_token,
+        'csrf_token'  => $csrf,
         'website'     => '',
         'email'       => $email,
-        'math_answer' => $math_answer
+        'math_answer' => $answer,
     ]);
 
     $ch = curl_init($url);
     $headers = [
-        'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language: en-GB,en;q=0.9',
         'Content-Type: application/x-www-form-urlencoded',
         'Origin: ' . $url,
@@ -393,30 +296,30 @@ function submit_claim(string $url, string $cookie_file, string $email, string $c
         'Sec-Fetch-Mode: navigate',
         'Sec-Fetch-Site: same-origin',
         'Sec-Fetch-User: ?1',
-        'Upgrade-Insecure-Requests: 1'
+        'Upgrade-Insecure-Requests: 1',
     ];
     curl_setopt_array($ch, [
-        CURLOPT_POST => true,
-        CURLOPT_POSTFIELDS => $post_data,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $post,
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_TIMEOUT => 30,
+        CURLOPT_TIMEOUT        => 30,
         CURLOPT_SSL_VERIFYPEER => false,
         CURLOPT_SSL_VERIFYHOST => false,
-        CURLOPT_ENCODING => '',
-        CURLOPT_USERAGENT => 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36',
-        CURLOPT_HTTPHEADER => $headers,
-        CURLOPT_COOKIEJAR => $cookie_file,
-        CURLOPT_COOKIEFILE => $cookie_file,
+        CURLOPT_ENCODING       => '',
+        CURLOPT_USERAGENT      => USER_AGENT,
+        CURLOPT_HTTPHEADER     => $headers,
+        CURLOPT_COOKIEJAR      => $cookie_file,
+        CURLOPT_COOKIEFILE     => $cookie_file,
     ]);
-
-    $response = curl_exec($ch);
-    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-    return ['code' => $http_code, 'body' => (string)$response];
+    $body = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    return ['code' => $code, 'body' => (string) $body];
 }
 
-// ── Parser ───────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+//  PARSER
+// ═══════════════════════════════════════════════════════════════
 function extract_csrf_token(string $html): ?string {
     if (preg_match('/<input\s+type="hidden"\s+name="csrf_token"\s+value="([^"]+)"/i', $html, $m)) {
         return $m[1];
@@ -427,330 +330,386 @@ function extract_csrf_token(string $html): ?string {
 function extract_math_question(string $html): ?array {
     if (preg_match('/<div\s+class="captcha-q">(.*?)<\/div>/is', $html, $m)) {
         $text = strip_tags($m[1]);
-        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        $text = trim($text);
     } else {
         $text = strip_tags($html);
-        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
     }
-
-    $text = str_replace(['−', '–', '—', '‐', '‑', '‒', '&minus;'], '-', $text);
-    $text = str_replace(['×', '&times;'], '*', $text);
-    $text = str_replace(['÷', '&divide;'], '/', $text);
+    $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $text = str_replace(['−','–','—','‐','‑','‒','&minus;'], '-', $text);
+    $text = str_replace(['×','&times;'], '*', $text);
+    $text = str_replace(['÷','&divide;'], '/', $text);
 
     if (preg_match('/what\s+is\s+(\d+)\s*([+\-*\/])\s*(\d+)\s*=\s*\?/i', $text, $m)) {
-        return ['q1' => (int)$m[1], 'op' => $m[2], 'q2' => (int)$m[3]];
+        return ['q1'=>(int)$m[1], 'op'=>$m[2], 'q2'=>(int)$m[3]];
     }
     if (preg_match('/(\d+)\s*([+\-*\/])\s*(\d+)\s*=\s*\?/i', $text, $m)) {
-        return ['q1' => (int)$m[1], 'op' => $m[2], 'q2' => (int)$m[3]];
+        return ['q1'=>(int)$m[1], 'op'=>$m[2], 'q2'=>(int)$m[3]];
     }
     if (preg_match('/(\d+)\s*([+\-*\/])\s*(\d+)\s*=/i', $text, $m)) {
-        return ['q1' => (int)$m[1], 'op' => $m[2], 'q2' => (int)$m[3]];
+        return ['q1'=>(int)$m[1], 'op'=>$m[2], 'q2'=>(int)$m[3]];
     }
     return null;
 }
 
-function solve_math(array $math): int {
-    $n1 = $math['q1'];
-    $n2 = $math['q2'];
-    switch ($math['op']) {
-        case '+': return $n1 + $n2;
-        case '-': return $n1 - $n2;
-        case '*': return $n1 * $n2;
-        case '/': return $n2 != 0 ? (int)($n1 / $n2) : 0;
-        default: return 0;
+function solve_math(array $m): int {
+    $a = $m['q1']; $b = $m['q2'];
+    switch ($m['op']) {
+        case '+': return $a + $b;
+        case '-': return $a - $b;
+        case '*': return $a * $b;
+        case '/': return $b != 0 ? (int)($a / $b) : 0;
+        default:  return 0;
     }
 }
 
 function extract_endAt(string $html): ?int {
-    if (preg_match('/var\s+endAt\s*=\s*(\d+)\s*\*\s*1000/', $html, $m)) {
-        return (int)($m[1] * 1000);
-    }
-    if (preg_match('/endAt\s*=\s*(\d+)\s*\*\s*1000/', $html, $m)) {
-        return (int)($m[1] * 1000);
-    }
-    if (preg_match('/endAt\s*=\s*(\d+)\s*;?/', $html, $m)) {
-        return (int)$m[1];
-    }
+    if (preg_match('/endAt\s*=\s*(\d+)\s*\*\s*1000/', $html, $m)) return (int)($m[1] * 1000);
+    if (preg_match('/endAt\s*=\s*(\d+)\s*;?/', $html, $m))          return (int)$m[1];
     return null;
 }
 
-function check_response(string $html): array {
-    $lower = strtolower($html);
-    $patterns = [
-        'success' => ['success','claimed','reward','sent','received','balance','congratulations'],
-        'wait'    => ['wait','countdown','timer','please wait','try again later','time remaining'],
-        'wrong'   => ['wrong','incorrect','invalid','error','failed','captcha','try again'],
-        'already' => ['already','recently','one claim','per day','limit','maximum'],
-        'banned'  => ['banned','blocked','suspicious','bot detected','vpn','proxy']
-    ];
-    foreach ($patterns as $status => $keywords) {
-        foreach ($keywords as $kw) {
-            if (strpos($lower, $kw) !== false) {
-                return ['status' => $status, 'msg' => ucfirst($status) . " (keyword: '$kw')"];
+// ═══════════════════════════════════════════════════════════════
+//  RESPONSE PARSER
+// ═══════════════════════════════════════════════════════════════
+function parse_alert_message(string $html): array {
+    $out = ['success' => null, 'error' => null];
+
+    if (preg_match('/<div[^>]*class="[^"]*alert-success[^"]*"[^>]*>(.*?)<\/div>/is', $html, $m)) {
+        $out['success'] = trim(strip_tags($m[1]));
+    }
+    if (preg_match('/<div[^>]*class="[^"]*alert-error[^"]*"[^>]*>(.*?)<\/div>/is', $html, $m)) {
+        $out['error'] = trim(strip_tags($m[1]));
+    }
+    if ($out['success'] === null && $out['error'] === null) {
+        if (preg_match('/<div[^>]*class="[^"]*alert[^"]*"[^>]*>(.*?)<\/div>/is', $html, $m)) {
+            $txt = trim(strip_tags($m[1]));
+            $low = strtolower($txt);
+            if (strpos($low, 'success') !== false || strpos($low, 'sent') !== false) {
+                $out['success'] = $txt;
+            } else {
+                $out['error'] = $txt;
             }
         }
+    }
+    return $out;
+}
+
+function is_fatal_error(string $msg): bool {
+    $s = strtolower($msg);
+    $keys = [
+        'insufficient fund', 'does not have sufficient', 'payment failed',
+        'faucet is empty', 'out of funds', 'no funds', 'balance is empty',
+        'not enough balance',
+    ];
+    foreach ($keys as $k) {
+        if (strpos($s, $k) !== false) return true;
+    }
+    return false;
+}
+
+function check_faucet_health(string $html, int $max_age_min = 30): array {
+    $out = ['ok' => true, 'last_payment' => null, 'age_min' => null, 'reason' => ''];
+    if (preg_match_all('/(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/', $html, $matches)) {
+        $ts = array_map('strtotime', $matches[1]);
+        sort($ts);
+        $latest = end($ts);
+        $out['last_payment'] = $latest;
+        $age_sec = time() - $latest;
+        $age_min = (int) floor($age_sec / 60);
+        $out['age_min'] = $age_min;
+        if ($age_min > $max_age_min) {
+            $out['ok'] = false;
+            $out['reason'] = "Last payment {$age_min} menit lalu (threshold {$max_age_min}m)";
+        }
+    } else {
+        $out['ok'] = false;
+        $out['reason'] = 'Gak ada entry di Live Payment Proof';
+    }
+    return $out;
+}
+
+function check_response(string $html): array {
+    $alerts = parse_alert_message($html);
+
+    if ($alerts['success'] !== null) {
+        return ['status' => 'success', 'msg' => $alerts['success']];
+    }
+    if ($alerts['error'] !== null) {
+        $msg = $alerts['error'];
+        if (is_fatal_error($msg)) {
+            return ['status' => 'fatal', 'msg' => $msg];
+        }
+        $low = strtolower($msg);
+        if (strpos($low, 'math') !== false || strpos($low, 'captcha') !== false
+            || strpos($low, 'wrong') !== false || strpos($low, 'incorrect') !== false
+            || strpos($low, 'invalid') !== false) {
+            return ['status' => 'wrong', 'msg' => $msg];
+        }
+        return ['status' => 'error', 'msg' => $msg];
+    }
+
+    $low = strtolower($html);
+    foreach (['banned', 'blocked', 'vpn not allowed', 'proxy not allowed'] as $kw) {
+        if (strpos($low, $kw) !== false) return ['status' => 'banned', 'msg' => "Keyword: $kw"];
+    }
+    foreach (['please wait', 'try again later', 'countdown', 'one claim'] as $kw) {
+        if (strpos($low, $kw) !== false) return ['status' => 'wait', 'msg' => "Cooldown: $kw"];
     }
     return ['status' => 'unknown', 'msg' => 'Unclear response'];
 }
 
-function countdown_seconds(int $seconds): void {
-    // pakai spinner animasi dari animation pack
-    spinner_wait($seconds, "Next claim");
-}
-
-// ── Banner Utama ─────────────────────────────────────────────
-function print_main_banner(array $config): void {
-    $counter = load_counter();
-    $remaining = max(0, DAILY_LIMIT - $counter['count']);
-
-    $status_color = $remaining > 50 ? NEON : ($remaining > 10 ? NEON_Y : RED);
-
-    echo NEON . "
-╭──────────────────────────────────────────────────────────────╮
-│                                                              │
-│   ████████╗██████╗  ██████╗ ███╗   ██╗                      │
-│   ╚══██╔══╝██╔══██╗██╔═══██╗████╗  ██║                      │
-│      ██║   ██████╔╝██║   ██║██╔██╗ ██║                      │
-│      ██║   ██╔══██╗██║   ██║██║╚██╗██║                      │
-│      ██║   ██║  ██║╚██████╔╝██║ ╚████║                      │
-│      ╚═╝   ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝                      │
-│                                                              │
-│              " . NEON_C . "TRONBLOW // AUTO CLAIM v4.0" . NEON . "              │
-│                                                              │
-│   " . WHITE . "┌─ SYSTEM ─────────────────────────────────────────┐" . NEON . " │
-│   " . WHITE . "│ " . NEON . "● BOT STATUS   : ONLINE" . WHITE . "                      │" . NEON . " │
-│   " . WHITE . "│ " . NEON_C . "⚡ CLAIM MODE   : AUTOMATIC" . WHITE . "                   │" . NEON . " │
-│   " . WHITE . "│ " . NEON_Y . "💰 REWARD      : 1000 SATOSHI" . WHITE . "                 │" . NEON . " │
-│   " . WHITE . "│ " . NEON_P . "⏱ INTERVAL    : 60 SECONDS" . WHITE . "                 │" . NEON . " │
-│   " . WHITE . "│ " . ORANGE . "📊 DAILY LIMIT : " . DAILY_LIMIT . " / DAY" . WHITE . "                     │" . NEON . " │
-│   " . WHITE . "│ " . $status_color . "🎯 CLAIMED     : " . $counter['count'] . " (" . $remaining . " left)" . WHITE . "             │" . NEON . " │
-│   " . WHITE . "└───────────────────────────────────────────────────┘" . NEON . " │
-│                                                              │
-│             " . NEON_Y . ">>> INITIALIZING CLAIM ENGINE..." . NEON . "             │
-│                                                              │
-╰──────────────────────────────────────────────────────────────╯
-" . RESET . "\n";
-}
-
 // ═══════════════════════════════════════════════════════════════
-//  INTERACTIVE SETUP
+//  SETUP
 // ═══════════════════════════════════════════════════════════════
-
 function interactive_setup(): array {
-    echo "\n" . NEON . "╔════════════════════════════════════════════════╗" . RESET . "\n";
-    echo NEON . "║     TRONBLOW FAUCET BOT v4.0                  ║" . RESET . "\n";
-    echo NEON . "║     Developer: ScriptyXSouu                   ║" . RESET . "\n";
-    echo NEON . "╚════════════════════════════════════════════════╝" . RESET . "\n\n";
-
-    $config = [];
-    echo NEON_C . "[1/2] Enter your FaucetPay email:" . RESET . "\n";
-    $config['email'] = read_line("Email: ");
-    while (empty($config['email']) || !filter_var($config['email'], FILTER_VALIDATE_EMAIL)) {
-        log_msg("Invalid email!", "WARN");
-        $config['email'] = read_line("Email: ");
+    echo "\n" . CYN . "═══ FIRST TIME SETUP ═══" . RST . "\n\n";
+    $email = '';
+    while (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $email = read_line(YEL . "FaucetPay Email: " . RST);
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            echo RED . "  ✗ Email gak valid, coba lagi.\n" . RST;
+        }
     }
-
-    $config['base_url'] = "https://tronblow.site";
-    $config['delay'] = 65;
-    $config['cookie'] = '';
-
-    echo "\n" . NEON . "Config saved!" . RESET . "\n";
-    return $config;
+    return [
+        'email'    => $email,
+        'base_url' => BASE_URL,
+        'delay'    => 65,
+        'cookie'   => '',
+    ];
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  MAIN EXECUTION
+//  MAIN
 // ═══════════════════════════════════════════════════════════════
+render_box_clear();
+echo CYN . "  ◈ TRONBLOW AUTO CLAIM ENGINE v4.1 (Clean)\n" . RST;
+echo DIM . "  ─── Souu Engine ───\n\n" . RST;
 
-clear_screen();
-
-// 1. Efek boot ala hacker
-hacking_boot([
-    "Initializing kernel module...",
-    "Loading anti-bot engine...",
-    "Rotating device fingerprint...",
-    "Injecting stealth headers...",
-    "Connecting to remote server...",
-    "Bypassing security layers...",
-    "Loading session cookies...",
-    "System ready.",
-]);
-echo "\n";
-
-// 2. Decrypt title
-decrypt_text("TRONBLOW AUTO CLAIM ENGINE v4.0", 1.2);
-glitch_text("MAX 200 CLAIM/DAY • 1000 SATOSHI/CLAIM", 0.8);
-echo "\n";
-
-// 3. Loading modules
-loading_bar("Loading modules", 1.0);
-loading_bar("Fetching cookies", 0.8);
-scan_line("Reading target", 40);
-echo "\n";
-
-// 4. Load config
+// Load config
 $config = load_config();
 if ($config) {
-    log_msg("Saved config found!", "SUCCESS");
-    echo "  Email: {$config['email']}\n";
-    echo "  URL:   {$config['base_url']}\n";
-    echo "  Delay: {$config['delay']}s\n\n";
-    $use = read_line("\033[36mUse saved? (y/n/reconfig): \033[0m");
-    if ($use === 'n' || $use === 'reconfig') {
+    echo GRN . "  ✓ Config found\n" . RST;
+    echo DIM . "    Email : {$config['email']}\n" . RST;
+    echo DIM . "    Delay : {$config['delay']}s\n" . RST;
+    echo DIM . "    URL   : {$config['base_url']}\n\n" . RST;
+    $ans = read_line(YEL . "  Use saved? (y/n): " . RST);
+    if (strtolower($ans) === 'n') {
         $config = interactive_setup();
     }
 } else {
     $config = interactive_setup();
 }
+save_config($config);
 
-if (empty($config['email']) || empty($config['base_url'])) {
-    log_msg("Invalid configuration!", "ERROR");
-    exit(1);
-}
-if (!isset($config['delay'])) $config['delay'] = 65;
-if (!isset($config['cookie'])) $config['cookie'] = '';
+if (!file_exists($COOKIE_FILE)) touch($COOKIE_FILE);
 
-if (!file_exists($COOKIE_FILE)) {
-    touch($COOKIE_FILE);
-}
+// Update state
+$STATE['email'] = $config['email'];
+$STATE['daily_count'] = load_counter()['count'];
+$STATE['runtime_start'] = time();
 
-// 5. Banner utama dengan info 200/day
-print_main_banner($config);
-
-// 6. Efek hack sebelum mulai
-hack_progress("Hacking server");
-echo "\n";
-faucet_progress("Bypassing Cloudflare", 1.5);
-echo "\n";
-
-log_msg("=== BOT STARTED ===", "SUCCESS");
-log_msg("Daily limit: " . DAILY_LIMIT . " claims", "INFO");
-log_msg("Press Ctrl+C to stop", "WARN");
-echo "\n";
+render_box_clear();
 
 $cycle = 0;
 while (true) {
-    // Cek limit harian
+    // Cek daily limit
     $counter = load_counter();
+    $STATE['daily_count'] = $counter['count'];
     if ($counter['count'] >= DAILY_LIMIT) {
-        log_msg("🚫 Daily limit reached ({$counter['count']}/" . DAILY_LIMIT . "). Waiting for reset...", "WARN");
-        $secs_until_reset = strtotime("tomorrow 00:00 UTC") - time();
-        if ($secs_until_reset > 0) spinner_wait($secs_until_reset, "Reset in");
+        state_log("Daily limit reached ({$counter['count']}/" . DAILY_LIMIT . ")", 'WARN');
+        render_box_clear();
+        $secs = strtotime("tomorrow 00:00 UTC") - time();
+        while ($secs > 0) {
+            sleep(min(60, $secs));
+            $secs = strtotime("tomorrow 00:00 UTC") - time();
+        }
         continue;
     }
 
-    $cycle++;
-    echo "\n" . NEON_P . "╭─── CYCLE #$cycle ─── " . date("H:i:s") . " ─── " . $counter['count'] . "/" . DAILY_LIMIT . " ───╮" . RESET . "\n";
+    // Cek max runtime
+    if ((time() - $STATE['runtime_start']) >= $STATE['max_runtime']) {
+        state_log("Max runtime reached, exiting", 'WARN');
+        render_box_clear();
+        break;
+    }
 
+    // Cek max failures
+    if ($STATE['failures'] >= $STATE['max_failures']) {
+        state_log("Max failures reached, exiting", 'ERR');
+        render_box_clear();
+        break;
+    }
+
+    $cycle++;
+    state_log("Cycle #$cycle starting...", 'INFO');
+    render_box_clear();
+
+    // Fetch homepage
     $result = fetch_page($config['base_url'], $COOKIE_FILE);
     if (!$result['html']) {
-        log_msg("Failed to fetch page. Retry in 30s...", "ERROR");
-        spinner_wait(30, "Retry");
+        state_log("Fetch failed (HTTP {$result['http_code']})", 'ERR');
+        $STATE['failures']++;
+        render_box_clear();
+        sleep(30);
         continue;
     }
     $html = $result['html'];
 
-    $lower = strtolower($html);
-    if (strpos($lower, 'cf-browser-verification') !== false ||
-        strpos($lower, 'challenge-platform') !== false ||
-        strpos($lower, 'just a moment') !== false) {
-        log_msg("Cloudflare challenge detected! Clearing cookies...", "WARN");
-        glitch_text("!! CLOUDFLARE CHALLENGE DETECTED !!", 0.6);
-        unlink($COOKIE_FILE);
+    // ─── HEALTH CHECK ───
+    state_log("Checking faucet health...", 'HEALTH');
+    render_box_clear();
+    $health = check_faucet_health($html, 30);
+    $STATE['faucet_status'] = $health['ok'] ? 'ok' : 'suspect';
+    $STATE['last_payment']  = $health['last_payment'];
+
+    if (!$health['ok']) {
+        state_log("SUSPECT: {$health['reason']}", 'WARN');
+        render_box_clear();
+
+        // Pre-check: apakah ada alert fatal di homepage?
+        $pre = parse_alert_message($html);
+        if ($pre['error'] && is_fatal_error($pre['error'])) {
+            $STATE['faucet_status'] = 'dead';
+            state_log("FATAL: {$pre['error']}", 'ERR');
+            render_box_clear();
+            echo "\n" . RED . "  ╔══════════════════════════════════════════════════════╗\n" . RST;
+            echo RED   . "  ║  ❌ FAUCET SUDAH TIDAK BISA BAYAR                    ║\n" . RST;
+            echo RED   . "  ║  Bot dihentikan otomatis.                            ║\n" . RST;
+            echo RED   . "  ╚══════════════════════════════════════════════════════╝\n\n" . RST;
+            break;
+        }
+
+        // Tanya user
+        echo "\n" . YEL . "  ⚠ Faucet kelihatan gak bayar (" . ($health['age_min'] ?? '?') . " menit).\n" . RST;
+        $ans = read_line(YEL . "  Lanjut claim? (y/n): " . RST);
+        if (strtolower($ans) !== 'y') {
+            state_log("Stopped by user", 'WARN');
+            render_box_clear();
+            break;
+        }
+    }
+
+    // ─── CLOUDFLARE check ───
+    $low = strtolower($html);
+    if (strpos($low, 'cf-browser-verification') !== false
+        || strpos($low, 'challenge-platform') !== false
+        || strpos($low, 'just a moment') !== false) {
+        state_log("Cloudflare challenge — clearing cookies", 'WARN');
+        render_box_clear();
+        @unlink($COOKIE_FILE);
         touch($COOKIE_FILE);
-        spinner_wait(60, "Cooldown");
+        sleep(60);
         continue;
     }
 
+    // ─── CSRF ───
     $csrf = extract_csrf_token($html);
     if (!$csrf) {
-        log_msg("CSRF token not found! Retry in 30s...", "ERROR");
-        spinner_wait(30, "Retry");
+        state_log("CSRF token not found", 'ERR');
+        $STATE['failures']++;
+        render_box_clear();
+        sleep(30);
         continue;
     }
-    log_msg("CSRF: " . substr($csrf, 0, 10) . "...", "DEBUG");
 
+    // ─── MATH ───
     $math = extract_math_question($html);
     if (!$math) {
-        log_msg("Could not extract math question. Retry in 30s...", "ERROR");
-        spinner_wait(30, "Retry");
+        state_log("Math question not found", 'ERR');
+        $STATE['failures']++;
+        render_box_clear();
+        sleep(30);
         continue;
     }
     $answer = solve_math($math);
-    log_msg("Math: {$math['q1']} {$math['op']} {$math['q2']} = $answer", "SUCCESS");
+    state_log("Math: {$math['q1']} {$math['op']} {$math['q2']} = $answer", 'VERIFY');
+    render_box_clear();
 
-    // Animasi dekripsi payload
-    decrypt_text("SOLVING CAPTCHA → " . $answer, 0.6);
-
-    // Animasi progress claim
-    faucet_progress("Claiming 1000 SATOSHI", 2.0);
+    // ─── SUBMIT ───
+    state_log("Claiming 1000 SAT...", 'CLAIM');
+    render_box_clear();
 
     $submit = submit_claim($config['base_url'], $COOKIE_FILE, $config['email'], $csrf, $answer);
-    log_msg("HTTP Status: {$submit['code']}", "INFO");
-
     $status = check_response($submit['body']);
     $wait_seconds = $config['delay'];
 
     switch ($status['status']) {
         case 'success':
             $counter = increment_counter();
-            $remaining = max(0, DAILY_LIMIT - $counter['count']);
-
-            success_banner("CLAIM COMPLETED", [
-                "Reward"     => "1000 SATOSHI TRX",
-                "Account"    => $config['email'],
-                "Progress"   => $counter['count'] . "/" . DAILY_LIMIT . " today",
-                "Remaining"  => $remaining . " claims left",
-                "Next"       => "Auto-wait...",
-            ]);
+            $STATE['daily_count'] = $counter['count'];
+            $STATE['claims']++;
+            $STATE['rewards'] += 0.00001; // 1000 sat = 0.00001 TRX
+            $STATE['failures'] = 0;
+            state_log("✓ CLAIMED: {$status['msg']}", 'OK');
 
             $endAt = extract_endAt($submit['body']);
             if ($endAt) {
-                $now = time() * 1000;
-                $wait_ms = $endAt - $now;
-                if ($wait_ms > 0) $wait_seconds = (int)ceil($wait_ms / 1000);
+                $wait_ms = $endAt - (int)(microtime(true) * 1000);
+                if ($wait_ms > 0) $wait_seconds = (int) ceil($wait_ms / 1000);
             }
+            render_box_clear();
             break;
+
+        case 'fatal':
+            $STATE['faucet_status'] = 'dead';
+            state_log("FATAL: {$status['msg']}", 'ERR');
+            render_box_clear();
+            echo "\n" . RED . "  ╔══════════════════════════════════════════════════════╗\n" . RST;
+            echo RED   . "  ║  ❌ FAUCET SUDAH TIDAK BISA BAYAR                    ║\n" . RST;
+            echo RED   . "  ║  " . str_pad("  " . substr($status['msg'], 0, 46), 52) . "  ║\n" . RST;
+            echo RED   . "  ║  Bot dihentikan otomatis.                            ║\n" . RST;
+            echo RED   . "  ╚══════════════════════════════════════════════════════╝\n\n" . RST;
+            exit(2);
 
         case 'wait':
         case 'already':
-            log_msg("⏳ Cooldown active. Waiting for server timer.", "WARN");
+            state_log("⏳ {$status['msg']}", 'WAIT');
             $endAt = extract_endAt($submit['body']);
             if ($endAt) {
-                $now = time() * 1000;
-                $wait_ms = $endAt - $now;
-                if ($wait_ms > 0) $wait_seconds = (int)ceil($wait_ms / 1000);
+                $wait_ms = $endAt - (int)(microtime(true) * 1000);
+                if ($wait_ms > 0) $wait_seconds = (int) ceil($wait_ms / 1000);
             }
+            render_box_clear();
             break;
 
         case 'wrong':
-            log_msg("❌ Math answer wrong! Retrying with new page...", "ERROR");
-            glitch_text("!! CAPTCHA FAILED !!", 0.5);
-            spinner_wait(10, "Retry");
+            state_log("Math wrong: {$status['msg']}", 'ERR');
+            $STATE['failures']++;
+            render_box_clear();
+            sleep(5);
+            continue 2;
+
+        case 'error':
+            state_log("Error: {$status['msg']}", 'ERR');
+            $STATE['failures']++;
+            render_box_clear();
+            sleep(15);
             continue 2;
 
         case 'banned':
-            log_msg("🚫 ACCOUNT BANNED! Exiting...", "ERROR");
-            glitch_text("!! ACCESS DENIED — BANNED !!", 0.8);
+            state_log("BANNED: {$status['msg']}", 'ERR');
+            render_box_clear();
             exit(1);
 
         default:
-            log_msg("❓ Unknown response: {$status['msg']}", "WARN");
+            state_log("Unknown: {$status['msg']}", 'WARN');
             $endAt = extract_endAt($submit['body']);
             if ($endAt) {
-                $now = time() * 1000;
-                $wait_ms = $endAt - $now;
-                if ($wait_ms > 0) $wait_seconds = (int)ceil($wait_ms / 1000);
+                $wait_ms = $endAt - (int)(microtime(true) * 1000);
+                if ($wait_ms > 0) $wait_seconds = (int) ceil($wait_ms / 1000);
             }
+            render_box_clear();
+            break;
     }
 
-    echo NEON . "╰─────────────────────────────────────────────╯" . RESET . "\n";
-
+    // Wait
     if ($wait_seconds > 0) {
-        spinner_wait($wait_seconds, "Next claim");
-    } else {
-        log_msg("No timer found, using default delay {$config['delay']}s", "WARN");
-        spinner_wait($config['delay'], "Next claim");
+        state_log("Next claim in {$wait_seconds}s", 'WAIT');
+        render_box_clear();
+        sleep($wait_seconds);
     }
 }
+
+// Final
+render_box_clear();
+echo "\n" . CYN . "  ◈ Bot stopped.\n" . RST;
+echo DIM . "  Claims: {$STATE['claims']}  |  Failures: {$STATE['failures']}\n\n" . RST;
