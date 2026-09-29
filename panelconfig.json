@@ -267,6 +267,11 @@
           "label": "Adclickers 🟢",
           "file": "Adclickers.php",
           "runner": "php"
+        },
+        "24": {
+          "label": "AdTubesBot 🟢",
+          "file": "AdTubesBot.py",
+          "runner": "python3"
         }
       }
     },
