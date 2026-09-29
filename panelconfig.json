@@ -39,8 +39,8 @@
           "runner": "python3"
         },
         "8": {
-          "label": "RapidGame 🟡",
-          "file": "Rapid.py",
+          "label": "Faucetpayz 🟢",
+          "file": "faucetpayz.py",
           "runner": "python3"
         },
         "9": {
