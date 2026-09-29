@@ -2,21 +2,22 @@
 # -*- coding: utf-8 -*-
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   FAUCETPAYZ AUTO CLAIM — SOUU ENGINE Edition v7.1          ║
-║   Modes  : Faucet / YT Videos (aviso) / PTC (ajax/surf)     ║
-║   Login  : username + password (no cookie file)             ║
+║   FAUCETPAYZ AUTO CLAIM — SOUU ENGINE Edition v9.2          ║
+║   Modes  : Faucet / YT Videos (aviso)                       ║
+║   Login  : cookie cached — login hanya kalau expired        ║
 ╚══════════════════════════════════════════════════════════════╝
 """
 
-import requests, re, json, time, sys, os, random, urllib.parse, secrets, signal
+import requests, re, json, time, sys, os, random, signal, hashlib
 from datetime import datetime
 from collections import deque
 from colorama import init, Fore, Style
 init(autoreset=True)
 
-VERSION = "7.1"
+VERSION = "9.2"
 HOST = "https://faucetpayz.com"
 CONFIG_FILE = "config_faucetpayz.json"
+SESSION_DIR = "sessions_faucetpayz"
 
 WARYONO_IN  = "https://api.waryono.my.id/in.php"
 WARYONO_RES = "https://api.waryono.my.id/res.php"
@@ -29,12 +30,14 @@ RESET = Style.RESET_ALL
 
 BOX_WIDTH = 62
 LOG_LINES = 7
-SUPPORTED_TASK_TYPES = ['ads', 'like']
 ANSI_RE = re.compile(r'\033\[[0-9;]*m')
 
 DEFAULT_UA = ("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36")
 DEFAULT_TURNSTILE = "0x4AAAAAAAB-TZt_lwYtViEL"
+
+FAUCET_ERROR_CD = 10
+FAUCET_SUCCESS_CD = 10
 
 
 # ═════════════════════════════════════════════════════════════
@@ -47,6 +50,7 @@ class UI:
         "balance": "-", "purchase": "-", "points": "-",
         "state": "INIT", "phase": "-", "cooldown": 0,
         "solver": "WARYONO", "mode": "-", "start_ts": int(time.time()),
+        "last_claim": "-", "total_earned": 0,
     }
     logs = deque(maxlen=200)
 
@@ -111,6 +115,7 @@ class UI:
     def render():
         if not UI.state["running"]: return
         s = UI.state
+        # clear screen
         buf = "\033[2J\033[H"
         buf += UI.top() + "\n"
         buf += UI.row(UI.bold(UI.gradient(s["title"], 51, 213))) + "\n"
@@ -129,6 +134,11 @@ class UI:
         buf += UI.row("├─ " + UI.pad("Balance", 11) + ": " + UI.trunc(UI.fg(46, str(s["balance"])), 30)) + "\n"
         buf += UI.row("├─ " + UI.pad("Purchase", 11) + ": " + UI.trunc(UI.fg(226, str(s["purchase"])), 30)) + "\n"
         buf += UI.row("└─ " + UI.pad("Points", 11) + ": " + UI.trunc(UI.fg(226, str(s["points"])), 30)) + "\n"
+        buf += UI.mid() + "\n"
+
+        buf += UI.row(UI.bold("STATISTIC")) + "\n"
+        buf += UI.row("├─ " + UI.pad("Last claim", 11) + ": " + UI.fg(226, str(s.get("last_claim", "-")))) + "\n"
+        buf += UI.row("└─ " + UI.pad("Total earn", 11) + ": " + UI.fg(46, f"+{s.get('total_earned', 0)} Tokens")) + "\n"
         buf += UI.mid() + "\n"
 
         phase = str(s["phase"])
@@ -216,7 +226,7 @@ class UI:
         print(line(UI.bold("ABOUT")))
         print(line("├─ " + UI.pad("Host", 11) + ": " + HOST))
         print(line("├─ " + UI.pad("Solver", 11) + ": WARYONO"))
-        print(line("├─ " + UI.pad("Modes", 11) + ": faucet / ytvideos / ptc"))
+        print(line("├─ " + UI.pad("Modes", 11) + ": faucet / ytvideos"))
         print(line("└─ " + UI.pad("Version", 11) + ": v" + VERSION))
         print(UI.fg(51, "╠" + "═" * W_ + "╣"))
         print(line(UI.bold("AUTHOR")))
@@ -234,13 +244,13 @@ def show_menu():
     print(UI.fg(51, "╠" + "═" * W_ + "╣"))
     print(line(UI.fg(46, "  1") + ". " + UI.fg(15, "Faucet") + UI.dim(" — claim every 5 min")))
     print(line(UI.fg(46, "  2") + ". " + UI.fg(15, "YT Videos") + UI.dim(" — aviso API")))
-    print(line(UI.fg(46, "  3") + ". " + UI.fg(15, "PTC Ads") + UI.dim(" — paid to click")))
     print(UI.fg(51, "╠" + "═" * W_ + "╣"))
+    print(line(UI.fg(196, "  c") + ". " + UI.fg(15, "Clear cookies") + UI.dim(" — force re-login")))
     print(line(UI.fg(196, "  0") + ". " + UI.fg(15, "Exit")))
     print(UI.fg(51, "╚" + "═" * W_ + "╝"))
     print()
     try:
-        return input(UI.c("  › ", "br_green") + "Choose [0-3]: ").strip()
+        return input(UI.c("  › ", "br_green") + "Choose [0-2/c]: ").strip()
     except (EOFError, KeyboardInterrupt):
         return "0"
 
@@ -265,6 +275,7 @@ class FaucetPayzBot:
         self.aviso_endpoint = AVISO_API
         self.aviso_key = AVISO_API_KEY_DEFAULT
         self.user_hash = ""
+        self.cookie_file = None
 
     def get_config(self):
         if not os.path.exists(CONFIG_FILE):
@@ -284,6 +295,46 @@ class FaucetPayzBot:
         with open(CONFIG_FILE) as f:
             return json.load(f)
 
+    # ── cookie ──
+    def _cookie_path(self):
+        os.makedirs(SESSION_DIR, exist_ok=True)
+        h = hashlib.md5(self.username.lower().strip().encode()).hexdigest()[:16]
+        return os.path.join(SESSION_DIR, f"cookies_{h}.json")
+
+    def load_cookies(self):
+        self.cookie_file = self._cookie_path()
+        if not os.path.exists(self.cookie_file): return False
+        try:
+            with open(self.cookie_file) as f:
+                data = json.load(f)
+            cookies = data.get('cookies', {}) if isinstance(data, dict) else data
+            for k, v in cookies.items():
+                self.session.cookies.set(k, v)
+            return True
+        except Exception:
+            return False
+
+    def save_cookies(self):
+        if not self.cookie_file:
+            self.cookie_file = self._cookie_path()
+        try:
+            cookies = {c.name: c.value for c in self.session.cookies}
+            with open(self.cookie_file, 'w') as f:
+                json.dump({
+                    'username': self.username,
+                    'saved_at': datetime.now().isoformat(),
+                    'cookies': cookies,
+                }, f, indent=2)
+        except Exception:
+            pass
+
+    def clear_cookie_file(self):
+        p = self._cookie_path()
+        if os.path.exists(p):
+            try: os.remove(p)
+            except Exception: pass
+
+    # ── http ──
     def _headers(self, method='GET', referer=None, ajax=False):
         h = {
             'User-Agent': DEFAULT_UA,
@@ -299,9 +350,6 @@ class FaucetPayzBot:
             h['Origin'] = HOST
         if ajax:
             h['x-requested-with'] = 'XMLHttpRequest'
-            h['sec-fetch-site'] = 'same-origin'
-            h['sec-fetch-mode'] = 'cors'
-            h['sec-fetch-dest'] = 'empty'
         return h
 
     def _req(self, url, method='GET', data=None, referer=None, allow_redirects=True, ajax=False):
@@ -311,6 +359,17 @@ class FaucetPayzBot:
                 r = self.session.get(url, headers=hdr, allow_redirects=allow_redirects, timeout=30)
             else:
                 r = self.session.post(url, headers=hdr, data=data, allow_redirects=allow_redirects, timeout=30)
+            self.save_cookies()
+            return r.text
+        except Exception as e:
+            UI.err("HTTP", f"{type(e).__name__}: {str(e)[:40]}")
+            return ""
+
+    def _req_raw(self, url, method='POST', body_str='', referer=None):
+        try:
+            hdr = self._headers(method, referer)
+            r = self.session.post(url, headers=hdr, data=body_str, timeout=30, allow_redirects=True)
+            self.save_cookies()
             return r.text
         except Exception as e:
             UI.err("HTTP", f"{type(e).__name__}: {str(e)[:40]}")
@@ -335,6 +394,7 @@ class FaucetPayzBot:
         m = re.search(r'data-sitekey=["\']([^"\']+)["\']', html)
         return m.group(1) if m else None
 
+    # ── Waryono solvers ──
     def solve_turnstile(self, sitekey, pageurl):
         UI.step("SOLVE", f"Turnstile {sitekey[:16]}…")
         payload = {"apikey": self.api_key, "methods": "turnstile",
@@ -342,11 +402,9 @@ class FaucetPayzBot:
         try:
             j = requests.post(WARYONO_IN, json=payload, timeout=30).json()
         except Exception as e:
-            UI.err("SOLVE", f"TS: {str(e)[:30]}")
-            return None
+            UI.err("SOLVE", f"TS: {str(e)[:30]}"); return None
         if not isinstance(j, dict) or j.get("status") != 1:
-            UI.err("SOLVE", f"TS: {str(j.get('request', 'bad'))[:40]}")
-            return None
+            UI.err("SOLVE", f"TS: {str(j.get('request', 'bad'))[:40]}"); return None
         tid = j["request"]
         for i in range(60):
             time.sleep(2)
@@ -365,10 +423,8 @@ class FaucetPayzBot:
             if "CAPCHA_NOT_READY" in req:
                 if (i + 1) % 5 == 0: UI.info("SOLVE", f"TS poll {i+1}/60")
                 continue
-            UI.err("SOLVE", f"TS: {req[:40]}")
-            return None
-        UI.err("SOLVE", "TS timeout")
-        return None
+            UI.err("SOLVE", f"TS: {req[:40]}"); return None
+        UI.err("SOLVE", "TS timeout"); return None
 
     def solve_antibot(self, main_b64, opt_ids, opt_b64s):
         if not main_b64 or not opt_ids: return None
@@ -379,11 +435,9 @@ class FaucetPayzBot:
         try:
             j = requests.post(WARYONO_IN, json=payload, timeout=30).json()
         except Exception as e:
-            UI.err("SOLVE", f"AB: {str(e)[:30]}")
-            return None
+            UI.err("SOLVE", f"AB: {str(e)[:30]}"); return None
         if not isinstance(j, dict) or j.get("status") != 1:
-            UI.err("SOLVE", f"AB: {str(j.get('request', 'bad'))[:40]}")
-            return None
+            UI.err("SOLVE", f"AB: {str(j.get('request', 'bad'))[:40]}"); return None
         tid = j["request"]
         for i in range(80):
             time.sleep(3)
@@ -391,8 +445,7 @@ class FaucetPayzBot:
                 raw = requests.get(WARYONO_RES,
                     params={"apikey": self.api_key, "id": tid, "action": "get", "json": 1},
                     timeout=30).text.strip()
-                if raw.startswith("OK|"):
-                    return raw[3:]
+                if raw.startswith("OK|"): return raw[3:]
                 j2 = json.loads(raw)
             except Exception:
                 continue
@@ -402,23 +455,22 @@ class FaucetPayzBot:
             if "CAPCHA_NOT_READY" in req:
                 if (i + 1) % 5 == 0: UI.info("SOLVE", f"AB poll {i+1}/80")
                 continue
-            UI.err("SOLVE", f"AB: {req[:40]}")
-            return None
+            UI.err("SOLVE", f"AB: {req[:40]}"); return None
         return None
 
+    # ── login ──
     def login(self):
         UI.step("LOGIN", f"Login as {self.username}")
         self.session.cookies.clear()
+        self.clear_cookie_file()
+
         html = self._req(f"{HOST}/login")
-        if not html:
-            UI.err("LOGIN", "empty page"); return False
+        if not html: UI.err("LOGIN", "empty page"); return False
         csrf = self.extract_csrf(html)
         sitekey = self.extract_sitekey(html) or DEFAULT_TURNSTILE
-        if not csrf:
-            UI.err("LOGIN", "CSRF not found"); return False
+        if not csrf: UI.err("LOGIN", "CSRF not found"); return False
         token = self.solve_turnstile(sitekey, f"{HOST}/login")
-        if not token:
-            UI.err("LOGIN", "turnstile fail"); return False
+        if not token: UI.err("LOGIN", "turnstile fail"); return False
 
         html2 = self._req(f"{HOST}/login")
         csrf2 = self.extract_csrf(html2) if html2 else None
@@ -429,9 +481,20 @@ class FaucetPayzBot:
         self._req(f"{HOST}/login", 'POST', data=data, referer=f'{HOST}/login')
 
         if self.is_logged_in():
-            UI.ok("LOGIN", "Login OK"); return True
-        UI.err("LOGIN", "login failed")
-        return False
+            UI.ok("LOGIN", "Login OK"); self.save_cookies(); return True
+        UI.err("LOGIN", "login failed"); return False
+
+    def ensure_login(self):
+        loaded = self.load_cookies()
+        if loaded:
+            UI.info("AUTH", "cookies loaded from file")
+            if self.is_logged_in():
+                UI.ok("AUTH", "session valid")
+                return True
+            UI.warn("AUTH", "cookies expired — re-login")
+        else:
+            UI.info("AUTH", "no cookies — first login")
+        return self.login()
 
     def get_dashboard(self):
         html = self._req(f"{HOST}/account")
@@ -450,13 +513,10 @@ class FaucetPayzBot:
     def parse_balance(self):
         html = self._req(f"{HOST}/account")
         if not html: return None
-        m = re.search(r'id=["\']balance["\'][^>]*>([^<]+)', html, re.IGNORECASE)
+        m = re.search(r'id=["\']balance["\'][^>]*>\s*([\d,]+)', html, re.IGNORECASE)
         if m:
-            raw = m.group(1).strip()
-            num = re.search(r'([\d,]+)', raw)
-            if num:
-                try: return int(num.group(1).replace(',', ''))
-                except: return None
+            try: return int(m.group(1).replace(',', ''))
+            except: return None
         return None
 
     # ═════════════════════════════════════════════════════════
@@ -482,7 +542,7 @@ class FaucetPayzBot:
 
         if 'Claim again' in html or 'claimleft' in html:
             UI.warn("WAIT", "timer active")
-            UI.countdown(240, "next claim")
+            UI.countdown(300, "next claim")
             return 'waited'
 
         csrf = self.extract_csrf(html)
@@ -491,47 +551,137 @@ class FaucetPayzBot:
             UI.err("CLAIM", "CSRF not found"); return False
 
         main_img = None
-        for p in [r'order\s*<img\s+src="data:image/png;base64,([^"]+)"',
-                  r'<img[^>]*src="data:image/png;base64,([^"]+)"[^>]*width="276"']:
+        for p in [r'Please click on the Anti-Bot links.*?<img\s+src="data:image/png;base64,([^"]+)"',
+                  r'<img[^>]*src="data:image/png;base64,([^"]+)"[^>]*width="228"',
+                  r'<img[^>]*src="data:image/png;base64,([^"]+)"[^>]*width="276"',
+                  r'<img[^>]*src="data:image/png;base64,([^"]+)"[^>]*width="132"']:
             m = re.search(p, html, re.DOTALL | re.IGNORECASE)
             if m: main_img = m.group(1); break
-        options = []
-        for rel, b64 in re.findall(
-            r'rel=["\'](\d+)["\'][^>]*>.*?src=["\']data:image/png;base64,([^"\']+)["\']',
-            html, re.DOTALL):
-            if rel not in [r for r, _ in options]:
-                options.append((rel, b64))
 
-        antibot_solution = None
-        if options and len(options) >= 3 and main_img:
+        options = []
+        m = re.search(r'var\s+ablinks\s*=\s*(\[.*?\])\s*;', html, re.DOTALL)
+        if m:
+            js = m.group(1).replace('\\"', '"').replace("\\'", "'")
+            for rel, b64 in re.findall(
+                r'rel="(\d+)"[^>]*>.*?src="data:image/png;base64,([^"]+)"',
+                js, re.DOTALL):
+                if rel not in [r for r, _ in options]:
+                    options.append((rel, b64))
+        if not options:
+            for rel, b64 in re.findall(
+                r'rel=["\'](\d+)["\'][^>]*>.*?src=["\']data:image/png;base64,([^"\']+)["\']',
+                html, re.DOTALL):
+                if rel not in [r for r, _ in options]:
+                    options.append((rel, b64))
+
+        antibot_param = None
+        if options and len(options) >= 3:
             UI.info("CLAIM", f"antibot {len(options)} opts")
-            antibot_solution = self.solve_antibot(main_img,
-                                                  [r for r, _ in options],
-                                                  [b for _, b in options])
-            if not antibot_solution:
+            if not main_img: main_img = options[0][1]
+            raw_ans = self.solve_antibot(main_img,
+                                         [r for r, _ in options],
+                                         [b for _, b in options])
+            if not raw_ans:
                 UI.err("CLAIM", "antibot fail"); return False
+
+            ids = re.findall(r'\d+', raw_ans)
+            if not ids:
+                UI.err("CLAIM", f"antibot no ids: {raw_ans[:40]}"); return False
+
+            valid_rels = [r for r, _ in options]
+            try:
+                ints = [int(i) for i in ids]
+                is_index = all(1 <= v <= len(valid_rels) for v in ints)
+                all_short = all(len(i) <= 2 for i in ids)
+                if all_short and is_index:
+                    mapped = [valid_rels[v - 1] for v in ints]
+                else:
+                    mapped = [i for i in ids if i in valid_rels]
+                    if not mapped: mapped = ids
+            except Exception:
+                mapped = ids
+
+            antibot_param = ''.join(f'+{r}' for r in mapped)
+            UI.ok("CLAIM", f"antibot → {antibot_param}")
         else:
             UI.info("CLAIM", "no antibot")
 
         token = self.solve_turnstile(sitekey, f"{HOST}/faucet")
         if not token: return False
 
-        data = {'csrf_token': csrf, 'cf-turnstile-response': token}
-        if antibot_solution: data['antibotlinks'] = antibot_solution
-
         UI.step("CLAIM", "submit faucet")
-        resp = self._req(f"{HOST}/faucet", 'POST', data=data, referer=f"{HOST}/faucet")
+        body_parts = [
+            f"csrf_token={csrf}",
+            f"cf-turnstile-response={token}",
+        ]
+        if antibot_param:
+            body_parts.append(f"antibotlinks={antibot_param}")
+        body_str = "&".join(body_parts)
 
-        if 'Tokens has been added' in resp or 'Token has been added' in resp or 'successfully' in resp.lower():
-            am = re.search(r'(\d[\d,.]*)\s*Tokens?', resp, re.IGNORECASE)
-            UI.ok("CLAIM", f"+{am.group(1)} Tokens!" if am else "claimed!")
+        resp = self._req_raw(f"{HOST}/faucet", 'POST', body_str, referer=f"{HOST}/faucet")
+
+        # ── success detect + parse amount ──
+        if "has been added to your balance" in resp or "Tokens has been added" in resp:
+            got = "?"
+            # Pattern 1: '5\u0020Tokens\u0020has...'
+            m = re.search(r"message:\s*['\"](\d+)\\u0020Tokens?", resp)
+            if m: got = m.group(1)
+            # Pattern 2: '5 Tokens has been added'
+            if got == "?":
+                m = re.search(r"(\d+)\s*Tokens?\s*has", resp)
+                if m: got = m.group(1)
+            # Pattern 3: notyf.open({type: 'success', message: '5 ...'})
+            if got == "?":
+                m = re.search(r"type:\s*['\"]success['\"].*?message:\s*['\"](\d+)", resp, re.DOTALL)
+                if m: got = m.group(1)
+            # Pattern 4: message with N Tokens
+            if got == "?":
+                m = re.search(r"message:\s*['\"]([^'\"]*\d+\s*Tokens?[^'\"]*)", resp)
+                if m:
+                    d = re.search(r'(\d+)', m.group(1))
+                    if d: got = d.group(1)
+            # Pattern 5: N Tokens ... added
+            if got == "?":
+                m = re.search(r'(\d+)[^\d]{0,20}Tokens?[^\d]{0,20}added', resp, re.I)
+                if m: got = m.group(1)
+
+            # refresh balance
+            new_bal = None
+            try:
+                new_bal = self.parse_balance()
+            except Exception:
+                pass
+
+            if got != "?":
+                reward_str = f"+{got} Tokens"
+                try:
+                    UI.set(last_claim=reward_str,
+                           total_earned=int(UI.state.get("total_earned", 0)) + int(got))
+                except Exception:
+                    UI.set(last_claim=reward_str)
+            else:
+                reward_str = "claimed"
+                UI.set(last_claim="claimed")
+
+            if new_bal is not None:
+                UI.ok("CLAIM", f"{reward_str} | balance: {new_bal}")
+                UI.set(balance=f"{new_bal} Tokens")
+            else:
+                UI.ok("CLAIM", reward_str)
             return True
+
+        if 'notyf.open' in resp and 'success' in resp.lower():
+            UI.ok("CLAIM", "claimed (success)")
+            UI.set(last_claim="claimed")
+            return True
+
         err_m = re.search(r'alert-danger[^>]*>(.*?)</div>', resp, re.DOTALL)
         if err_m:
             err_text = re.sub(r'<[^>]+>', '', err_m.group(1)).strip()
             UI.err("CLAIM", err_text[:40])
         else:
-            UI.err("CLAIM", "failed")
+            snip = re.sub(r'\s+', ' ', resp[:150]) if resp else 'empty'
+            UI.err("CLAIM", f"resp: {snip[:50]}")
         return False
 
     # ═════════════════════════════════════════════════════════
@@ -586,7 +736,6 @@ class FaucetPayzBot:
         self.user_hash = user_hash
         UI.ok("AVISO", f"hash={user_hash[:12]}…")
 
-        UI.step("AVISO", "identify")
         code, j = self.aviso('/youtube/tasks/identify', {
             "hash": user_hash, "ip": None, "userAgent": DEFAULT_UA,
             "fingerprint": {
@@ -635,12 +784,10 @@ class FaucetPayzBot:
                 'taskId': tid, 'hash': user_hash, 'type': ttype, 'platform': 'Linux aarch64',
             })
             if code != 200 or not isinstance(js, dict):
-                UI.err("START", f"#{tid} start fail")
-                continue
+                UI.err("START", f"#{tid} start fail"); continue
             aid = js.get('attemptId')
             if not aid:
-                UI.err("START", f"#{tid} no attemptId")
-                continue
+                UI.err("START", f"#{tid} no attemptId"); continue
 
             url = js.get('url', '') or ''
             duration = int(js.get('duration', 0) or 0)
@@ -654,8 +801,7 @@ class FaucetPayzBot:
             code, ts = self.aviso('/youtube/tasks/timer-status',
                                   {'attemptId': aid, 'action': 'start'})
             if not isinstance(ts, dict):
-                UI.warn("YT", f"#{tid} timer start fail")
-                continue
+                UI.warn("YT", f"#{tid} timer start fail"); continue
 
             status = ts.get('status', '')
             if status == 'need_check':
@@ -665,14 +811,12 @@ class FaucetPayzBot:
                 code, comp = self.aviso('/youtube/tasks/timer-status',
                                         {'attemptId': aid, 'action': 'complete', 'watchedTime': duration})
                 if not isinstance(comp, dict) or not comp.get('verified'):
-                    UI.warn("YT", f"#{tid} not verified")
-                    continue
+                    UI.warn("YT", f"#{tid} not verified"); continue
 
                 code, chk = self.aviso('/youtube/tasks/timer-status',
                                        {'attemptId': aid, 'action': 'check'})
                 if not isinstance(chk, dict) or not chk.get('viewExists'):
-                    UI.warn("YT", f"#{tid} view not exists")
-                    continue
+                    UI.warn("YT", f"#{tid} view not exists"); continue
 
             code, fin = self.aviso('/youtube/tasks/complete', {'attemptId': aid})
             if isinstance(fin, dict):
@@ -680,7 +824,12 @@ class FaucetPayzBot:
                     UI.ok("CLAIM", f"#{tid} already done"); done += 1
                 elif fin.get('earned') or fin.get('amount'):
                     e = fin.get('earned') or fin.get('amount')
-                    UI.ok("CLAIM", f"#{tid} +{e}"); done += 1
+                    UI.ok("CLAIM", f"#{tid} +{e}")
+                    try:
+                        UI.set(last_claim=f"+{e}", total_earned=int(UI.state.get("total_earned", 0)) + int(e))
+                    except Exception:
+                        UI.set(last_claim=f"+{e}")
+                    done += 1
                 else:
                     UI.warn("CLAIM", f"#{tid} resp: {str(fin)[:30]}")
             time.sleep(random.uniform(1.5, 3))
@@ -688,104 +837,12 @@ class FaucetPayzBot:
         return done > 0
 
     # ═════════════════════════════════════════════════════════
-    #  MODE 3: PTC
-    # ═════════════════════════════════════════════════════════
-    def mode_ptc(self):
-        UI.step("HEALTH", "GET /surf")
-        html = self._req(f"{HOST}/surf", referer=f'{HOST}/account')
-        if not html: return 'error'
-        if 'name="username"' in html and 'name="password"' in html:
-            return 'not_logged_in'
-
-        ads = []
-        for m in re.finditer(
-            r'<a\s+href="/surf/([a-f0-9]{32})"\s+class="ptclinks[^"]*"[^>]*>(.*?)</a>',
-            html, re.DOTALL):
-            aid = m.group(1)
-            body = m.group(2)
-            coins_m = re.search(r'fa-coins[^<]*</i>\s*(\d+)\s*Tokens', body)
-            dur_m = re.search(r'fa-clock[^<]*</i>\s*(\d+)\s*s', body)
-            ads.append({
-                'uid': aid,
-                'coins': int(coins_m.group(1)) if coins_m else 18,
-                'duration': int(dur_m.group(1)) if dur_m else 5,
-            })
-
-        if not ads:
-            UI.warn("PTC", "no ads")
-            return 'no_task'
-
-        UI.info("PTC", f"{len(ads)} ads")
-        done = 0
-
-        for i, ad in enumerate(ads[:8], 1):
-            aid = ad['uid']
-            dur = ad['duration']
-            UI.step("PTC", f"[{i}/{len(ads)}] {aid[:10]}… ({ad['coins']}c, {dur}s)")
-
-            # 1. register view (302 redirect ke ad)
-            self._req(f"{HOST}/surf/{aid}", referer=f"{HOST}/surf", allow_redirects=False)
-
-            # 2. generate view token
-            button_id = secrets.token_hex(32)
-            c_param = button_id + str(random.randint(1000, 9999))
-
-            # 3. fetch view page dengan token
-            v = self._req(f"{HOST}/surf/{aid}/{c_param}",
-                          referer=f"{HOST}/surf", allow_redirects=False)
-
-            if not v or len(v) < 1000:
-                UI.warn("PTC", f"#{aid[:8]} redirect, skip")
-                time.sleep(2)
-                continue
-
-            m = re.search(r'id="surfCAPTCHA".*?name="csrf_token"\s+value="([^"]+)"', v, re.DOTALL)
-            modal_csrf = m.group(1) if m else None
-            m = re.search(r'id="surfCAPTCHA".*?id="uid"\s+value="([^"]*)"', v, re.DOTALL)
-            modal_uid = m.group(1) if m else aid
-            m = re.search(r'id="surfCAPTCHA".*?data-sitekey="([^"]+)"', v, re.DOTALL)
-            modal_sitekey = m.group(1) if m else DEFAULT_TURNSTILE
-            m = re.search(r'let count = (\d+);', v)
-            count = int(m.group(1)) if m else dur
-
-            if not modal_csrf:
-                UI.warn("PTC", f"#{aid[:8]} no csrf")
-                continue
-
-            UI.info("PTC", f"view {count}s")
-            UI.countdown(count, f"PTC {aid[:8]}")
-
-            token = self.solve_turnstile(modal_sitekey, f"{HOST}/surf/{aid}")
-            if not token: continue
-
-            payload = {
-                'csrf_token': modal_csrf,
-                'cf-turnstile-response': token,
-                'uid': modal_uid,
-                'c': c_param,
-            }
-            UI.step("CLAIM", f"#{aid[:8]} submit")
-            resp = self._req(f"{HOST}/ajax/surf", 'POST', data=payload,
-                             referer=f"{HOST}/surf/{aid}", ajax=True)
-
-            if resp and ('ptclinks' in resp or 'ptc-card' in resp or 'PTC -' in resp):
-                UI.ok("PTC", f"#{aid[:8]} +{ad['coins']}c claimed")
-                done += 1
-            elif resp and 'Too early' in resp:
-                UI.warn("PTC", f"#{aid[:8]} too early")
-            else:
-                UI.warn("PTC", f"#{aid[:8]} resp: {resp[:40] if resp else 'empty'}")
-
-            time.sleep(random.uniform(2, 4))
-
-        return done > 0
-
-    # ═════════════════════════════════════════════════════════
     #  MAIN LOOP
     # ═════════════════════════════════════════════════════════
     def run(self, mode):
-        os.system('cls' if os.name == 'nt' else 'clear')
-        UI.banner()
+        # clear tanpa banner biar panel gak numpuk
+        sys.stdout.write("\033[2J\033[H")
+        sys.stdout.flush()
 
         cfg = self.get_config()
         self.username = cfg.get('username', '').strip()
@@ -801,10 +858,11 @@ class FaucetPayzBot:
             with open(CONFIG_FILE, 'w') as f:
                 json.dump(cfg, f, indent=2)
 
-        UI.set(user=self.username, solver="WARYONO", state="LOGIN", mode=mode)
+        UI.set(user=self.username, solver="WARYONO", state="LOGIN", mode=mode,
+               last_claim="-", total_earned=0)
         UI.start_panel()
 
-        if not self.login():
+        if not self.ensure_login():
             UI.err("AUTH", "login failed")
             UI.stop_panel(); return
 
@@ -814,9 +872,7 @@ class FaucetPayzBot:
                    purchase=info.get('purchase_balance', '?'),
                    points=info.get('points', '?'))
 
-        handlers = {"faucet": self.mode_faucet,
-                    "ytvideos": self.mode_ytvideos,
-                    "ptc": self.mode_ptc}
+        handlers = {"faucet": self.mode_faucet, "ytvideos": self.mode_ytvideos}
         handler = handlers.get(mode)
         if not handler:
             UI.err("MODE", f"unknown: {mode}")
@@ -829,11 +885,10 @@ class FaucetPayzBot:
             UI.info("CYCLE", f"Cycle #{cycle} [{mode}]")
 
             if not self.is_logged_in():
-                UI.warn("AUTH", "session expired, re-login")
+                UI.warn("AUTH", "session expired — re-login")
                 if not self.login():
                     UI.err("AUTH", "re-login failed")
-                    UI.countdown(60, "retry")
-                    continue
+                    UI.countdown(60, "retry"); continue
 
             try:
                 result = handler()
@@ -844,14 +899,16 @@ class FaucetPayzBot:
                 result = 'error'
 
             if result == 'not_logged_in':
-                UI.countdown(60, "retry"); continue
+                UI.warn("AUTH", "session lost mid-run")
+                if not self.login():
+                    UI.countdown(60, "retry"); continue
+                continue
             if result in ('waited', 'already_claimed'):
                 continue
             if result == 'no_task':
                 delay = random.randint(60, 120)
                 UI.warn("WAIT", f"no task, {delay}s")
-                UI.countdown(delay, "idle")
-                continue
+                UI.countdown(delay, "idle"); continue
             if result is True:
                 info2 = self.get_dashboard()
                 if info2:
@@ -859,13 +916,17 @@ class FaucetPayzBot:
                            purchase=info2.get('purchase_balance', '?'),
                            points=info2.get('points', '?'))
 
-            delay = random.randint(180, 300)
+            if mode == "faucet":
+                delay = FAUCET_SUCCESS_CD if result is True else FAUCET_ERROR_CD
+            else:
+                delay = random.randint(180, 300)
+
             UI.warn("WAIT", f"next cycle {delay}s")
             UI.countdown(delay, "next")
 
 
 # ═════════════════════════════════════════════════════════════
-#  ENTRY + SIGINT HANDLER
+#  ENTRY
 # ═════════════════════════════════════════════════════════════
 def main():
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -874,12 +935,20 @@ def main():
         choice = show_menu()
         if choice == "0":
             print(UI.c("\n  bye boss 👋\n", "br_yellow")); return
-        mode_map = {"1": "faucet", "2": "ytvideos", "3": "ptc"}
+        if choice.lower() == "c":
+            if os.path.isdir(SESSION_DIR):
+                for f in os.listdir(SESSION_DIR):
+                    if f.startswith("cookies_") and f.endswith(".json"):
+                        try: os.remove(os.path.join(SESSION_DIR, f))
+                        except Exception: pass
+            print(UI.c("\n  ✓ all cookies cleared\n", "br_green"))
+            time.sleep(1)
+            os.system('cls' if os.name == 'nt' else 'clear'); UI.banner(); continue
+        mode_map = {"1": "faucet", "2": "ytvideos"}
         mode = mode_map.get(choice)
         if not mode:
             print(UI.c("\n  ✖ invalid\n", "br_red"))
-            time.sleep(1); os.system('cls' if os.name == 'nt' else 'clear'); UI.banner()
-            continue
+            time.sleep(1); os.system('cls' if os.name == 'nt' else 'clear'); UI.banner(); continue
         try:
             FaucetPayzBot().run(mode)
         except KeyboardInterrupt:
@@ -891,7 +960,6 @@ def main():
 
 
 def _on_sigint(sig, frame):
-    # restore default biar Ctrl+C kedua langsung kill
     try: signal.signal(signal.SIGINT, signal.SIG_DFL)
     except Exception: pass
     try: UI.stop_panel()
