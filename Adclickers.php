@@ -52,7 +52,7 @@ const BOX_WIDTH = 62;
 const LOG_LINES = 7;
 
 // ─── Timing ──────────────────────────────────────────────────────────────────
-const POST_VIDEO_WAIT_DEFAULT   = 600;   // 10 menit, setelah durasi video selesai
+const POST_VIDEO_WAIT_DEFAULT   = 240;   // 10 menit, setelah durasi video selesai
 const RETRY_WAIT_DEFAULT        = 60;    // jeda kalau complete gagal
 const COMPLETE_MAX_RETRY        = 10;    // max retry per task
 
