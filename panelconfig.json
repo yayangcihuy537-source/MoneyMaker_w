@@ -14,12 +14,12 @@
           "runner": "python3"
         },
         "3": {
-          "label": "ClaimX 🟡",
+          "label": "ClaimX 🟢",
           "file": "ClaimX.php",
           "runner": "php"
         },
         "4": {
-          "label": "Aruble 🟢",
+          "label": "Aruble 🔴",
           "file": "aruble.php",
           "runner": "php"
         },
@@ -39,7 +39,7 @@
           "runner": "python3"
         },
         "8": {
-          "label": "RapidGame 🟢",
+          "label": "RapidGame 🟡",
           "file": "Rapid.py",
           "runner": "python3"
         },
@@ -89,7 +89,7 @@
           "runner": "python3"
         },
         "7": {
-          "label": "99Faucet 🟡",
+          "label": "99Faucet 🟢",
           "file": "99faucet.php",
           "runner": "php"
         },
@@ -109,12 +109,12 @@
           "runner": "python3"
         },
         "11": {
-          "label": "Pitasks 🟡",
+          "label": "Pitasks 🟢",
           "file": "Pitasks.py",
           "runner": "python3"
         },
         "12": {
-          "label": "LimeFaucet 🟡",
+          "label": "LimeFaucet 🟢",
           "file": "lime.php",
           "runner": "php"
         },
@@ -132,6 +132,21 @@
           "label": "LiteBits.io 🟢",
           "file": "LiteBits.io.py",
           "runner": "python3"
+        },
+        "16": {
+          "label": "TheMagicDollar 🟢",
+          "file": "THEMAGICDOLLAR.php",
+          "runner": "php"
+        },
+        "17": {
+          "label": "Coming Soon 🔒",
+          "file": "comingsoon.php",
+          "runner": "php"
+        },
+        "18": {
+          "label": "Coming Soon 🔒",
+          "file": "comingsoon.php",
+          "runner": "php"
         }
       }
     },
