@@ -1,14 +1,15 @@
+#!/usr/bin/env php
 <?php
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED);
 ini_set('display_errors', '0');
 
 /**
- * CryptoFuture Auto Claim — v5
- * - Turnstile detection + auto-solve
- * - Parser fleksibel (Swal / JSON / plain / balance delta)
- * - Safe debug logger (redacted token) + response box
- * - Max claim 250
- * - Live moving timer + progress bar
+ * CryptoFuture Auto Claim — v6 (FIXED)
+ * - URL fix: /faucet/earn (bukan /faucet)
+ * - Field fix: token + earn_ticket + smart_token + fp_hash
+ * - Parser balance + wait fix
+ * - Turnstile tetap dipertahankan (buat login)
+ * - UI SAMA KAYA V5
  */
 
 define("RED","\033[0;31m"); define("GRN","\033[0;32m");
@@ -20,8 +21,8 @@ define("BOLD","\033[1m");
 const SITE   = "https://cryptofuture.co.in";
 const HOME   = SITE . "/";
 const LOGIN  = SITE . "/auth/login";
-const FAUCET = SITE . "/faucet";
-const VERIFY = SITE . "/faucet/verify";
+const FAUCET = SITE . "/faucet/earn";   // FIX: /faucet/earn
+const VERIFY = SITE . "/faucet/earn";   // FIX: POST ke /faucet/earn
 const DASH   = SITE . "/dashboard";
 
 const TURNSTILE_SITEKEY = "0x4AAAAAACCJpcjk1yzJVey2";
@@ -34,8 +35,7 @@ const DEBUG_FILE  = "debug_verify_response.txt";
 
 const UA = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36";
 
-const MAX_CLAIMS      = 100;
-const LOOP_SLEEP_STEP = 15;
+const MAX_CLAIMS = 100;
 
 /* ═══════════ RICH ANSI ═══════════ */
 function fg($c){ return "\033[38;5;{$c}m"; }
@@ -126,10 +126,13 @@ function redactPost(string $post): string
     foreach ([
         'csrf_token_name',
         'claim_token',
+        'token',
+        'earn_ticket',
         'cf-turnstile-response',
         'g-recaptcha-response',
         'wallet',
         'device_token',
+        'smart_token',
     ] as $key) {
         if (isset($data[$key])) {
             $data[$key] = '[REDACTED]';
@@ -171,7 +174,7 @@ function banner(){
 
     echo fg(51)."╔".str_repeat("═",62)."╗".RST."\n";
     echo box_line(gradient("CRYPTOFUTURE AUTO CLAIM", 51, 213));
-    echo box_line(fg(240)."─────── SOUU ENGINE v5 ───────".RST);
+    echo box_line(fg(240)."─────── SOUU ENGINE v6 ───────".RST);
     echo box_div();
 
     echo box_line(fg(213).BOLD."NETWORK".RST);
@@ -241,6 +244,7 @@ function load_config(){
 }
 function save_config($cfg){
     @file_put_contents(CONFIG_FILE, json_encode($cfg, JSON_PRETTY_PRINT));
+    @chmod(CONFIG_FILE, 0600);
 }
 
 /* ═══════════ COOKIE JAR ═══════════ */
@@ -432,46 +436,49 @@ function login($wallet, $apikey){
     return ['ok'=>false, 'msg'=>'cookie not accepted', 'cf'=>false];
 }
 
-/* ═══════════ PARSER ═══════════ */
+/* ═══════════ PARSER (FIXED) ═══════════ */
 function parse_earn($html){
     $o = [
-        'csrf' => '',
-        'claim_token' => '',
-        'wait' => 0,
-        'balance' => null,
-        'has_form' => false,
-        'has_turnstile' => false,
+        'csrf'         => '',
+        'token'        => '',   // FIX
+        'earn_ticket'  => '',   // FIX
+        'wallet'       => '',
+        'wait'         => 0,
+        'balance'      => null,
+        'has_form'     => false,
+        'has_turnstile'=> false,
         'turnstile_sitekey' => TURNSTILE_SITEKEY,
     ];
 
     if (preg_match('/<form[^>]+id="fauform"[^>]*>(.*?)<\/form>/si', $html, $fm)) {
         $o['has_form'] = true;
         $in = $fm[1];
-        if (preg_match('/name="csrf_token_name"[^>]*value="([^"]*)"/i', $in, $m)) $o['csrf'] = $m[1];
-        if (preg_match('/name="claim_token"[^>]*value="([^"]*)"/i', $in, $m))     $o['claim_token'] = $m[1];
+        if (preg_match('/name="csrf_token_name"[^>]*value="([^"]*)"/i', $in, $m)) $o['csrf']        = $m[1];
+        if (preg_match('/name="token"[^>]*value="([^"]*)"/i', $in, $m))           $o['token']       = $m[1];
+        if (preg_match('/name="earn_ticket"[^>]*value="([^"]*)"/i', $in, $m))     $o['earn_ticket'] = $m[1];
+        if (preg_match('/name="wallet"[^>]*value="([^"]*)"/i', $in, $m))          $o['wallet']      = $m[1];
 
-        // Deteksi Turnstile di dalam form
         if (stripos($in, 'cf-turnstile') !== false
             || stripos($in, 'cf-turnstile-response') !== false) {
             $o['has_turnstile'] = true;
-            if (preg_match('/class="cf-turnstile"[^>]*data-sitekey="([^"]+)"/i', $in, $m)) {
-                $o['turnstile_sitekey'] = $m[1];
-            } elseif (preg_match('/data-sitekey="([^"]+)"[^>]*class="cf-turnstile"/i', $in, $m)) {
-                $o['turnstile_sitekey'] = $m[1];
-            } elseif (preg_match('/data-sitekey="([^"]+)"/i', $in, $m)) {
+            if (preg_match('/data-sitekey="([^"]+)"/i', $in, $m)) {
                 $o['turnstile_sitekey'] = $m[1];
             }
         }
     }
 
-    if (preg_match('/var\s+wait\s*=\s*(\d+)/i', $html, $m)) {
+    // FIX: support let wait / var wait / const wait
+    if (preg_match('/(?:let|var|const)\s+wait\s*=\s*(\d+)/i', $html, $m)) {
         $o['wait'] = (int)$m[1];
     }
 
-    if (preg_match('/Balance:\s*<strong>([0-9,]+)\s*Coins<\/strong>/i', $html, $m)) {
+    // Balance: layout baru (balance-amount) atau lama
+    if (preg_match('/class="balance-amount">\s*([\d,]+)\s*<span[^>]*class="balance-unit"/i', $html, $m)) {
         $o['balance'] = (float)str_replace(',', '', $m[1]);
-    } elseif (preg_match('/TOTAL BALANCE.*?([0-9.]+)\s*Coins/si', $html, $m)) {
-        $o['balance'] = (float)$m[1];
+    } elseif (preg_match('/TOTAL BALANCE.*?([\d,]+)\s*Coins/si', $html, $m)) {
+        $o['balance'] = (float)str_replace(',', '', $m[1]);
+    } elseif (preg_match('/Balance:\s*<strong>([0-9,]+)\s*Coins<\/strong>/i', $html, $m)) {
+        $o['balance'] = (float)str_replace(',', '', $m[1]);
     }
 
     return $o;
@@ -480,6 +487,23 @@ function parse_earn($html){
 function fetch_balance(){
     $r = req(FAUCET);
     return parse_earn($r['body'])['balance'];
+}
+
+/* ═══════════ SMART TOKEN + FP HASH GENERATOR ═══════════ */
+function gen_smart_token(){
+    $data = [
+        'ts'    => (int)round(microtime(true) * 1000),
+        'cpu'   => 8,
+        'mem'   => 8,
+        'w'     => 384,
+        'h'     => 832,
+        'touch' => 5,
+        'moves' => rand(3, 15),
+    ];
+    return base64_encode(json_encode($data));
+}
+function gen_fp_hash(){
+    return bin2hex(random_bytes(32));
 }
 
 /* ═══════════ MAIN ═══════════ */
@@ -501,16 +525,24 @@ if (!$apikey) {
     banner();
 }
 
-echo fg(213)."\n  INPUT REQUIRED\n".RST;
-echo fg(51)."  ┌─[ ".fg(226)."FAUCETPAY EMAIL".fg(51)." ]".RST."\n";
-echo fg(51)."  └──> ".RST;
-$wallet = trim(fgets(STDIN));
-if (!$wallet) { echo RED."wallet kosong\n"; exit(1); }
+$wallet = $cfg['wallet'] ?? '';
+if (!$wallet) {
+    echo fg(213)."\n  INPUT REQUIRED\n".RST;
+    echo fg(51)."  ┌─[ ".fg(226)."FAUCETPAY EMAIL".fg(51)." ]".RST."\n";
+    echo fg(51)."  └──> ".RST;
+    $wallet = trim(fgets(STDIN));
+    if (!$wallet) { echo RED."wallet kosong\n"; exit(1); }
+    $cfg['wallet'] = $wallet;
+    save_config($cfg);
+    echo fg(46)."  ✓ tersimpan\n".RST;
+    sleep(1);
+    banner();
+}
 
 $GLOBALS['_wallet'] = $wallet;
 
 /* Init CF + login */
-push_log("probing /faucet...", 'in');
+push_log("probing /faucet/earn...", 'in');
 banner();
 
 $r    = req(FAUCET);
@@ -561,8 +593,10 @@ while (true) {
         continue;
     }
 
+    // Session drop check
     if (strpos($html, 'id="fauform"') === false
-        && (stripos($html, 'auth/login') !== false || stripos($html, 'Sign in') !== false)) {
+        && (stripos($html, 'auth/login') !== false || stripos($html, 'Sign in') !== false
+            || stripos($html, 'Welcome,') !== false)) {
         push_log("session drop — re-login", 'wr');
         banner();
         $lr = login($wallet, $apikey);
@@ -578,7 +612,7 @@ while (true) {
     }
 
     $info = parse_earn($html);
-    if ($info['balance'] !== null) $GLOBALS['_balance'] = number_format((float)$info['balance'], 4);
+    if ($info['balance'] !== null) $GLOBALS['_balance'] = number_format((float)$info['balance'], 0);
 
     if ($info['wait'] > 0) {
         push_log("cooldown ".fmt_time($info['wait'])." | bal: ".$GLOBALS['_balance'], 'wr');
@@ -588,33 +622,40 @@ while (true) {
     }
 
     if (!$info['has_form']) {
-        push_log("no form & no wait — unknown", 'er');
+        push_log("no form & no wait — refresh (URL: ".FAUCET.")", 'er');
         $GLOBALS['_fails']++;
         banner();
         live_tick(15, "retry");
         continue;
     }
 
-    // Info turnstile
+    // Turnstile detect
     if (!empty($info['has_turnstile'])) {
         push_log("form: turnstile DETECTED (sitekey=".substr($info['turnstile_sitekey'],0,16)."…)", 'wr');
     } else {
-        push_log("form: no turnstile", 'i');
+        push_log("form: smartcaptcha (no turnstile)", 'i');
     }
     banner();
 
-    // POST claim
-    sleep(rand(2,4));
+    // Jeda human
+    sleep(rand(2, 4));
 
+    // POST payload
     $postData = [
         'csrf_token_name' => $info['csrf'],
-        'claim_token'     => $info['claim_token'],
+        'token'           => $info['token'],
+        'earn_ticket'     => $info['earn_ticket'],
+        'fp_hash'         => gen_fp_hash(),
+        'confirm_wallet'  => '',
+        'wallet'          => $info['wallet'] !== '' ? $info['wallet'] : $wallet,
+        'smart_token'     => gen_smart_token(),
+        'captcha'         => 'smartcaptcha',
     ];
 
+    // Kalau ternyata ada turnstile (jarang), solve dulu
     if (!empty($info['has_turnstile'])) {
         push_log("turnstile muncul — solving...", 'in');
         banner();
-
         $ts_token = solve_turnstile($apikey, HOME, $info['turnstile_sitekey'], '', '');
         if (!$ts_token) {
             push_log("turnstile solve fail — skip round", 'er');
@@ -634,7 +675,7 @@ while (true) {
     $respHtml = (string)($r2['body'] ?? '');
     $httpCode = (int)($r2['code'] ?? 0);
 
-    // === SAFE DEBUG LOGGER (redacted) ===
+    // Safe debug logger (redacted)
     $plainBody = trim(preg_replace('/\s+/', ' ', strip_tags($respHtml)));
 
     @file_put_contents(
@@ -649,7 +690,6 @@ while (true) {
         FILE_APPEND
     );
 
-    // === SHOW BOX DI TERMINAL ===
     print_verify_box($httpCode, $respHtml, $plainBody);
 
     $success = false;
@@ -658,8 +698,8 @@ while (true) {
 
     if ($httpCode === 200 && $respHtml !== '') {
 
-        // 1. Swal.fire html — multi-line tolerant
-        if (preg_match("/Swal\.fire\s*\(\s*\{.*?html\s*:\s*['\"]([^'\"]+)['\"]/is", $respHtml, $m)) {
+        // 1. Swal.fire html
+        if (preg_match("/Swal\.fire\s*\(\s*\{.*?html\s*:\s*['\"](.+?)['\"]\s*[,}]/is", $respHtml, $m)) {
             $msg = strip_tags($m[1]);
             if (preg_match('/([0-9.,]+)\s+Coins?/i', $msg, $am)) {
                 $amount = (float)str_replace(',', '', $am[1]);
@@ -675,7 +715,7 @@ while (true) {
             if (stripos($m[1], 'error') !== false)   { $reason = 'swal-title-error'; }
         }
 
-        // 3. Plain text success
+        // 3. Plain text
         if (!$success && preg_match('/Success!.*?([0-9.]+)\s+Coins?/is', $respHtml, $m)) {
             $amount = (float)$m[1]; $success = true; $reason = 'plain-text';
         }
@@ -701,7 +741,7 @@ while (true) {
             }
         }
 
-        // 5. Balance delta fallback
+        // 5. Balance delta
         if (!$success) {
             sleep(1);
             $balAfter = fetch_balance();
@@ -712,7 +752,7 @@ while (true) {
         }
     }
 
-    // HTTP 500 / DB err fallback
+    // HTTP 500 fallback
     if (!$success && ($httpCode === 500 || stripos($respHtml, 'Database Error') !== false)) {
         push_log("HTTP 500 / DB err — re-check balance", 'wr');
         banner();
@@ -728,7 +768,7 @@ while (true) {
         $GLOBALS['_claims']++;
         $GLOBALS['_earned'] += $amount;
         if ($amount > 0) {
-            $GLOBALS['_balance'] = number_format((float)$info['balance'] + $amount, 4);
+            $GLOBALS['_balance'] = number_format((float)$info['balance'] + $amount, 0);
         }
         push_log("+".number_format($amount, 4)." [{$reason}] | total: ".number_format($GLOBALS['_earned'],4)." | bal: ".$GLOBALS['_balance'], 'ok');
     } else {
