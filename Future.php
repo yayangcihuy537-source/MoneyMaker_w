@@ -1,167 +1,142 @@
 #!/usr/bin/env php
 <?php
+/**
+ * ═══════════════════════════════════════════════════════════════
+ *  CryptoFuture Auto Claim — SOUU ENGINE v8.5
+ *  FIX: Turnstile detect + auto-solve di faucet claim
+ *       Balance scrape 4 fallback regex
+ *       Verify login pake /faucet
+ * ═══════════════════════════════════════════════════════════════
+ */
+
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED);
 ini_set('display_errors', '0');
 
-/**
- * CryptoFuture Auto Claim — v6 (FIXED)
- * - URL fix: /faucet/earn (bukan /faucet)
- * - Field fix: token + earn_ticket + smart_token + fp_hash
- * - Parser balance + wait fix
- * - Turnstile tetap dipertahankan (buat login)
- * - UI SAMA KAYA V5
- */
+// ═══════════ COLORS ═══════════
+function fg($c){ return "\033[38;5;{$c}m"; }
+define("RST", "\033[0m");
+define("BOLD", "\033[1m");
 
-define("RED","\033[0;31m"); define("GRN","\033[0;32m");
-define("YEL","\033[0;33m"); define("BLU","\033[0;34m");
-define("MAG","\033[0;35m"); define("CYN","\033[0;36m");
-define("WHT","\033[0;37m"); define("RST","\033[0m");
-define("BOLD","\033[1m");
-
-const SITE   = "https://cryptofuture.co.in";
-const HOME   = SITE . "/";
-const LOGIN  = SITE . "/auth/login";
-const FAUCET = SITE . "/faucet/earn";   // FIX: /faucet/earn
-const VERIFY = SITE . "/faucet/earn";   // FIX: POST ke /faucet/earn
-const DASH   = SITE . "/dashboard";
+// ═══════════ CONFIG ═══════════
+const SITE_BASE        = "https://cryptofuture.co.in";
+const SITE_HOME        = "https://cryptofuture.co.in/";
+const SITE_LOGIN       = "https://cryptofuture.co.in/auth/login";
+const SITE_DASHBOARD   = "https://cryptofuture.co.in/dashboard";
+const SITE_FAUCET      = "https://cryptofuture.co.in/faucet";
+const SITE_VERIFY      = "https://cryptofuture.co.in/faucet/verify";
+const SITE_PTC         = "https://cryptofuture.co.in/ptc";
+const SITE_PTC_VERIFY  = "https://cryptofuture.co.in/ptc/verify/";
 
 const TURNSTILE_SITEKEY = "0x4AAAAAACCJpcjk1yzJVey2";
-
 const SOLVER_IN  = "https://api.waryono.my.id/in.php";
 const SOLVER_OUT = "https://api.waryono.my.id/res.php";
 
-const CONFIG_FILE = "cryptofuture_config.json";
-const DEBUG_FILE  = "debug_verify_response.txt";
+const CONFIG_FILE        = "cryptofuture_config.json";
+const DEBUG_FILE         = "debug_verify_response.txt";
+const DEBUG_BALANCE_FILE = "debug_balance.html";
 
-const UA = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36";
+const UA_DEFAULT = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36";
 
-const MAX_CLAIMS = 100;
+const MAX_CLAIMS  = 100;
+const CLAIM_CD    = 10;
+const RETRY_CD    = 15;
+const FAIL_LIMIT  = 5;
 
-/* ═══════════ RICH ANSI ═══════════ */
-function fg($c){ return "\033[38;5;{$c}m"; }
+// ═══════════ STATE ═══════════
+$GLOBALS['_logs']       = [];
+$GLOBALS['_stage']      = 'INIT';
+$GLOBALS['_email']      = '?';
+$GLOBALS['_balance']    = '?';
+$GLOBALS['_claims']     = 0;
+$GLOBALS['_fails']      = 0;
+$GLOBALS['_earned']     = 0.0;
+$GLOBALS['_ip']         = '?';
+$GLOBALS['_isp']        = '?';
+$GLOBALS['_country']    = '?';
+$GLOBALS['_startTime']  = time();
+$GLOBALS['_mode']       = 'idle';
+$GLOBALS['COOKIES']     = [];
+
+// ═══════════ ANSI HELPERS ═══════════
 function ansi_len($s){
-    $plain = preg_replace('/\x1b\[[0-9;]*m/','',$s);
+    $plain = preg_replace('/\x1b\[[0-9;]*m/', '', $s);
     $w = 0;
     $len = mb_strlen($plain, 'UTF-8');
-    for ($i=0; $i<$len; $i++){
-        $ch = mb_substr($plain,$i,1,'UTF-8');
+    for ($i = 0; $i < $len; $i++){
+        $ch = mb_substr($plain, $i, 1, 'UTF-8');
         $cp = mb_ord($ch, 'UTF-8');
-        if (($cp>=0x1F300 && $cp<=0x1F9FF) || ($cp>=0x2600 && $cp<=0x27BF) ||
-            ($cp>=0x2B00 && $cp<=0x2BFF) || ($cp>=0x25A0 && $cp<=0x25FF) ||
-            ($cp>=0x2580 && $cp<=0x259F)) {
+        if (($cp >= 0x1F300 && $cp <= 0x1F9FF) || ($cp >= 0x2600 && $cp <= 0x27BF) ||
+            ($cp >= 0x2B00 && $cp <= 0x2BFF) || ($cp >= 0x25A0 && $cp <= 0x25FF) ||
+            ($cp >= 0x2580 && $cp <= 0x259F)) {
             $w += 2;
         } else { $w += 1; }
     }
     return $w;
 }
-function ansi_pad($s,$len){ $p = $len - ansi_len($s); return $s . ($p>0 ? str_repeat(' ',$p) : ''); }
-function gradient($text,$start=51,$end=196){
-    $len = mb_strlen($text,'UTF-8');
-    if ($len<=1) return fg($start).$text.RST;
+function ansi_pad($s, $len){
+    $p = $len - ansi_len($s);
+    return $s . ($p > 0 ? str_repeat(' ', $p) : '');
+}
+function gradient($text, $start = 51, $end = 196){
+    $len = mb_strlen($text, 'UTF-8');
+    if ($len <= 1) return fg($start) . $text . RST;
     $out = '';
-    for ($i=0; $i<$len; $i++){
-        $t = $i/max(1,$len-1);
-        $c = (int)round($start + ($end-$start)*$t);
-        $out .= fg($c).mb_substr($text,$i,1,'UTF-8');
+    for ($i = 0; $i < $len; $i++){
+        $t = $i / max(1, $len - 1);
+        $c = (int)round($start + ($end - $start) * $t);
+        $out .= fg($c) . mb_substr($text, $i, 1, 'UTF-8');
     }
-    return $out.RST;
+    return $out . RST;
 }
-function box_line($c){ return fg(51)."║  ".RST.ansi_pad($c,60).fg(51)."║".RST."\n"; }
-function box_div(){ return fg(51)."╠".str_repeat("═",62)."╣".RST."\n"; }
+function box_line($c){ return fg(51) . "║  " . RST . ansi_pad($c, 60) . fg(51) . "║" . RST . "\n"; }
+function box_div(){  return fg(51) . "╠" . str_repeat("═", 62) . "╣" . RST . "\n"; }
 
-/* ═══════════ GLOBAL STATE ═══════════ */
-$GLOBALS['_logs']      = [];
-$GLOBALS['_stage']     = 'INIT';
-$GLOBALS['_wallet']    = '?';
-$GLOBALS['_balance']   = '?';
-$GLOBALS['_claims']    = 0;
-$GLOBALS['_fails']     = 0;
-$GLOBALS['_earned']    = 0.0;
-$GLOBALS['_ip']        = '?';
-$GLOBALS['_isp']       = '?';
-$GLOBALS['_country']   = '?';
-$GLOBALS['_startTime'] = time();
+// ═══════════ CLEAR SCREEN ═══════════
+function clear_screen(){
+    if (PHP_OS_FAMILY === 'Windows') { @system('cls'); }
+    else { @system('clear'); }
+    echo "\033[3J\033[H\033[2J";
+}
 
-function push_log($msg, $tag='i'){
-    $icons = ['i'=>fg(51)."●".RST, 'ok'=>fg(46)."✔".RST, 'er'=>fg(196)."✖".RST,
-              'wr'=>fg(208)."◈".RST, 'in'=>fg(213)."◉".RST, 'g'=>fg(226)."◆".RST];
+// ═══════════ LOG ═══════════
+function push_log($msg, $tag = 'i'){
+    $icons = ['i' => fg(51)."●".RST, 'ok' => fg(46)."✔".RST, 'er' => fg(196)."✖".RST,
+              'wr' => fg(208)."◈".RST, 'in' => fg(213)."◉".RST, 'g' => fg(226)."◆".RST];
     $ts = date('H:i:s');
-    $line = fg(250)."[{$ts}]".RST." ".($icons[$tag]??'●')." ".$msg;
+    $line = fg(250) . "[{$ts}]" . RST . " " . ($icons[$tag] ?? '●') . " " . $msg;
     $GLOBALS['_logs'][] = $line;
-    if (count($GLOBALS['_logs'])>5) array_shift($GLOBALS['_logs']);
+    if (count($GLOBALS['_logs']) > 5) array_shift($GLOBALS['_logs']);
 }
 
-/* ═══════════ IP CHECK ═══════════ */
+// ═══════════ IP CHECK ═══════════
 function check_ip(){
     if ($GLOBALS['_ip'] !== '?') return;
-    $ctx = stream_context_create(['http'=>['timeout'=>5]]);
+    $ctx = stream_context_create(['http' => ['timeout' => 5]]);
     $r = @file_get_contents("http://ip-api.com/json", false, $ctx);
-    if ($r === false) { $GLOBALS['_ip']='?'; return; }
+    if ($r === false) return;
     $j = json_decode($r, true);
-    if (!is_array($j)) { $GLOBALS['_ip']='?'; return; }
-    $GLOBALS['_ip']      = $j['query']   ?? '?';
-    $GLOBALS['_country'] = ($j['country'] ?? '?').' / '.($j['city'] ?? '?');
-    $GLOBALS['_isp']     = $j['isp']     ?? '?';
+    if (!is_array($j)) return;
+    $GLOBALS['_ip']      = $j['query'] ?? '?';
+    $GLOBALS['_country'] = ($j['country'] ?? '?') . ' / ' . ($j['city'] ?? '?');
+    $GLOBALS['_isp']     = $j['isp'] ?? '?';
 }
 
-/* ═══════════ TIME HELPERS ═══════════ */
+// ═══════════ TIME HELPERS ═══════════
 function fmt_time($s){
-    $s = (int)$s; if ($s<=0) return '0s';
-    if ($s >= 3600) return floor($s/3600).'h'.floor(($s%3600)/60).'m';
-    if ($s >= 60)   return floor($s/60).'m'.($s%60).'s';
-    return $s.'s';
+    $s = (int)$s; if ($s <= 0) return '0s';
+    if ($s >= 3600) return floor($s/3600) . 'h' . floor(($s % 3600) / 60) . 'm';
+    if ($s >= 60)   return floor($s/60) . 'm' . ($s % 60) . 's';
+    return $s . 's';
 }
 function fmt_uptime($s){
     $s = (int)$s;
-    $h = floor($s/3600);
-    $m = floor(($s%3600)/60);
-    $sec = $s%60;
-    return sprintf('%02d:%02d:%02d', $h, $m, $sec);
+    return sprintf('%02d:%02d:%02d', floor($s/3600), floor(($s%3600)/60), $s%60);
 }
 
-/* ═══════════ REDACT & DEBUG BOX ═══════════ */
-function redactPost(string $post): string
-{
-    parse_str($post, $data);
-    foreach ([
-        'csrf_token_name',
-        'claim_token',
-        'token',
-        'earn_ticket',
-        'cf-turnstile-response',
-        'g-recaptcha-response',
-        'wallet',
-        'device_token',
-        'smart_token',
-    ] as $key) {
-        if (isset($data[$key])) {
-            $data[$key] = '[REDACTED]';
-        }
-    }
-    return http_build_query($data);
-}
-
-function print_verify_box(int $code, string $body, string $plain): void
-{
-    echo "\n";
-    echo "╔══════════════════════════════════════════╗\n";
-    echo "║          VERIFY RESPONSE                 ║\n";
-    echo "╠══════════════════════════════════════════╣\n";
-    echo "║ HTTP : " . str_pad((string)$code, 30) . "║\n";
-    echo "║ SIZE : " . str_pad(strlen($body) . " bytes", 30) . "║\n";
-    echo "╚══════════════════════════════════════════╝\n";
-    if ($plain === '') {
-        echo "Response : EMPTY\n";
-    } else {
-        echo "Response : " . substr($plain, 0, 500) . "\n";
-    }
-    echo "\n";
-}
-
-/* ═══════════ BANNER ═══════════ */
+// ═══════════ BANNER ═══════════
 function banner(){
     check_ip();
-    echo "\033[2J\033[H";
+    clear_screen();
 
     $elapsed = time() - $GLOBALS['_startTime'];
     $claims  = $GLOBALS['_claims'];
@@ -169,50 +144,52 @@ function banner(){
     $pct     = $maxC > 0 ? min(100, ($claims / $maxC) * 100) : 0;
 
     $barLen = 20;
-    $filled = (int)round(($pct/100) * $barLen);
-    $bar    = str_repeat("█", $filled).str_repeat("░", $barLen - $filled);
+    $filled = (int)round(($pct / 100) * $barLen);
+    $bar    = str_repeat("█", $filled) . str_repeat("░", $barLen - $filled);
 
-    echo fg(51)."╔".str_repeat("═",62)."╗".RST."\n";
+    echo fg(51) . "╔" . str_repeat("═", 62) . "╗" . RST . "\n";
     echo box_line(gradient("CRYPTOFUTURE AUTO CLAIM", 51, 213));
-    echo box_line(fg(240)."─────── SOUU ENGINE v6 ───────".RST);
+    echo box_line(fg(240) . "─────── SOUU ENGINE v8.5 ───────" . RST);
     echo box_div();
 
-    echo box_line(fg(213).BOLD."NETWORK".RST);
-    echo box_line(fg(51)."├─ IP         : ".RST.fg(226).$GLOBALS['_ip'].RST);
-    echo box_line(fg(51)."├─ Country    : ".RST.fg(226).$GLOBALS['_country'].RST);
-    echo box_line(fg(51)."└─ ISP        : ".RST.fg(226).$GLOBALS['_isp'].RST);
+    echo box_line(fg(213) . BOLD . "NETWORK" . RST);
+    echo box_line(fg(51) . "├─ IP         : " . RST . fg(226) . $GLOBALS['_ip'] . RST);
+    echo box_line(fg(51) . "├─ Country    : " . RST . fg(226) . $GLOBALS['_country'] . RST);
+    echo box_line(fg(51) . "└─ ISP        : " . RST . fg(226) . $GLOBALS['_isp'] . RST);
     echo box_div();
 
-    echo box_line(fg(213).BOLD."SESSION".RST);
-    echo box_line(fg(51)."├─ Stage      : ".RST.fg(208).$GLOBALS['_stage'].RST);
-    echo box_line(fg(51)."├─ Uptime     : ".RST.fg(226).fmt_uptime($elapsed).RST);
-    echo box_line(fg(51)."├─ Wallet     : ".RST.fg(226).$GLOBALS['_wallet'].RST);
-    echo box_line(fg(51)."├─ Balance    : ".RST.fg(46).$GLOBALS['_balance'].RST);
-    echo box_line(fg(51)."├─ Claims     : ".RST.fg(226)."{$claims}/{$maxC}".RST);
-    echo box_line(fg(51)."├─ Failed     : ".RST.fg(196).$GLOBALS['_fails'].RST);
-    echo box_line(fg(51)."└─ Earned     : ".RST.fg(46).number_format($GLOBALS['_earned'], 4).RST);
+    echo box_line(fg(213) . BOLD . "SESSION" . RST);
+    echo box_line(fg(51) . "├─ Stage      : " . RST . fg(208) . $GLOBALS['_stage'] . RST);
+    echo box_line(fg(51) . "├─ Mode       : " . RST . fg(213) . strtoupper($GLOBALS['_mode']) . RST);
+    echo box_line(fg(51) . "├─ Uptime     : " . RST . fg(226) . fmt_uptime($elapsed) . RST);
+    echo box_line(fg(51) . "├─ Email      : " . RST . fg(226) . $GLOBALS['_email'] . RST);
+    echo box_line(fg(51) . "├─ Balance    : " . RST . fg(46) . $GLOBALS['_balance'] . " Coins" . RST);
+    echo box_line(fg(51) . "├─ Claims     : " . RST . fg(226) . "{$claims}/{$maxC}" . RST);
+    echo box_line(fg(51) . "├─ Failed     : " . RST . fg(196) . $GLOBALS['_fails'] . RST);
+    echo box_line(fg(51) . "└─ Earned     : " . RST . fg(46) . number_format($GLOBALS['_earned'], 4) . " Coins" . RST);
     echo box_div();
 
-    echo box_line(fg(213).BOLD."PROGRESS".RST);
+    echo box_line(fg(213) . BOLD . "PROGRESS" . RST);
     $pctColor = $pct >= 80 ? 196 : ($pct >= 50 ? 208 : 46);
-    echo box_line(fg(51)."  [".fg($pctColor).$bar.fg(51)."]  ".RST.fg($pctColor).sprintf("%.1f%%", $pct).RST);
+    echo box_line(fg(51) . "  [" . fg($pctColor) . $bar . fg(51) . "]  " . RST . fg($pctColor) . sprintf("%.1f%%", $pct) . RST);
     echo box_div();
 
-    echo box_line(fg(213).BOLD."LIVE LOG".RST);
+    echo box_line(fg(213) . BOLD . "LIVE LOG" . RST);
     $logs = $GLOBALS['_logs'];
-    for ($i=0; $i<5; $i++){
-        if (isset($logs[$i])) echo box_line(fg(252).$logs[$i].RST);
-        else echo fg(51)."║".str_repeat(" ",62)."║".RST."\n";
+    for ($i = 0; $i < 5; $i++){
+        if (isset($logs[$i])) echo box_line(fg(252) . $logs[$i] . RST);
+        else echo fg(51) . "║" . str_repeat(" ", 62) . "║" . RST . "\n";
     }
 
-    echo fg(51)."╚".str_repeat("═",62)."╝".RST."\n";
-    echo "\n   ".gradient("BOT RUNNING", 46, 226)." ".fg(250)."• ".date('H:i:s').RST
-        ." • ".fg(51)."uptime ".fmt_uptime($elapsed).RST."\n";
-    echo "   ".fg(240)."By Power ".RST.fg(213)."@SouuXso".RST.fg(240)." • ".RST.fg(46)."CryptoFuture Edition".RST."\n\n";
+    echo fg(51) . "╚" . str_repeat("═", 62) . "╝" . RST . "\n";
+    echo "\n   " . gradient("BOT RUNNING", 46, 226) . " " . fg(250) . "• " . date('H:i:s') . RST
+        . " • " . fg(51) . "uptime " . fmt_uptime($elapsed) . RST . "\n";
+    echo "   " . fg(240) . "By Power " . RST . fg(213) . "@SouuXso" . RST . fg(240) . " • " . RST
+        . fg(46) . "CryptoFuture Edition" . RST . "\n\n";
 }
 
-/* ═══════════ LIVE TICK ═══════════ */
-function live_tick($seconds, $label="next", $step=1){
+// ═══════════ LIVE TICK ═══════════
+function live_tick($seconds, $label = "next", $step = 1){
     $w = (int)$seconds;
     while ($w > 0) {
         $s = min($w, $step);
@@ -223,20 +200,20 @@ function live_tick($seconds, $label="next", $step=1){
         $claims  = $GLOBALS['_claims'];
         $pct     = MAX_CLAIMS > 0 ? min(100, ($claims / MAX_CLAIMS) * 100) : 0;
 
-        $line = "  ".fg(51)."⏳ {$label} ".fmt_time($w).RST
-              . "  ".fg(240)."|".RST
-              . "  ".fg(226)."uptime ".fmt_uptime($elapsed).RST
-              . "  ".fg(240)."|".RST
-              . "  ".fg(46)."claims {$claims}/".MAX_CLAIMS.RST
-              . "  ".fg(240)."|".RST
-              . "  ".fg(213).sprintf("%.1f%%", $pct).RST;
-        echo "\r".str_repeat(" ", 130)."\r".$line;
+        $line = "  " . fg(51) . "⏳ {$label} " . fmt_time($w) . RST
+              . " " . fg(240) . "|" . RST
+              . " " . fg(226) . "up " . fmt_uptime($elapsed) . RST
+              . " " . fg(240) . "|" . RST
+              . " " . fg(46) . "clm {$claims}/" . MAX_CLAIMS . RST
+              . " " . fg(213) . sprintf("(%.0f%%)", $pct) . RST;
+
+        echo "\r\033[K" . $line;
         flush();
     }
     echo "\n";
 }
 
-/* ═══════════ CONFIG ═══════════ */
+// ═══════════ CONFIG ═══════════
 function load_config(){
     if (!file_exists(CONFIG_FILE)) return [];
     $j = json_decode(file_get_contents(CONFIG_FILE), true);
@@ -247,12 +224,11 @@ function save_config($cfg){
     @chmod(CONFIG_FILE, 0600);
 }
 
-/* ═══════════ COOKIE JAR ═══════════ */
-$GLOBALS['COOKIES'] = [];
+// ═══════════ COOKIE JAR ═══════════
 function cookie_str(){
     if (!$GLOBALS['COOKIES']) return '';
     $p = [];
-    foreach ($GLOBALS['COOKIES'] as $k=>$v) $p[] = "$k=$v";
+    foreach ($GLOBALS['COOKIES'] as $k => $v) $p[] = "$k=$v";
     return implode('; ', $p);
 }
 function cookie_absorb($headers){
@@ -260,26 +236,23 @@ function cookie_absorb($headers){
         foreach ($m as $c) $GLOBALS['COOKIES'][trim($c[1])] = trim($c[2]);
     }
 }
-function cookie_seed($name, $value){
-    if ($value !== '') $GLOBALS['COOKIES'][$name] = $value;
-}
 
-/* ═══════════ HTTP ═══════════ */
-function req($url, $method='GET', $data=null, $headers=[], $binary=false){
+// ═══════════ HTTP ═══════════
+function req($url, $method = 'GET', $data = null, $headers = [], $binary = false){
     $ch = curl_init();
     $def = [
-        "User-Agent: ".UA,
+        "User-Agent: " . UA_DEFAULT,
         "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language: id-ID,id;q=0.9,en;q=0.8",
         "Upgrade-Insecure-Requests: 1",
-        "Referer: ".HOME,
+        "Referer: " . SITE_HOME,
         "sec-ch-ua: \"Chromium\";v=\"127\", \"Not)A;Brand\";v=\"99\"",
         "sec-ch-ua-mobile: ?1",
         "sec-ch-ua-platform: \"Android\"",
     ];
     if ($method === 'POST') $def[] = "Content-Type: application/x-www-form-urlencoded";
     $cs = cookie_str();
-    if ($cs !== '') $def[] = "Cookie: ".$cs;
+    if ($cs !== '') $def[] = "Cookie: " . $cs;
 
     curl_setopt_array($ch, [
         CURLOPT_URL => $url,
@@ -304,22 +277,22 @@ function req($url, $method='GET', $data=null, $headers=[], $binary=false){
     if ($resp === false){
         $err = curl_error($ch);
         curl_close($ch);
-        return ['body'=>'', 'code'=>0, 'headers'=>'', 'error'=>$err];
+        return ['body' => '', 'code' => 0, 'headers' => '', 'error' => $err];
     }
     $info = curl_getinfo($ch);
     curl_close($ch);
 
     if ($binary){
-        return ['body'=>$resp, 'code'=>$info['http_code'], 'headers'=>'', 'error'=>''];
+        return ['body' => $resp, 'code' => $info['http_code'], 'headers' => '', 'error' => ''];
     }
     $hs   = $info['header_size'];
     $raw  = substr($resp, 0, $hs);
     $body = substr($resp, $hs);
     cookie_absorb($raw);
-    return ['body'=>$body, 'code'=>$info['http_code'], 'headers'=>$raw, 'error'=>''];
+    return ['body' => $body, 'code' => $info['http_code'], 'headers' => $raw, 'error' => ''];
 }
 
-/* ═══════════ CF DETECT ═══════════ */
+// ═══════════ CF DETECT ═══════════
 function is_cf_challenge($html){
     return stripos($html, 'Just a moment') !== false
         || stripos($html, 'cf-challenge') !== false
@@ -327,8 +300,8 @@ function is_cf_challenge($html){
         || stripos($html, 'cf_chl_opt') !== false;
 }
 
-/* ═══════════ TURNSTILE SOLVER ═══════════ */
-function solve_turnstile($apikey, $domain, $sitekey, $action='', $cdata=''){
+// ═══════════ TURNSTILE SOLVER ═══════════
+function solve_turnstile($apikey, $domain, $sitekey, $action = '', $cdata = ''){
     push_log("solving turnstile...", 'in');
     $body = json_encode([
         "apikey"  => $apikey,
@@ -347,27 +320,27 @@ function solve_turnstile($apikey, $domain, $sitekey, $action='', $cdata=''){
 
     if (is_array($j) && isset($j['request'])) {
         if (($j['status'] ?? 1) === 0) {
-            push_log("solver err: ".$j['request'], 'er');
+            push_log("solver err: " . $j['request'], 'er');
             return null;
         }
         $id = $j['request'];
     } elseif (preg_match('/OK\|(\S+)/', $r['body'], $m)) {
         $id = $m[1];
     } else {
-        push_log("solver in: ".substr($r['body'],0,60), 'er');
+        push_log("solver in: " . substr($r['body'], 0, 60), 'er');
         return null;
     }
 
     push_log("job id $id, polling...", 'in');
-    for ($i=0; $i<40; $i++) {
+    for ($i = 0; $i < 40; $i++) {
         sleep(2);
-        $url = SOLVER_OUT."?apikey=".$apikey."&action=get&id=".$id."&json=1";
+        $url = SOLVER_OUT . "?apikey=" . $apikey . "&action=get&id=" . $id . "&json=1";
         $r2 = req($url, 'GET');
         $raw = trim($r2['body']);
 
         if (strpos($raw, "CAPCHA_NOT_READY") !== false) continue;
         if (strpos($raw, "ERROR_") !== false) {
-            push_log("solver: ".substr($raw,0,60), 'er');
+            push_log("solver: " . substr($raw, 0, 60), 'er');
             return null;
         }
         if (preg_match('/^OK\|(.+)$/', $raw, $m)) {
@@ -389,60 +362,17 @@ function solve_turnstile($apikey, $domain, $sitekey, $action='', $cdata=''){
     return null;
 }
 
-/* ═══════════ CF PROMPT ═══════════ */
-function prompt_cf(){
-    echo "\n".YEL."  ⚠ Cloudflare challenge detected.".RST."\n";
-    echo "  Grab cf_clearance from browser DevTools → Application → Cookies → cryptofuture.co.in\n";
-    echo WHT."  cf_clearance   : ".RST;
-    $cf = trim(fgets(STDIN));
-    cookie_seed('cf_clearance', $cf);
-    return $cf !== '';
+// ═══════════ SCRAPERS ═══════════
+function extract_csrf($html){
+    if (preg_match('/name="csrf_token_name"[^>]*value="([^"]+)"/i', $html, $m)) return $m[1];
+    if (preg_match('/<meta[^>]+name=["\']csrf-token["\'][^>]+content=["\']([^"\']+)/i', $html, $m)) return $m[1];
+    return '';
 }
 
-/* ═══════════ LOGIN ═══════════ */
-function login($wallet, $apikey){
-    push_log("login $wallet", 'in');
-    $r = req(LOGIN);
-    if ($r['code'] !== 200) return ['ok'=>false, 'msg'=>"GET login HTTP {$r['code']}", 'cf'=>false];
-    $html = $r['body'];
-
-    if (is_cf_challenge($html)) return ['ok'=>false, 'msg'=>'CF challenge', 'cf'=>true];
-
-    $csrf = '';
-    if (preg_match('/name="csrf_token_name"\s+value="([^"]+)"/i', $html, $m)) $csrf = $m[1];
-    if ($csrf === '' && preg_match('/name="csrf_token_name"\s+id="[^"]*"\s+value="([^"]+)"/i', $html, $m)) $csrf = $m[1];
-    if ($csrf === '') return ['ok'=>false, 'msg'=>'CSRF not found', 'cf'=>false];
-
-    $ts_token = solve_turnstile($apikey, HOME, TURNSTILE_SITEKEY, '', '');
-    if (!$ts_token) return ['ok'=>false, 'msg'=>'turnstile solve fail', 'cf'=>false];
-
-    $device = "dev_".substr(md5(uniqid(mt_rand(), true)), 0, 12).base_convert((string)time(), 10, 36);
-    $post = http_build_query([
-        'wallet'                => $wallet,
-        'csrf_token_name'       => $csrf,
-        'device_token'          => $device,
-        'cf-turnstile-response' => $ts_token,
-    ]);
-
-    $r2 = req(LOGIN, 'POST', $post, ['Origin: '.SITE, 'Referer: '.HOME]);
-    if ($r2['code'] >= 500) return ['ok'=>false, 'msg'=>"login POST HTTP {$r2['code']}", 'cf'=>false];
-
-    $r3 = req(DASH);
-    if (stripos($r3['body'], 'auth/logout') !== false
-        || stripos($r3['body'], 'Logout') !== false
-        || stripos($r3['body'], 'Dashboard') !== false) {
-        return ['ok'=>true, 'msg'=>'login ok', 'cf'=>false];
-    }
-    return ['ok'=>false, 'msg'=>'cookie not accepted', 'cf'=>false];
-}
-
-/* ═══════════ PARSER (FIXED) ═══════════ */
 function parse_earn($html){
     $o = [
         'csrf'         => '',
-        'token'        => '',   // FIX
-        'earn_ticket'  => '',   // FIX
-        'wallet'       => '',
+        'claim_token'  => '',
         'wait'         => 0,
         'balance'      => null,
         'has_form'     => false,
@@ -454,352 +384,849 @@ function parse_earn($html){
         $o['has_form'] = true;
         $in = $fm[1];
         if (preg_match('/name="csrf_token_name"[^>]*value="([^"]*)"/i', $in, $m)) $o['csrf']        = $m[1];
-        if (preg_match('/name="token"[^>]*value="([^"]*)"/i', $in, $m))           $o['token']       = $m[1];
-        if (preg_match('/name="earn_ticket"[^>]*value="([^"]*)"/i', $in, $m))     $o['earn_ticket'] = $m[1];
-        if (preg_match('/name="wallet"[^>]*value="([^"]*)"/i', $in, $m))          $o['wallet']      = $m[1];
+        if (preg_match('/name="claim_token"[^>]*value="([^"]*)"/i', $in, $m))     $o['claim_token'] = $m[1];
 
+        // ── Detect Turnstile di dalam form ──
         if (stripos($in, 'cf-turnstile') !== false
             || stripos($in, 'cf-turnstile-response') !== false) {
             $o['has_turnstile'] = true;
-            if (preg_match('/data-sitekey="([^"]+)"/i', $in, $m)) {
+            if (preg_match('/data-sitekey=["\']([^"\']+)["\']/i', $in, $m)) {
                 $o['turnstile_sitekey'] = $m[1];
             }
         }
     }
 
-    // FIX: support let wait / var wait / const wait
+    // Fallback: cek Turnstile di seluruh halaman
+    if (!$o['has_turnstile'] && stripos($html, 'cf-turnstile') !== false) {
+        $o['has_turnstile'] = true;
+        if (preg_match('/data-sitekey=["\']([^"\']+)["\']/i', $html, $m)) {
+            $o['turnstile_sitekey'] = $m[1];
+        }
+    }
+
     if (preg_match('/(?:let|var|const)\s+wait\s*=\s*(\d+)/i', $html, $m)) {
         $o['wait'] = (int)$m[1];
     }
 
-    // Balance: layout baru (balance-amount) atau lama
-    if (preg_match('/class="balance-amount">\s*([\d,]+)\s*<span[^>]*class="balance-unit"/i', $html, $m)) {
-        $o['balance'] = (float)str_replace(',', '', $m[1]);
-    } elseif (preg_match('/TOTAL BALANCE.*?([\d,]+)\s*Coins/si', $html, $m)) {
-        $o['balance'] = (float)str_replace(',', '', $m[1]);
-    } elseif (preg_match('/Balance:\s*<strong>([0-9,]+)\s*Coins<\/strong>/i', $html, $m)) {
-        $o['balance'] = (float)str_replace(',', '', $m[1]);
-    }
+    $o['balance'] = scrape_balance($html);
 
     return $o;
 }
 
-function fetch_balance(){
-    $r = req(FAUCET);
-    return parse_earn($r['body'])['balance'];
-}
+/**
+ * Scrape balance — 4 fallback regex
+ */
+function scrape_balance($html) {
+    if (!$html) return null;
 
-/* ═══════════ SMART TOKEN + FP HASH GENERATOR ═══════════ */
-function gen_smart_token(){
-    $data = [
-        'ts'    => (int)round(microtime(true) * 1000),
-        'cpu'   => 8,
-        'mem'   => 8,
-        'w'     => 384,
-        'h'     => 832,
-        'touch' => 5,
-        'moves' => rand(3, 15),
-    ];
-    return base64_encode(json_encode($data));
-}
-function gen_fp_hash(){
-    return bin2hex(random_bytes(32));
-}
-
-/* ═══════════ MAIN ═══════════ */
-banner();
-
-$cfg    = load_config();
-$apikey = $cfg['apikey'] ?? '';
-
-if (!$apikey) {
-    echo fg(213)."\n  INPUT REQUIRED\n".RST;
-    echo fg(51)."  ┌─[ ".fg(226)."SOLVER APIKEY (waryono)".fg(51)." ]".RST."\n";
-    echo fg(51)."  └──> ".RST;
-    $apikey = trim(fgets(STDIN));
-    if (!$apikey) { echo RED."apikey kosong\n"; exit(1); }
-    $cfg['apikey'] = $apikey;
-    save_config($cfg);
-    echo fg(46)."  ✓ tersimpan\n".RST;
-    sleep(1);
-    banner();
-}
-
-$wallet = $cfg['wallet'] ?? '';
-if (!$wallet) {
-    echo fg(213)."\n  INPUT REQUIRED\n".RST;
-    echo fg(51)."  ┌─[ ".fg(226)."FAUCETPAY EMAIL".fg(51)." ]".RST."\n";
-    echo fg(51)."  └──> ".RST;
-    $wallet = trim(fgets(STDIN));
-    if (!$wallet) { echo RED."wallet kosong\n"; exit(1); }
-    $cfg['wallet'] = $wallet;
-    save_config($cfg);
-    echo fg(46)."  ✓ tersimpan\n".RST;
-    sleep(1);
-    banner();
-}
-
-$GLOBALS['_wallet'] = $wallet;
-
-/* Init CF + login */
-push_log("probing /faucet/earn...", 'in');
-banner();
-
-$r    = req(FAUCET);
-$html = $r['body'];
-
-if (is_cf_challenge($html)) {
-    if (!prompt_cf()) { echo RED."no cf_clearance, exit\n"; exit(1); }
-    $r = req(FAUCET);
-    $html = $r['body'];
-    if (is_cf_challenge($html)) { echo RED."still CF, exit\n"; exit(1); }
-}
-
-if (strpos($html, 'id="fauform"') === false) {
-    $lr = login($wallet, $apikey);
-    if (!$lr['ok']) {
-        if (!empty($lr['cf'])) {
-            if (!prompt_cf()) { echo RED."exit\n"; exit(1); }
-            $lr = login($wallet, $apikey);
+    // P1: exact — "Balance: <strong>N Coins</strong>"
+    if (preg_match('/Balance:\s*<strong[^>]*>([\d,\.]+)\s*Coins/i', $html, $m)) {
+        return (float)str_replace(',', '', $m[1]);
+    }
+    // P2: strong manapun + "N Coins"
+    if (preg_match('/<strong[^>]*>([\d,\.]+)\s*Coins<\/strong>/i', $html, $m)) {
+        return (float)str_replace(',', '', $m[1]);
+    }
+    // P3: any tag + "N Coins"
+    if (preg_match_all('/>([\d,\.]+)\s*Coins\b/i', $html, $mm)) {
+        $best = 0;
+        foreach ($mm[1] as $v) {
+            $n = (float)str_replace(',', '', $v);
+            if ($n > $best) $best = $n;
         }
-        if (!$lr['ok']) { push_log("login gagal: ".$lr['msg'], 'er'); banner(); exit(1); }
+        if ($best > 0) return $best;
     }
-    push_log("login ok", 'ok');
-    banner();
+    // P4: raw "N Coins"
+    if (preg_match('/([\d,\.]+)\s*Coins\b/i', $html, $m)) {
+        return (float)str_replace(',', '', $m[1]);
+    }
+    return null;
 }
 
-$sessionStart = time();
-$round        = 0;
-
-/* ═══════════ LOOP ═══════════ */
-while (true) {
-    if ($GLOBALS['_claims'] >= MAX_CLAIMS) {
-        $GLOBALS['_stage'] = 'LIMIT REACHED';
-        push_log("max claim reached (".MAX_CLAIMS.") — stopping", 'g');
-        banner();
-        break;
+function fetch_balance_from_faucet(){
+    $r = req(SITE_FAUCET);
+    $bal = scrape_balance($r['body']);
+    if ($bal === null) {
+        @file_put_contents(DEBUG_BALANCE_FILE,
+            "TIME  : " . date('Y-m-d H:i:s') . "\n" .
+            "URL   : " . SITE_FAUCET . "\n" .
+            "LEN   : " . strlen($r['body']) . "\n" .
+            "SNIP  :\n" . substr($r['body'], 0, 3000) . "\n\n",
+            FILE_APPEND);
+        return null;
     }
+    $GLOBALS['_balance'] = number_format((float)$bal, 0);
+    return $bal;
+}
 
-    $round++;
-    $GLOBALS['_stage'] = "ROUND #{$round}";
+function is_login_page($html) {
+    if (stripos($html, 'cf-chl-') !== false) return false;
+    if (stripos($html, 'Just a moment') !== false) return false;
+    if (stripos($html, 'name="password"') !== false && stripos($html, 'fauform') === false) return true;
+    if (preg_match('/<form[^>]*action=["\'][^"\']*(?:login|auth|signin)[^"\']*["\']/i', $html)) return true;
+    return false;
+}
 
-    $r    = req(FAUCET);
-    $html = $r['body'];
+// ═══════════ GENERATORS ═══════════
+function gen_device_token(){
+    $chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    $s = '';
+    for ($i = 0; $i < 20; $i++) $s .= $chars[random_int(0, strlen($chars) - 1)];
+    return 'dev_' . $s;
+}
+
+// ═══════════ SESSION CHECK ═══════════
+function check_session(){
+    $tryUrls = [SITE_FAUCET, SITE_DASHBOARD, SITE_HOME];
+    $lastHttp = 0;
+    foreach ($tryUrls as $url) {
+        $r = req($url);
+        $httpCode = (int)($r['code'] ?? 0);
+        $body = $r['body'];
+        $lastHttp = $httpCode;
+        if ($httpCode === 404 || $httpCode === 0) continue;
+
+        $info = parse_earn($body);
+        $bal = $info['balance'];
+
+        if ($bal !== null) $GLOBALS['_balance'] = number_format((float)$bal, 0);
+
+        if (!empty($info['claim_token']) || !empty($info['has_form'])) {
+            return ['ok' => true, 'balance' => $bal, 'http' => $httpCode];
+        }
+        if (is_login_page($body))
+            return ['ok' => false, 'reason' => 'session_expired', 'http' => $httpCode];
+
+        if ($httpCode >= 200 && $httpCode < 400) {
+            if ($bal !== null || stripos($body, 'logout') !== false
+                || stripos($body, 'Faucet') !== false) {
+                return ['ok' => true, 'balance' => $bal, 'http' => $httpCode];
+            }
+        }
+    }
+    return ['ok' => false, 'reason' => 'unknown_' . $lastHttp, 'http' => $lastHttp];
+}
+
+// ═══════════ EMAIL LOGIN ═══════════
+function login_with_email($email, $apikey){
+    push_log("opening homepage...", 'in');
+    banner();
+
+    $r1 = req(SITE_HOME);
+    $html = $r1['body'];
 
     if (is_cf_challenge($html)) {
-        push_log("CF challenge — butuh cf_clearance baru", 'wr');
-        banner();
-        if (!prompt_cf()) { push_log("abort", 'er'); banner(); break; }
-        continue;
-    }
-
-    // Session drop check
-    if (strpos($html, 'id="fauform"') === false
-        && (stripos($html, 'auth/login') !== false || stripos($html, 'Sign in') !== false
-            || stripos($html, 'Welcome,') !== false)) {
-        push_log("session drop — re-login", 'wr');
-        banner();
-        $lr = login($wallet, $apikey);
-        if (!$lr['ok']) {
-            push_log("re-login gagal: ".$lr['msg']." — tunggu 60s", 'er');
-            banner();
-            live_tick(60, "retry");
-            continue;
+        push_log("CF challenge at homepage — retry...", 'wr');
+        sleep(3);
+        $r1 = req(SITE_HOME);
+        $html = $r1['body'];
+        if (is_cf_challenge($html)) {
+            return ['ok' => false, 'msg' => 'CF challenge - bot blocked by Cloudflare'];
         }
-        push_log("re-login ok", 'ok');
-        banner();
-        continue;
     }
 
-    $info = parse_earn($html);
-    if ($info['balance'] !== null) $GLOBALS['_balance'] = number_format((float)$info['balance'], 0);
+    $csrf = extract_csrf($html);
+    if ($csrf === '') {
+        $csrf = $GLOBALS['COOKIES']['csrf_cookie_name'] ?? '';
+    }
+    if ($csrf === '') {
+        return ['ok' => false, 'msg' => 'CSRF not found'];
+    }
+    push_log("csrf: " . substr($csrf, 0, 12) . "...", 'ok');
+    banner();
 
-    if ($info['wait'] > 0) {
-        push_log("cooldown ".fmt_time($info['wait'])." | bal: ".$GLOBALS['_balance'], 'wr');
-        banner();
-        live_tick($info['wait'], "cooldown");
-        continue;
+    push_log("opening login page...", 'in');
+    banner();
+    $r2 = req(SITE_LOGIN);
+    $loginHtml = $r2['body'];
+
+    if (is_cf_challenge($loginHtml)) {
+        return ['ok' => false, 'msg' => 'CF challenge at /login'];
     }
 
-    if (!$info['has_form']) {
-        push_log("no form & no wait — refresh (URL: ".FAUCET.")", 'er');
-        $GLOBALS['_fails']++;
+    $csrf2 = extract_csrf($loginHtml);
+    if ($csrf2 !== '') $csrf = $csrf2;
+
+    $loginSitekey = TURNSTILE_SITEKEY;
+    if (preg_match('/data-sitekey="([^"]+)"/i', $loginHtml, $m)) {
+        $loginSitekey = $m[1];
+    }
+    $hasTurnstile = stripos($loginHtml, 'cf-turnstile') !== false;
+
+    $tsToken = '';
+    if ($hasTurnstile && $apikey) {
+        push_log("login page: turnstile required", 'wr');
         banner();
-        live_tick(15, "retry");
-        continue;
+        $tsToken = solve_turnstile($apikey, SITE_HOME, $loginSitekey);
+        if (!$tsToken) {
+            return ['ok' => false, 'msg' => 'turnstile solve fail'];
+        }
+        push_log("turnstile solved", 'ok');
+        banner();
+    } elseif ($hasTurnstile && !$apikey) {
+        return ['ok' => false, 'msg' => 'turnstile required but apikey missing'];
     }
 
-    // Turnstile detect
-    if (!empty($info['has_turnstile'])) {
-        push_log("form: turnstile DETECTED (sitekey=".substr($info['turnstile_sitekey'],0,16)."…)", 'wr');
-    } else {
-        push_log("form: smartcaptcha (no turnstile)", 'i');
+    $device = gen_device_token();
+    $postData = [
+        'wallet'          => $email,
+        'csrf_token_name' => $csrf,
+        'device_token'    => $device,
+    ];
+    if ($tsToken) {
+        $postData['cf-turnstile-response'] = $tsToken;
+    }
+
+    $post = http_build_query($postData);
+    push_log("posting login...", 'in');
+    banner();
+
+    $r3 = req(SITE_LOGIN, 'POST', $post, [
+        'Origin: ' . SITE_BASE,
+        'Referer: ' . SITE_LOGIN,
+    ]);
+
+    $httpCode = (int)($r3['code'] ?? 0);
+    $respBody = $r3['body'];
+
+    if ($httpCode >= 400) {
+        return ['ok' => false, 'msg' => "HTTP {$httpCode}"];
+    }
+    if (is_login_page($respBody)) {
+        return ['ok' => false, 'msg' => 'still on login page (turnstile rejected)'];
+    }
+
+    push_log("verifying session...", 'in');
+    banner();
+    sleep(2);
+
+    // ── FIX: verify pake /faucet (ada balance), bukan /dashboard ──
+    $r4 = req(SITE_FAUCET);
+    $faucetHtml = $r4['body'];
+
+    if (is_login_page($faucetHtml)) {
+        return ['ok' => false, 'msg' => 'login rejected (redirected to login)'];
+    }
+
+    $loginOk = stripos($faucetHtml, 'fauform') !== false
+            || stripos($faucetHtml, 'auth/logout') !== false
+            || stripos($faucetHtml, 'Logout') !== false
+            || stripos($faucetHtml, 'Balance:') !== false
+            || stripos($faucetHtml, 'Faucet') !== false;
+
+    if (!$loginOk) {
+        return ['ok' => false, 'msg' => 'login rejected (no faucet markers)'];
+    }
+
+    $bal = scrape_balance($faucetHtml);
+    if ($bal !== null) {
+        $GLOBALS['_balance'] = number_format((float)$bal, 0);
+        push_log("balance: " . $GLOBALS['_balance'] . " Coins", 'ok');
     }
     banner();
 
-    // Jeda human
+    return ['ok' => true];
+}
+
+// ═══════════ FAUCET CLAIM (v8.5 — Turnstile detect + solve) ═══════════
+function attempt_faucet_claim($apikey){
+    $r    = req(SITE_FAUCET);
+    $html = $r['body'];
+
+    if (is_cf_challenge($html)) return ['status' => 'cf'];
+    if (is_login_page($html))  return ['status' => 'session_invalid'];
+
+    $info = parse_earn($html);
+    if ($info['balance'] !== null) {
+        $GLOBALS['_balance'] = number_format((float)$info['balance'], 0);
+    }
+
+    if ($info['wait'] > 0)     return ['status' => 'cooldown', 'wait' => (int)$info['wait']];
+    if (!$info['has_form'])    return ['status' => 'error', 'msg' => 'no fauform'];
+    if ($info['claim_token'] === '') return ['status' => 'error', 'msg' => 'claim_token missing'];
+
     sleep(rand(2, 4));
 
-    // POST payload
     $postData = [
         'csrf_token_name' => $info['csrf'],
-        'token'           => $info['token'],
-        'earn_ticket'     => $info['earn_ticket'],
-        'fp_hash'         => gen_fp_hash(),
-        'confirm_wallet'  => '',
-        'wallet'          => $info['wallet'] !== '' ? $info['wallet'] : $wallet,
-        'smart_token'     => gen_smart_token(),
-        'captcha'         => 'smartcaptcha',
+        'claim_token'     => $info['claim_token'],
     ];
 
-    // Kalau ternyata ada turnstile (jarang), solve dulu
+    // ── FIX v8.5: Solve Turnstile kalo muncul ──
     if (!empty($info['has_turnstile'])) {
-        push_log("turnstile muncul — solving...", 'in');
+        push_log("turnstile DETECTED — solving...", 'wr');
         banner();
-        $ts_token = solve_turnstile($apikey, HOME, $info['turnstile_sitekey'], '', '');
+        $ts_token = solve_turnstile($apikey, SITE_HOME, $info['turnstile_sitekey']);
         if (!$ts_token) {
-            push_log("turnstile solve fail — skip round", 'er');
-            $GLOBALS['_fails']++;
+            push_log("turnstile solve FAIL — skip round", 'er');
             banner();
-            live_tick(rand(10, 20), "retry");
-            continue;
+            return ['status' => 'error', 'msg' => 'turnstile solve fail'];
         }
         $postData['cf-turnstile-response'] = $ts_token;
-        push_log("turnstile solved", 'ok');
+        push_log("turnstile SOLVED (" . strlen($ts_token) . "c)", 'ok');
         banner();
     }
 
     $post = http_build_query($postData);
-
-    $r2       = req(VERIFY, 'POST', $post, ['Origin: '.SITE, 'Referer: '.FAUCET]);
+    $r2 = req(SITE_VERIFY, 'POST', $post, ['Origin: ' . SITE_BASE, 'Referer: ' . SITE_FAUCET]);
     $respHtml = (string)($r2['body'] ?? '');
     $httpCode = (int)($r2['code'] ?? 0);
 
-    // Safe debug logger (redacted)
-    $plainBody = trim(preg_replace('/\s+/', ' ', strip_tags($respHtml)));
-
-    @file_put_contents(
-        DEBUG_FILE,
-        str_repeat('═', 60)."\n".
-        "TIME   : ".date('Y-m-d H:i:s')."\n".
-        "ROUND  : #{$round}\n".
-        "HTTP   : {$httpCode}\n".
-        "TURNSTILE: ".(!empty($info['has_turnstile']) ? 'yes' : 'no')."\n".
-        "POST   : ".redactPost($post)."\n".
-        "BODY (5000 chars):\n".substr($respHtml, 0, 5000)."\n\n",
-        FILE_APPEND
-    );
-
-    print_verify_box($httpCode, $respHtml, $plainBody);
+    @file_put_contents(DEBUG_FILE,
+        str_repeat('═', 60) . "\n" .
+        "TIME   : " . date('Y-m-d H:i:s') . "\n" .
+        "HTTP   : {$httpCode}\n" .
+        "TURNSTILE: " . (!empty($info['has_turnstile']) ? 'YES (' . strlen($postData['cf-turnstile-response'] ?? '') . 'c)' : 'no') . "\n" .
+        "CLAIM  : csrf=" . substr($info['csrf'], 0, 12) . " token=" . substr($info['claim_token'], 0, 12) . "\n" .
+        "BODY (5000):\n" . substr($respHtml, 0, 5000) . "\n\n",
+        FILE_APPEND);
 
     $success = false;
     $amount  = 0.0;
-    $reason  = 'unknown';
 
     if ($httpCode === 200 && $respHtml !== '') {
-
-        // 1. Swal.fire html
-        if (preg_match("/Swal\.fire\s*\(\s*\{.*?html\s*:\s*['\"](.+?)['\"]\s*[,}]/is", $respHtml, $m)) {
-            $msg = strip_tags($m[1]);
-            if (preg_match('/([0-9.,]+)\s+Coins?/i', $msg, $am)) {
+        // P1: Swal success + amount
+        if (preg_match("/Swal\.fire\s*\(\s*\{.*?icon:\s*['\"]success['\"].*?html:\s*['\"]([^'\"]*\d+[^'\"]*Coins?[^'\"]*)['\"]/is", $respHtml, $m)) {
+            if (preg_match('/([\d\.,]+)\s*Coins?/i', $m[1], $am)) {
                 $amount = (float)str_replace(',', '', $am[1]);
-                $success = true; $reason = 'swal-html';
-            } elseif (stripos($msg, 'success') !== false) {
-                $success = true; $reason = 'swal-html-nocoins';
+                $success = true;
             }
         }
-
-        // 2. Swal.fire title
-        if (!$success && preg_match("/Swal\.fire\s*\(\s*\{.*?title\s*:\s*['\"]([^'\"]+)['\"]/is", $respHtml, $m)) {
-            if (stripos($m[1], 'success') !== false) { $success = true; $reason = 'swal-title'; }
-            if (stripos($m[1], 'error') !== false)   { $reason = 'swal-title-error'; }
-        }
-
-        // 3. Plain text
-        if (!$success && preg_match('/Success!.*?([0-9.]+)\s+Coins?/is', $respHtml, $m)) {
-            $amount = (float)$m[1]; $success = true; $reason = 'plain-text';
-        }
-
-        // 4. JSON
-        if (!$success) {
-            $j = json_decode($respHtml, true);
-            if (is_array($j)) {
-                $isOk = (($j['success'] ?? false) === true)
-                     || (($j['status']  ?? '') === 'ok')
-                     || (($j['status']  ?? '') === 'success')
-                     || (($j['code']    ?? 0)  === 200 && !empty($j['message']));
-                if ($isOk) {
-                    $success = true;
-                    $reason  = 'json';
-                    foreach (['amount','coins','reward','value','balance'] as $k) {
-                        if (isset($j[$k]) && is_numeric($j[$k])) { $amount = (float)$j[$k]; break; }
-                    }
-                    if ($amount === 0.0 && isset($j['message']) && preg_match('/([0-9.]+)\s+Coins?/i', $j['message'], $am)) {
-                        $amount = (float)$am[1];
-                    }
+        // P2: Swal success tanpa amount (cari amount manapun)
+        if (!$success && preg_match("/Swal\.fire\s*\(\s*\{.*?icon:\s*['\"]success['\"]/is", $respHtml)) {
+            if (preg_match("/html:\s*['\"]([^'\"]*\d+[^'\"]*Coins?[^'\"]*)['\"]/is", $respHtml, $m)) {
+                if (preg_match('/([\d\.,]+)\s*Coins?/i', $m[1], $am)) {
+                    $amount = (float)str_replace(',', '', $am[1]);
                 }
             }
+            $success = true;
         }
-
-        // 5. Balance delta
+        // P3: plain text
+        if (!$success && preg_match('/([\d\.,]+)\s+Coins?\s+has been added/i', $respHtml, $m)) {
+            $amount = (float)str_replace(',', '', $m[1]);
+            $success = true;
+        }
+        // P4: balance delta
         if (!$success) {
             sleep(1);
-            $balAfter = fetch_balance();
+            $balAfter = fetch_balance_from_faucet();
             if ($balAfter !== null && $info['balance'] !== null) {
                 $delta = (float)$balAfter - (float)$info['balance'];
-                if ($delta > 0) { $success = true; $amount = $delta; $reason = 'balance-delta'; }
+                if ($delta > 0) { $success = true; $amount = $delta; }
+            }
+        }
+        // Extract error msg kalo gagal
+        if (!$success) {
+            $errMsg = '';
+            if (preg_match("/Swal\.fire\s*\(\s*\{.*?html:\s*['\"]([^'\"]+)['\"]/is", $respHtml, $m)) {
+                $errMsg = strip_tags($m[1]);
+            } elseif (preg_match("/Swal\.fire\s*\(\s*\{.*?title:\s*['\"]([^'\"]+)['\"]/is", $respHtml, $m)) {
+                $errMsg = $m[1];
+            }
+            if ($errMsg !== '') {
+                return ['status' => 'fail', 'http' => $httpCode, 'msg' => substr(trim($errMsg), 0, 80)];
             }
         }
     }
 
-    // HTTP 500 fallback
-    if (!$success && ($httpCode === 500 || stripos($respHtml, 'Database Error') !== false)) {
-        push_log("HTTP 500 / DB err — re-check balance", 'wr');
-        banner();
-        sleep(2);
-        $balAfter = fetch_balance();
-        if ($balAfter !== null && $info['balance'] !== null) {
-            $delta = (float)$balAfter - (float)$info['balance'];
-            if ($delta > 0) { $success = true; $amount = $delta; $reason = 'db-delta'; }
-        }
-    }
-
-    if ($success) {
-        $GLOBALS['_claims']++;
-        $GLOBALS['_earned'] += $amount;
-        if ($amount > 0) {
-            $GLOBALS['_balance'] = number_format((float)$info['balance'] + $amount, 0);
-        }
-        push_log("+".number_format($amount, 4)." [{$reason}] | total: ".number_format($GLOBALS['_earned'],4)." | bal: ".$GLOBALS['_balance'], 'ok');
-    } else {
-        $GLOBALS['_fails']++;
-        push_log("fail (HTTP {$httpCode}) reason={$reason}", 'er');
-
-        $snip = trim(preg_replace('/\s+/', ' ', strip_tags($respHtml)));
-        if ($snip !== '') {
-            push_log("resp: ".substr($snip, 0, 80), 'wr');
-        }
-    }
-    banner();
-
-    if ($GLOBALS['_claims'] >= MAX_CLAIMS) {
-        $GLOBALS['_stage'] = 'LIMIT REACHED';
-        push_log("max claim reached (".MAX_CLAIMS.") — stopping", 'g');
-        banner();
-        break;
-    }
-
-    $cd = $success ? 10 : rand(20, 40);
-    live_tick($cd, $success ? "next" : "retry");
+    if ($success) return ['status' => 'success', 'amount' => $amount];
+    return ['status' => 'fail', 'http' => $httpCode];
 }
 
-/* ═══════════ SUMMARY ═══════════ */
-$uptime = time() - $sessionStart;
-$GLOBALS['_stage'] = 'DONE';
-push_log("done | claims=".$GLOBALS['_claims']."/".MAX_CLAIMS
-    ." fails=".$GLOBALS['_fails']
-    ." earned=".number_format($GLOBALS['_earned'],4)
-    ." uptime=".fmt_uptime($uptime), 'g');
-banner();
-echo fg(250)."  ~ session flushed\n".RST;
-exit(0);
+// ═══════════ WATCH ADS (PTC) ═══════════
+function attempt_watch_claim(){
+    $r1 = req(SITE_PTC);
+    $html = $r1['body'];
+    $httpP = (int)($r1['code'] ?? 0);
+
+    if ($httpP === 404) return ['status' => 'error', 'msg' => '/ptc 404'];
+    if (is_login_page($html)) return ['status' => 'session_invalid'];
+    if (preg_match('/no ads? (available|left)|all ads? (watched|completed)/i', $html)) {
+        return ['status' => 'error', 'msg' => 'no ads available'];
+    }
+
+    $adLinks = [];
+    if (preg_match_all("#location\.href='https://cryptofuture\.co\.in/(ptc/(?:window|iframe)/(\d+))'#i", $html, $m, PREG_SET_ORDER)) {
+        foreach ($m as $row) {
+            $adLinks[] = ['url' => SITE_BASE . '/' . $row[1], 'id' => $row[2], 'type' => strpos($row[1], 'window') !== false ? 'window' : 'iframe'];
+        }
+    }
+    if (empty($adLinks)) return ['status' => 'error', 'msg' => 'no ad links found'];
+
+    $ad = $adLinks[0];
+    $viewUrl = $ad['url'];
+    $adId = $ad['id'];
+
+    push_log("opening ad #{$adId} ({$ad['type']})", 'in');
+    banner();
+
+    $r2 = req($viewUrl, 'GET', null, ['Referer: ' . SITE_PTC]);
+    $viewHtml = $r2['body'];
+
+    if (is_login_page($viewHtml)) return ['status' => 'session_invalid'];
+
+    $csrf = '';
+    if (preg_match('/name="csrf_token_name"[^>]*value="([^"]+)"/i', $viewHtml, $m)) {
+        $csrf = $m[1];
+    }
+    if ($csrf === '') $csrf = $GLOBALS['COOKIES']['csrf_cookie_name'] ?? '';
+    if ($csrf === '') return ['status' => 'error', 'msg' => 'CSRF not found on view page'];
+
+    $timer = 10;
+    if (preg_match('/(?:var|let|const)\s+timer\s*=\s*(\d+)/i', $viewHtml, $m)) {
+        $timer = (int)$m[1];
+    }
+
+    push_log("watching {$timer}s...", 'i');
+    banner();
+
+    $wait = $timer + rand(1, 3);
+    live_tick($wait, "ad #{$adId}");
+
+    $verifyUrl = SITE_PTC_VERIFY . $adId;
+    $post = http_build_query(['csrf_token_name' => $csrf]);
+    $h = ['Origin: ' . SITE_BASE, 'Referer: ' . $viewUrl];
+
+    $r3 = req($verifyUrl, 'POST', $post, $h);
+    $respHtml = (string)($r3['body'] ?? '');
+    $httpCode = (int)($r3['code'] ?? 0);
+
+    $success = false;
+    $amount = 0.0;
+
+    if (preg_match("/Swal\.fire\s*\(\s*\{.*?html\s*:\s*['\"]([^'\"]*\d+[^'\"]*Coins?[^'\"]*)['\"]/is", $respHtml, $m)) {
+        if (preg_match('/([\d\.,]+)\s*Coins?/i', $m[1], $am)) {
+            $amount = (float)str_replace(',', '', $am[1]);
+            $success = true;
+        }
+    }
+    if (!$success && preg_match('/([\d\.,]+)\s+Coins?\s+has been added/i', $respHtml, $m)) {
+        $amount = (float)str_replace(',', '', $m[1]);
+        $success = true;
+    }
+    if (!$success) {
+        sleep(1);
+        $r4 = req(SITE_PTC);
+        if (preg_match("/Swal\.fire\s*\(\s*\{.*?html\s*:\s*['\"]([^'\"]*\d+[^'\"]*Coins?[^'\"]*)['\"]/is", $r4['body'], $m)) {
+            if (preg_match('/([\d\.,]+)\s*Coins?/i', $m[1], $am)) {
+                $amount = (float)str_replace(',', '', $am[1]);
+                $success = true;
+            }
+        }
+    }
+
+    if ($success) return ['status' => 'success', 'amount' => $amount];
+    return ['status' => 'fail', 'http' => $httpCode];
+}
+
+// ═══════════ MENU ═══════════
+function menu_ui($cfg){
+    $apikey_set = !empty($cfg['apikey']);
+    $email_set  = !empty($cfg['email']);
+
+    echo fg(51) . "╔" . str_repeat("═", 62) . "╗" . RST . "\n";
+    echo box_line(fg(213) . BOLD . "MENU" . RST);
+    echo box_div();
+    echo box_line(fg(46) . "  1" . RST . ". Start Faucet Claim");
+    echo box_line(fg(46) . "  2" . RST . ". Start Watch Ads Claim");
+    echo box_line(fg(226) . "  3" . RST . ". Login/Relogin via Email  " . ($email_set ? fg(46) . "[" . $GLOBALS['_email'] . "]" . RST : fg(196) . "[not logged]" . RST));
+    echo box_line(fg(226) . "  4" . RST . ". Set Waryono API Key  " . ($apikey_set ? fg(46) . "[set]" . RST : fg(196) . "[missing]" . RST));
+    echo box_line(fg(226) . "  5" . RST . ". Change Email");
+    echo box_line(fg(213) . "  6" . RST . ". Refresh Balance");
+    echo fg(51) . "╚" . str_repeat("═", 62) . "╝" . RST . "\n";
+    echo "\n  " . fg(51) . "›" . RST . " Choose: ";
+    return trim(fgets(STDIN));
+}
+
+function menu_login(&$cfg){
+    $savedEmail = $cfg['email'] ?? '';
+    if ($savedEmail !== '') {
+        echo "\n" . fg(213) . BOLD . "─── LOGIN VIA EMAIL ───" . RST . "\n";
+        echo fg(240) . "Saved: {$savedEmail}" . RST . "\n";
+        echo fg(51) . "  Use saved? (y/n) [y]: " . RST;
+        $ans = strtolower(trim(fgets(STDIN)));
+        if ($ans === '' || $ans === 'y') {
+            $email = $savedEmail;
+        } else {
+            echo fg(51) . "  Email: " . RST;
+            $email = trim(fgets(STDIN));
+        }
+    } else {
+        echo "\n" . fg(213) . BOLD . "─── LOGIN VIA EMAIL ───" . RST . "\n";
+        echo fg(51) . "  Email: " . RST;
+        $email = trim(fgets(STDIN));
+    }
+
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        push_log("invalid email", 'er');
+        sleep(2);
+        return;
+    }
+
+    $apikey = $cfg['apikey'] ?? '';
+    if (!$apikey) {
+        push_log("apikey missing (menu 4) — turnstile gak bisa di-solve", 'er');
+        sleep(2);
+        return;
+    }
+
+    $cfg['email'] = $email;
+    $GLOBALS['_email'] = $email;
+    save_config($cfg);
+
+    $GLOBALS['COOKIES'] = [];
+    push_log("logging in as {$email}...", 'in');
+    banner();
+
+    $res = login_with_email($email, $apikey);
+
+    if ($res['ok']) {
+        $cfg['cookies'] = $GLOBALS['COOKIES'];
+        save_config($cfg);
+        push_log("login OK | bal: " . $GLOBALS['_balance'] . " Coins", 'ok');
+        banner();
+    } else {
+        push_log("login FAIL: " . ($res['msg'] ?? '?'), 'er');
+        banner();
+    }
+    sleep(2);
+}
+
+function menu_set_apikey(&$cfg){
+    echo "\n" . fg(213) . BOLD . "─── WARYONO API KEY ───" . RST . "\n";
+    echo fg(240) . "Get from https://waryono.my.id" . RST . "\n\n";
+    echo fg(51) . "  Key: " . RST;
+    $k = trim(fgets(STDIN));
+    if ($k === '') { push_log("empty — cancelled", 'wr'); return; }
+    $cfg['apikey'] = $k;
+    save_config($cfg);
+    push_log("apikey saved", 'ok');
+    sleep(1);
+}
+
+function menu_change_email(&$cfg){
+    echo "\n" . fg(213) . BOLD . "─── CHANGE EMAIL ───" . RST . "\n";
+    echo fg(51) . "  New email: " . RST;
+    $e = trim(fgets(STDIN));
+    if (!filter_var($e, FILTER_VALIDATE_EMAIL)) {
+        push_log("invalid email", 'er');
+        sleep(2);
+        return;
+    }
+    $cfg['email'] = $e;
+    $GLOBALS['_email'] = $e;
+    save_config($cfg);
+    push_log("email updated: {$e}", 'ok');
+    sleep(1);
+}
+
+function menu_refresh_balance(){
+    push_log("refreshing balance...", 'in');
+    banner();
+    $bal = fetch_balance_from_faucet();
+    if ($bal !== null) {
+        push_log("balance: " . $GLOBALS['_balance'] . " Coins", 'ok');
+    } else {
+        push_log("balance not detected — cek debug_balance.html", 'er');
+    }
+    sleep(2);
+}
+
+// ═══════════ BOT LOOPS ═══════════
+function run_faucet($apikey, &$cfg){
+    $GLOBALS['_mode'] = 'faucet';
+
+    push_log("probing /faucet...", 'in');
+    banner();
+    $r = req(SITE_FAUCET);
+    $html = $r['body'];
+
+    if (is_cf_challenge($html)) {
+        push_log("CF challenge — try relogin", 'wr');
+        banner();
+        return;
+    }
+
+    if (strpos($html, 'id="fauform"') === false) {
+        if (!empty($cfg['email'])) {
+            push_log("session expired — auto relogin...", 'wr');
+            banner();
+            $res = login_with_email($cfg['email'], $apikey);
+            if ($res['ok']) {
+                $cfg['cookies'] = $GLOBALS['COOKIES'];
+                save_config($cfg);
+                push_log("relogin OK", 'ok');
+                banner();
+                sleep(1);
+                $r = req(SITE_FAUCET);
+                $html = $r['body'];
+            } else {
+                push_log("relogin FAIL: " . ($res['msg'] ?? '?'), 'er');
+                banner();
+                sleep(2);
+                return;
+            }
+        }
+        if (strpos($html, 'id="fauform"') === false) {
+            push_log("still no fauform — abort", 'er');
+            banner();
+            sleep(2);
+            return;
+        }
+    }
+
+    $bal = scrape_balance($html);
+    if ($bal !== null) {
+        $GLOBALS['_balance'] = number_format((float)$bal, 0);
+    }
+
+    push_log("faucet page OK | bal: " . $GLOBALS['_balance'], 'ok');
+    banner();
+
+    $round = 0;
+    while (true) {
+        if ($GLOBALS['_claims'] >= MAX_CLAIMS) {
+            $GLOBALS['_stage'] = 'LIMIT';
+            push_log("max claims reached", 'g');
+            banner();
+            break;
+        }
+        if ($GLOBALS['_fails'] >= FAIL_LIMIT) {
+            $GLOBALS['_stage'] = 'FAIL LIMIT';
+            push_log("fail limit reached", 'er');
+            banner();
+            break;
+        }
+
+        $round++;
+        $GLOBALS['_stage'] = "ROUND #{$round}";
+        banner();
+
+        $res = attempt_faucet_claim($apikey);
+        $st = $res['status'];
+
+        if ($st === 'success') {
+            $amt = (float)$res['amount'];
+            $GLOBALS['_claims']++;
+            $GLOBALS['_fails'] = 0;
+            $GLOBALS['_earned'] += $amt;
+            if ($amt > 0) {
+                $cur = (float)str_replace(',', '', $GLOBALS['_balance']);
+                $GLOBALS['_balance'] = number_format($cur + $amt, 0);
+            }
+            push_log("+" . number_format($amt, 4) . " | bal: " . $GLOBALS['_balance'], 'ok');
+            banner();
+            live_tick(CLAIM_CD, "next");
+        } elseif ($st === 'cooldown') {
+            $w = (int)$res['wait'];
+            push_log("cooldown " . fmt_time($w), 'wr');
+            banner();
+            live_tick($w, "cooldown");
+        } elseif ($st === 'cf') {
+            push_log("CF challenge — abort", 'wr');
+            banner();
+            break;
+        } elseif ($st === 'session_invalid') {
+            $GLOBALS['_fails']++;
+            push_log("session expired — auto relogin...", 'er');
+            banner();
+            if (!empty($cfg['email'])) {
+                $res2 = login_with_email($cfg['email'], $apikey);
+                if ($res2['ok']) {
+                    $cfg['cookies'] = $GLOBALS['COOKIES'];
+                    save_config($cfg);
+                    $GLOBALS['_fails'] = 0;
+                    push_log("relogin OK", 'ok');
+                    banner();
+                    sleep(1);
+                    continue;
+                }
+            }
+            live_tick(RETRY_CD, "retry");
+        } else {
+            $GLOBALS['_fails']++;
+            $err = $res['msg'] ?? ('HTTP ' . ($res['http'] ?? '?'));
+            push_log("fail: " . substr($err, 0, 60), 'er');
+            banner();
+            live_tick(RETRY_CD, "retry");
+        }
+    }
+
+    $GLOBALS['_stage'] = 'DONE';
+    banner();
+}
+
+function run_watch(&$cfg, $apikey){
+    $GLOBALS['_mode'] = 'watch';
+
+    push_log("probing /ptc...", 'in');
+    banner();
+    $r = req(SITE_PTC);
+    if (is_cf_challenge($r['body'])) {
+        push_log("CF challenge — abort", 'er');
+        banner();
+        return;
+    }
+    if (is_login_page($r['body'])) {
+        if (!empty($cfg['email'])) {
+            push_log("session expired — auto relogin...", 'wr');
+            banner();
+            $res = login_with_email($cfg['email'], $apikey);
+            if ($res['ok']) {
+                $cfg['cookies'] = $GLOBALS['COOKIES'];
+                save_config($cfg);
+                push_log("relogin OK", 'ok');
+                banner();
+                sleep(1);
+            } else {
+                push_log("relogin FAIL", 'er');
+                banner();
+                sleep(2);
+                return;
+            }
+        } else {
+            push_log("not logged in — login first", 'er');
+            banner();
+            sleep(2);
+            return;
+        }
+    }
+
+    fetch_balance_from_faucet();
+
+    push_log("/ptc OK | bal: " . $GLOBALS['_balance'], 'ok');
+    banner();
+
+    $round = 0;
+    while (true) {
+        if ($GLOBALS['_claims'] >= MAX_CLAIMS) {
+            $GLOBALS['_stage'] = 'LIMIT';
+            push_log("max claims reached", 'g');
+            banner();
+            break;
+        }
+        if ($GLOBALS['_fails'] >= FAIL_LIMIT) {
+            $GLOBALS['_stage'] = 'FAIL LIMIT';
+            push_log("fail limit reached", 'er');
+            banner();
+            break;
+        }
+
+        $round++;
+        $GLOBALS['_stage'] = "ROUND #{$round}";
+        banner();
+
+        $res = attempt_watch_claim();
+        $st = $res['status'];
+
+        if ($st === 'success') {
+            $amt = (float)$res['amount'];
+            $GLOBALS['_claims']++;
+            $GLOBALS['_fails'] = 0;
+            $GLOBALS['_earned'] += $amt;
+            if ($amt > 0) {
+                $cur = (float)str_replace(',', '', $GLOBALS['_balance']);
+                $GLOBALS['_balance'] = number_format($cur + $amt, 0);
+            }
+            push_log("+" . number_format($amt, 4) . " | bal: " . $GLOBALS['_balance'], 'ok');
+            banner();
+            live_tick(15, "next");
+        } elseif ($st === 'session_invalid') {
+            $GLOBALS['_fails']++;
+            push_log("session expired — relogin...", 'er');
+            banner();
+            if (!empty($cfg['email'])) {
+                $res2 = login_with_email($cfg['email'], $apikey);
+                if ($res2['ok']) {
+                    $cfg['cookies'] = $GLOBALS['COOKIES'];
+                    save_config($cfg);
+                    $GLOBALS['_fails'] = 0;
+                    push_log("relogin OK", 'ok');
+                    banner();
+                    sleep(1);
+                    continue;
+                }
+            }
+            live_tick(RETRY_CD, "retry");
+        } else {
+            $GLOBALS['_fails']++;
+            $err = $res['msg'] ?? '?';
+            push_log("fail: " . substr($err, 0, 60), 'er');
+            banner();
+            live_tick(RETRY_CD, "retry");
+        }
+    }
+
+    $GLOBALS['_stage'] = 'DONE';
+    banner();
+}
+
+// ═══════════ MAIN ═══════════
+if (function_exists('pcntl_signal')) {
+    pcntl_async_signals(true);
+    pcntl_signal(SIGINT, function () {
+        echo "\n\n" . fg(226) . "[!] SIGINT — keluar aman" . RST . "\n";
+        exit(0);
+    });
+}
+
+$cfg = load_config();
+if (!empty($cfg['email'])) $GLOBALS['_email'] = $cfg['email'];
+if (!empty($cfg['cookies']) && is_array($cfg['cookies'])) {
+    $GLOBALS['COOKIES'] = $cfg['cookies'];
+}
+
+while (true) {
+    banner();
+    $ch = menu_ui($cfg);
+
+    switch ($ch) {
+        case '1':
+            $apikey = $cfg['apikey'] ?? '';
+            if (!$apikey) { push_log("set apikey dulu (menu 4)", 'wr'); sleep(2); break; }
+            if (empty($cfg['email'])) { push_log("login via email dulu (menu 3)", 'wr'); sleep(2); break; }
+            if (empty($GLOBALS['COOKIES'])) {
+                push_log("no cookies — auto login...", 'wr');
+                banner();
+                $res = login_with_email($cfg['email'], $apikey);
+                if ($res['ok']) {
+                    $cfg['cookies'] = $GLOBALS['COOKIES'];
+                    save_config($cfg);
+                } else {
+                    push_log("login fail: " . ($res['msg'] ?? '?'), 'er');
+                    sleep(2);
+                    break;
+                }
+            }
+            run_faucet($apikey, $cfg);
+            break;
+
+        case '2':
+            $apikey = $cfg['apikey'] ?? '';
+            if (empty($cfg['email'])) { push_log("login via email dulu (menu 3)", 'wr'); sleep(2); break; }
+            if (empty($GLOBALS['COOKIES'])) {
+                push_log("no cookies — auto login...", 'wr');
+                banner();
+                $res = login_with_email($cfg['email'], $apikey);
+                if ($res['ok']) {
+                    $cfg['cookies'] = $GLOBALS['COOKIES'];
+                    save_config($cfg);
+                } else {
+                    push_log("login fail: " . ($res['msg'] ?? '?'), 'er');
+                    sleep(2);
+                    break;
+                }
+            }
+            run_watch($cfg, $apikey);
+            break;
+
+        case '3': menu_login($cfg); break;
+        case '4': menu_set_apikey($cfg); break;
+        case '5': menu_change_email($cfg); break;
+        case '6': menu_refresh_balance(); break;
+
+        default:
+            push_log("invalid choice", 'wr');
+            sleep(1);
+    }
+}
