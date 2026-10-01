@@ -44,9 +44,9 @@
           "runner": "python3"
         },
         "9": {
-          "label": "Coming Soon 🔒",
-          "file": "comingsoon.php",
-          "runner": "php"
+          "label": "GameRapid 🟢",
+          "file": "Rapid.py",
+          "runner": "python3"
         }
       }
     },
