@@ -2,9 +2,10 @@
 # -*- coding: utf-8 -*-
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   ADTUBES AUTO WATCH — SOUU ENGINE Edition v2.4             ║
+║   ADTUBES AUTO WATCH — SOUU ENGINE Edition v2.5             ║
 ║   FIX: auto-retry network + SSL tolerance + backoff         ║
 ║   NEW: stop kalau semua network daily limit                 ║
+║   NEW: stop kalau ads fail 3x berturut-turut                ║
 ╚══════════════════════════════════════════════════════════════╝
 """
 
@@ -17,7 +18,7 @@ from urllib3.util.retry import Retry
 from colorama import init, Fore, Style
 init(autoreset=True)
 
-VERSION = "2.4"
+VERSION = "2.5"
 HOST = "https://adtubes.lol"
 ADSGRAM_BASE = "https://api.adsgram.ai"
 CONFIG_FILE = "config_adtubes.json"
@@ -46,8 +47,11 @@ INIT_DATA_MAX_AGE_SEC = 3600
 
 # Network retry config
 HTTP_MAX_RETRY = 5
-HTTP_BACKOFF_BASE = 3       # detik (3, 6, 12, 24, 48)
+HTTP_BACKOFF_BASE = 3
 REQUEST_TIMEOUT = 45
+
+# Ad fail limit — stop kalau ads gagal berturut-turut
+AD_FAIL_LIMIT = 3
 
 _debug_fp = None
 
@@ -112,6 +116,7 @@ class UI:
         "tier": "-", "app_key": "-", "start_ts": int(time.time()),
         "last_reward": "-", "session_reward": 0.0, "session_ads": 0,
         "dcs_variant": "-", "init_age": "-", "net_retry": 0,
+        "ad_fails": 0,
     }
     logs = deque(maxlen=300)
 
@@ -193,6 +198,9 @@ class UI:
         buf += UI.row("├─ " + UI.pad("Reward", 13) + ": " + UI.fg(46, f"+${s['session_reward']:.6f}")) + "\n"
         buf += UI.row("├─ " + UI.pad("Ads count", 13) + ": " + UI.fg(226, str(s["session_ads"]))) + "\n"
         buf += UI.row("├─ " + UI.pad("Net retry", 13) + ": " + UI.fg(208, str(s.get("net_retry", 0)))) + "\n"
+        fails = int(s.get("ad_fails", 0))
+        fail_color = 196 if fails >= AD_FAIL_LIMIT else (208 if fails > 0 else 46)
+        buf += UI.row("├─ " + UI.pad("Ad fails", 13) + ": " + UI.fg(fail_color, f"{fails}/{AD_FAIL_LIMIT}")) + "\n"
         buf += UI.row("└─ " + UI.pad("Last reward", 13) + ": " + UI.fg(226, str(s["last_reward"]))) + "\n"
         buf += UI.mid() + "\n"
         phase = str(s["phase"])
@@ -282,6 +290,7 @@ class UI:
         print(line(UI.bold("ABOUT")))
         print(line("├─ " + UI.pad("Host", 11) + ": " + HOST))
         print(line("├─ " + UI.pad("Retry", 11) + f": {HTTP_MAX_RETRY}x backoff"))
+        print(line("├─ " + UI.pad("Ad fail", 11) + f": stop after {AD_FAIL_LIMIT}x"))
         print(line("├─ " + UI.pad("Debug", 11) + f": {DEBUG_FILE}"))
         print(line("└─ " + UI.pad("Version", 11) + ": v" + VERSION))
         print(UI.fg(51, "╠" + "═" * W_ + "╣"))
@@ -292,25 +301,12 @@ class UI:
 
 
 # ═══════════════════════════════════════════════════════════════
-#  SESSION BUILDER — robust retry
+#  SESSION BUILDER
 # ═══════════════════════════════════════════════════════════════
 def make_session():
-    """Bikin session dengan retry adapter + pool."""
     s = requests.Session()
-
-    retry = Retry(
-        total=0,                # kita handle manual
-        connect=0,
-        read=0,
-        redirect=0,
-        status=0,
-        backoff_factor=0,
-    )
-    adapter = HTTPAdapter(
-        max_retries=retry,
-        pool_connections=10,
-        pool_maxsize=20,
-    )
+    retry = Retry(total=0, connect=0, read=0, redirect=0, status=0, backoff_factor=0)
+    adapter = HTTPAdapter(max_retries=retry, pool_connections=10, pool_maxsize=20)
     s.mount("https://", adapter)
     s.mount("http://", adapter)
     return s
@@ -323,7 +319,6 @@ class AdTubesBot:
     def __init__(self):
         self.session = make_session()
         self.ua = TELEGRAM_UA
-
         self.init_data = ""
         self.app_key = ""
         self.user = {}
@@ -410,7 +405,6 @@ class AdTubesBot:
                 write_debug("")
 
     def _is_transient(self, exc):
-        """Cek exception transient (network)."""
         msg = str(exc).lower()
         transient_keywords = [
             'connection aborted', 'connection reset', 'connection refused',
@@ -424,9 +418,7 @@ class AdTubesBot:
         return any(k in msg for k in transient_keywords)
 
     def _request_with_retry(self, method, url, headers, body=None):
-        """HTTP request dengan retry + backoff."""
         last_exc = None
-
         for attempt in range(1, HTTP_MAX_RETRY + 1):
             try:
                 if method == "GET":
@@ -442,13 +434,10 @@ class AdTubesBot:
                     requests.exceptions.ProxyError) as e:
 
                 last_exc = e
-
                 if not self._is_transient(e):
-                    # Error non-transient → langsung return
                     write_debug(f"!!! NON-TRANSIENT ERROR: {type(e).__name__}: {e}")
                     return None, e
 
-                # Kalau masih ada retry
                 if attempt < HTTP_MAX_RETRY:
                     wait = HTTP_BACKOFF_BASE * (2 ** (attempt - 1))
                     wait += random.uniform(0, 2)
@@ -457,12 +446,9 @@ class AdTubesBot:
                     write_debug(f"!!! RETRY {attempt}/{HTTP_MAX_RETRY}: {type(e).__name__}: {str(e)[:100]}")
                     write_debug(f"    Waiting {wait:.1f}s before next try...")
 
-                    # Rebuild session setelah 2x gagal (koneksi mungkin stale)
                     if attempt >= 2:
-                        try:
-                            self.session.close()
-                        except Exception:
-                            pass
+                        try: self.session.close()
+                        except Exception: pass
                         self.session = make_session()
                         write_debug("    Session rebuilt")
 
@@ -470,19 +456,16 @@ class AdTubesBot:
                 else:
                     write_debug(f"!!! MAX RETRY EXCEEDED: {type(e).__name__}: {e}")
                     return None, e
-
         return None, last_exc
 
     def api_get(self, path, with_app_key=True):
         url = f"{HOST}{path}"
         headers = self._api_headers(with_app_key)
         self._log_request("GET", path, None, headers)
-
         r, err = self._request_with_retry("GET", url, headers)
         if r is None:
             UI.err("HTTP", f"{type(err).__name__}: {str(err)[:40]}")
             return 0, None, str(err)
-
         self._log_response("GET", path, r.status_code, r.text, r.headers)
         return r.status_code, self._try_json(r), r.text
 
@@ -491,12 +474,10 @@ class AdTubesBot:
         headers = self._api_headers(with_app_key)
         data = json.dumps(body) if body is not None else ""
         self._log_request("POST", path, body, headers)
-
         r, err = self._request_with_retry("POST", url, headers, data)
         if r is None:
             UI.err("HTTP", f"{type(err).__name__}: {str(err)[:40]}")
             return 0, None, str(err)
-
         self._log_response("POST", path, r.status_code, r.text, r.headers)
         return r.status_code, self._try_json(r), r.text
 
@@ -504,7 +485,6 @@ class AdTubesBot:
         try: return r.json()
         except Exception: return {"_raw": r.text[:200]}
 
-    # ── DCS ──
     def _parse_kv(self):
         kv = {}
         for p in self.init_data.split("&"):
@@ -738,7 +718,6 @@ class AdTubesBot:
         return True
 
     def _all_networks_limited(self):
-        """Cek apakah semua network udah daily limit."""
         if not self.networks:
             return False
         for net in self.networks:
@@ -749,6 +728,13 @@ class AdTubesBot:
         return True
 
     def watch_ad(self, network):
+        """
+        Return:
+          reward (float)  → success
+          "SKIP"          → network daily limit / cooldown
+          "FAIL"          → error (network/HTTP/token)
+          None            → fallback
+        """
         nid = network["id"]
         name = network["name"]
         reward = network["reward"]
@@ -758,7 +744,7 @@ class AdTubesBot:
         sdk_cfg = network.get("sdkConfig") or {}
 
         if today >= limit:
-            UI.warn("SKIP", f"{name}: limit"); return None
+            UI.warn("SKIP", f"{name}: limit"); return "SKIP"
 
         wait_until = network.get("waitUntil")
         if wait_until:
@@ -766,7 +752,7 @@ class AdTubesBot:
             if wait_s > 0:
                 UI.warn("CD", f"{name}: {wait_s}s")
                 UI.countdown(min(wait_s, 60), f"cd {name}")
-                return None
+                return "SKIP"
 
         time.sleep(random.uniform(2, 4))
 
@@ -783,7 +769,7 @@ class AdTubesBot:
                     UI.warn("START", f"[{ecode}] {emsg[:50]}")
                 except Exception:
                     UI.warn("START", f"body: {txt[:60]}")
-            return None
+            return "FAIL"
 
         if isinstance(j, dict) and j.get("blockType") == "RewardBlock":
             banners = j.get("banners", []) or []
@@ -794,7 +780,7 @@ class AdTubesBot:
         token = j.get("token") if isinstance(j, dict) else None
         if not token:
             UI.err("START", f"{name}: no token")
-            return None
+            return "FAIL"
 
         if sdk == "adsgram" and not (isinstance(j, dict) and j.get("blockType") == "RewardBlock"):
             block_id = sdk_cfg.get("blockId", "")
@@ -811,7 +797,7 @@ class AdTubesBot:
         if code != 200:
             UI.err("COMPLETE", f"{name}: HTTP {code}")
             if txt2: UI.warn("COMPLETE", f"body: {txt2[:50]}")
-            return None
+            return "FAIL"
 
         got_reward = j2.get("reward", reward) if isinstance(j2, dict) else reward
         u = j2.get("user", {}) if isinstance(j2, dict) else {}
@@ -866,7 +852,7 @@ class AdTubesBot:
 
         UI.set(state="INIT", session_reward=0.0, session_ads=0,
                last_reward="-", app_key=self.app_key or "-", dcs_variant="-",
-               init_age=age_str, net_retry=0)
+               init_age=age_str, net_retry=0, ad_fails=0)
         UI.start_panel()
 
         UI.ok("INIT", f"query_id={kv['query_id'][:16]}… age={age_str}")
@@ -889,6 +875,8 @@ class AdTubesBot:
         # 3. ping
         self.ping()
 
+        stop_reason = "finished"
+
         cycle = 0
         while True:
             cycle += 1
@@ -910,19 +898,44 @@ class AdTubesBot:
                 UI.ok("DONE", "Semua network daily limit — bot stop")
                 UI.set(state="DONE", phase="all limited")
                 write_debug("!!! ALL NETWORKS LIMITED — STOPPING")
+                stop_reason = "all_limited"
                 break
 
             any_done = False
             for net in self.networks:
                 if not UI.state["running"]: break
                 UI.set(state="RUNNING", phase=f"{net['name']}…")
+
                 got = self.watch_ad(net)
-                if got is not None: any_done = True
+
+                # ── CEK: FAIL vs SKIP vs SUCCESS ──
+                if got == "FAIL":
+                    fails = int(UI.state.get("ad_fails", 0)) + 1
+                    UI.set(ad_fails=fails)
+                    UI.warn("FAIL", f"{net['name']}: fail {fails}/{AD_FAIL_LIMIT}")
+                    write_debug(f"!!! AD FAIL {fails}/{AD_FAIL_LIMIT} on {net['name']}")
+                    if fails >= AD_FAIL_LIMIT:
+                        UI.err("STOP", f"{AD_FAIL_LIMIT}x ads fail — bot stop")
+                        UI.set(state="DONE", phase=f"{AD_FAIL_LIMIT}x fail")
+                        write_debug(f"!!! AD FAIL LIMIT {AD_FAIL_LIMIT} REACHED — STOPPING")
+                        stop_reason = "ad_fail_limit"
+                        break
+                elif got == "SKIP" or got is None:
+                    # skip / cooldown → gak ngitung fail, gak reset juga
+                    pass
+                else:
+                    # reward berhasil → reset fail counter
+                    UI.set(ad_fails=0)
+                    any_done = True
 
                 pause = random.randint(HUMAN_PAUSE_MIN, HUMAN_PAUSE_MAX)
                 UI.set(state="PAUSE")
                 UI.warn("PAUSE", f"human pause {pause}s")
                 UI.countdown(pause, "human pause")
+
+            # ── Kalau ke-break karena fail limit, keluar dari while ──
+            if stop_reason == "ad_fail_limit":
+                break
 
             # ── Refresh network list buat cek updated `today` ──
             if self.home():
@@ -930,6 +943,7 @@ class AdTubesBot:
                     UI.ok("DONE", "Semua network daily limit — bot stop")
                     UI.set(state="DONE", phase="all limited")
                     write_debug("!!! ALL NETWORKS LIMITED AFTER CYCLE — STOPPING")
+                    stop_reason = "all_limited"
                     break
 
             if not any_done:
@@ -939,17 +953,19 @@ class AdTubesBot:
                 UI.countdown(10, "refresh")
 
         # ── Summary akhir ──
-        UI.set(state="DONE", phase="finished")
+        UI.set(state="DONE", phase=stop_reason)
         UI.stop_panel()
 
         print()
         print(UI.c("═" * 64, "br_cyan"))
         print(UI.c("  ✓ BOT SELESAI", "br_green"))
         print(UI.c("═" * 64, "br_cyan"))
+        print(UI.c(f"  Reason      : {stop_reason}", "white"))
         print(UI.c(f"  User        : {UI.state['user']}", "white"))
         print(UI.c(f"  Balance     : ${UI.state['balance']}", "br_yellow"))
         print(UI.c(f"  Session     : +${UI.state['session_reward']:.6f} ({UI.state['session_ads']} ads)", "br_green"))
         print(UI.c(f"  Net retries : {UI.state['net_retry']}", "yellow"))
+        print(UI.c(f"  Ad fails    : {UI.state['ad_fails']}/{AD_FAIL_LIMIT}", "yellow"))
         print(UI.c(f"  Debug log   : {DEBUG_FILE}", "gray"))
         print(UI.c("═" * 64, "br_cyan"))
         print()
