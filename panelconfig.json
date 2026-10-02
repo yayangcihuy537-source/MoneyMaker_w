@@ -219,8 +219,8 @@
           "runner": "python3"
         },
         "13": {
-          "label": "TonSpark 🟢",
-          "file": "TonSpark.py",
+          "label": "DiaTon 🟢",
+          "file": "DiaTon.py",
           "runner": "python3"
         },
         "14": {
