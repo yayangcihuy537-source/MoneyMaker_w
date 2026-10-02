@@ -2,10 +2,11 @@
 # -*- coding: utf-8 -*-
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   ADTUBES AUTO WATCH — SOUU ENGINE Edition v2.5             ║
-║   FIX: auto-retry network + SSL tolerance + backoff         ║
-║   NEW: stop kalau semua network daily limit                 ║
-║   NEW: stop kalau ads fail 3x berturut-turut                ║
+║   ADTUBES AUTO WATCH — SOUU ENGINE Edition v2.6             ║
+║   FIX : auto-retry network + SSL tolerance + backoff        ║
+║   NEW : stop kalau semua network daily limit                ║
+║   NEW : stop kalau ads fail 3x berturut-turut               ║
+║   NEW : auto re-auth kalau init_data expired (401/403)      ║
 ╚══════════════════════════════════════════════════════════════╝
 """
 
@@ -18,7 +19,7 @@ from urllib3.util.retry import Retry
 from colorama import init, Fore, Style
 init(autoreset=True)
 
-VERSION = "2.5"
+VERSION = "2.6"
 HOST = "https://adtubes.lol"
 ADSGRAM_BASE = "https://api.adsgram.ai"
 CONFIG_FILE = "config_adtubes.json"
@@ -53,7 +54,15 @@ REQUEST_TIMEOUT = 45
 # Ad fail limit — stop kalau ads gagal berturut-turut
 AD_FAIL_LIMIT = 3
 
+# Re-auth limit
+MAX_REAUTH = 3
+
 _debug_fp = None
+
+
+class InitDataExpired(Exception):
+    """Raised pas server bilang init_data gak valid / expired."""
+    pass
 
 
 def open_debug():
@@ -102,6 +111,62 @@ def dump(label, data):
     except Exception:
         write_debug(repr(data))
     write_debug("")
+
+
+def prompt_new_init_data():
+    """Prompt user buat paste init_data baru. Return dict config baru."""
+    print()
+    print(UI.c("═" * 62, "br_yellow"))
+    print(UI.c("  ⚠  INIT DATA EXPIRED / INVALID", "br_yellow"))
+    print(UI.c("═" * 62, "br_yellow"))
+    print(UI.c("  Ambil init_data baru:", "white"))
+    print(UI.c("  Telegram Desktop → Ctrl+Shift+I → Console →", "gray"))
+    print(UI.c("  copy(Telegram.WebApp.initData)", "br_cyan"))
+    print()
+    print(UI.c("  init_data : ", "white"), end="")
+
+    while True:
+        try:
+            new_init = input().strip()
+        except EOFError:
+            new_init = ""
+
+        if not new_init:
+            print(UI.c("  ✖ kosong, coba lagi: ", "br_red"), end="")
+            continue
+
+        missing = [k for k in ('query_id', 'user', 'auth_date', 'signature', 'hash')
+                   if f"{k}=" not in new_init]
+        if missing:
+            print(UI.c(f"  ✖ kurang field: {', '.join(missing)}", "br_red"))
+            print(UI.c("  init_data : ", "white"), end="")
+            continue
+
+        try:
+            kv = dict(p.split("=", 1) for p in new_init.split("&") if "=" in p)
+            ad = int(kv.get("auth_date", "0"))
+            age = int(time.time()) - ad
+            if age > 300:
+                print(UI.c(f"  ⚠ init_data udah umur {age//60} menit.", "yellow"))
+                print(UI.c("  Tetap pakai? (y/N): ", "white"), end="")
+                ans = input().strip().lower()
+                if ans not in ("y", "ya", "yes"):
+                    print(UI.c("  init_data : ", "white"), end="")
+                    continue
+        except Exception:
+            pass
+
+        break
+
+    sp = ""
+    m = re.search(r'start_param=([^&]+)', new_init)
+    if m:
+        sp = urllib.parse.unquote(m.group(1))
+
+    return {
+        "init_data": new_init,
+        "start_param": sp,
+    }
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -291,6 +356,7 @@ class UI:
         print(line("├─ " + UI.pad("Host", 11) + ": " + HOST))
         print(line("├─ " + UI.pad("Retry", 11) + f": {HTTP_MAX_RETRY}x backoff"))
         print(line("├─ " + UI.pad("Ad fail", 11) + f": stop after {AD_FAIL_LIMIT}x"))
+        print(line("├─ " + UI.pad("Re-auth", 11) + f": auto up to {MAX_REAUTH}x"))
         print(line("├─ " + UI.pad("Debug", 11) + f": {DEBUG_FILE}"))
         print(line("└─ " + UI.pad("Version", 11) + ": v" + VERSION))
         print(UI.fg(51, "╠" + "═" * W_ + "╣"))
@@ -458,6 +524,25 @@ class AdTubesBot:
                     return None, e
         return None, last_exc
 
+    def _is_auth_error(self, code, body_text):
+        """Deteksi 401/403 atau pesan auth gagal dari server."""
+        if code in (401, 403):
+            return True
+        if not body_text:
+            return False
+        low = body_text.lower()
+        auth_hints = [
+            'please open ad tube',
+            'initdata',
+            'init_data',
+            'unauthorized',
+            'invalid signature',
+            'expired',
+        ]
+        if code != 200 and any(h in low for h in auth_hints):
+            return True
+        return False
+
     def api_get(self, path, with_app_key=True):
         url = f"{HOST}{path}"
         headers = self._api_headers(with_app_key)
@@ -467,6 +552,8 @@ class AdTubesBot:
             UI.err("HTTP", f"{type(err).__name__}: {str(err)[:40]}")
             return 0, None, str(err)
         self._log_response("GET", path, r.status_code, r.text, r.headers)
+        if self._is_auth_error(r.status_code, r.text):
+            raise InitDataExpired(f"HTTP {r.status_code}")
         return r.status_code, self._try_json(r), r.text
 
     def api_post(self, path, body=None, with_app_key=True):
@@ -479,6 +566,8 @@ class AdTubesBot:
             UI.err("HTTP", f"{type(err).__name__}: {str(err)[:40]}")
             return 0, None, str(err)
         self._log_response("POST", path, r.status_code, r.text, r.headers)
+        if self._is_auth_error(r.status_code, r.text):
+            raise InitDataExpired(f"HTTP {r.status_code}")
         return r.status_code, self._try_json(r), r.text
 
     def _try_json(self, r):
@@ -614,6 +703,71 @@ class AdTubesBot:
             write_debug(f"!!! banner events: {type(e).__name__}: {e}")
             return {}
 
+    # ── RE-AUTH ──
+    def reauth(self):
+        """Prompt new init_data, reset state, rebuild everything. Return True kalau sukses."""
+        UI.warn("AUTH", "init_data expired — prompt input baru")
+
+        was_running = UI.state["running"]
+        UI.state["running"] = False
+        sys.stdout.write("\033[2J\033[H")
+        sys.stdout.flush()
+
+        try:
+            new_cfg = prompt_new_init_data()
+        except KeyboardInterrupt:
+            raise
+
+        try: self.session.close()
+        except Exception: pass
+        self.session = make_session()
+
+        self.init_data = new_cfg["init_data"]
+        self.start_param = new_cfg.get("start_param", "")
+        self.fp = hashlib.sha256(secrets.token_bytes(32)).hexdigest()
+        self.did = secrets.token_hex(16)
+        self.app_key = ""
+        self.user = {}
+        self.networks = []
+
+        try:
+            cfg = {}
+            if os.path.exists(CONFIG_FILE):
+                with open(CONFIG_FILE) as f:
+                    cfg = json.load(f)
+            cfg.update({
+                "init_data": self.init_data,
+                "start_param": self.start_param,
+                "fp": self.fp,
+                "did": self.did,
+                "app_key": "",
+            })
+            with open(CONFIG_FILE, "w") as f:
+                json.dump(cfg, f, indent=2)
+            UI.ok("AUTH", "config baru disimpan")
+        except Exception as e:
+            UI.warn("AUTH", f"gagal simpan config: {e}")
+
+        UI.set(app_key="-", net_retry=0, ad_fails=0, init_age="0m")
+
+        UI.state["running"] = was_running
+        if was_running: UI.render()
+
+        try:
+            if not self.bootstrap():
+                UI.err("AUTH", "bootstrap gagal setelah re-auth")
+                return False
+            if not self.device():
+                UI.err("AUTH", "device gagal setelah re-auth")
+                return False
+            self.ping()
+        except InitDataExpired:
+            UI.err("AUTH", "init_data baru juga ditolak server")
+            return False
+
+        UI.ok("AUTH", "re-auth selesai, lanjut cycle")
+        return True
+
     # ── FLOW ──
     def bootstrap(self):
         UI.step("BOOT", "GET /api/bootstrap")
@@ -681,8 +835,11 @@ class AdTubesBot:
         return False
 
     def ping(self):
-        code, _, _ = self.api_post("/api/ping", None)
-        return code == 200
+        try:
+            code, _, _ = self.api_post("/api/ping", None)
+            return code == 200
+        except InitDataExpired:
+            raise
 
     def home(self):
         UI.step("HOME", "GET /api/home")
@@ -698,7 +855,7 @@ class AdTubesBot:
         u = j.get("user", {})
         if not u or not u.get("id"):
             UI.err("HOME", "no user data — init_data expired?")
-            return False
+            raise InitDataExpired("home no user")
 
         self.user = u
         UI.set(
@@ -758,7 +915,11 @@ class AdTubesBot:
 
         UI.step("START", f"#{nid} {name} +${reward}")
         body = {"networkId": nid}
-        code, j, txt = self.api_post("/api/ads/start", body)
+        try:
+            code, j, txt = self.api_post("/api/ads/start", body)
+        except InitDataExpired:
+            raise
+
         if code != 200:
             UI.err("START", f"{name}: HTTP {code}")
             if txt:
@@ -793,7 +954,11 @@ class AdTubesBot:
         UI.countdown(watch_sec, f"watch {name}")
 
         UI.step("COMPLETE", f"{name}: submit")
-        code, j2, txt2 = self.api_post("/api/ads/complete", {"token": token})
+        try:
+            code, j2, txt2 = self.api_post("/api/ads/complete", {"token": token})
+        except InitDataExpired:
+            raise
+
         if code != 200:
             UI.err("COMPLETE", f"{name}: HTTP {code}")
             if txt2: UI.warn("COMPLETE", f"body: {txt2[:50]}")
@@ -860,11 +1025,24 @@ class AdTubesBot:
         if age_sec > INIT_DATA_MAX_AGE_SEC:
             UI.warn("INIT", f"init_data > 1 jam — mungkin expired")
 
-        # 1. bootstrap
-        if not self.bootstrap():
-            UI.err("FATAL", "bootstrap failed"); UI.stop_panel(); return
+        # ── 1. bootstrap — auto re-auth kalau expired ──
+        reauth_count = 0
+        while True:
+            try:
+                if self.bootstrap():
+                    break
+                UI.err("FATAL", "bootstrap failed")
+                UI.stop_panel(); return
+            except InitDataExpired:
+                reauth_count += 1
+                if reauth_count > MAX_REAUTH:
+                    UI.err("FATAL", f"re-auth gagal {MAX_REAUTH}x — keluar")
+                    UI.stop_panel(); return
+                if not self.reauth():
+                    UI.err("FATAL", "reauth gagal")
+                    UI.stop_panel(); return
 
-        # 2. device — kalau gak ada cached app_key
+        # ── 2. device ──
         if not self.app_key:
             if not self.device():
                 UI.err("FATAL", "device failed — gak dapet appKey")
@@ -872,8 +1050,12 @@ class AdTubesBot:
         else:
             UI.info("DEVICE", f"using cached appKey: {self.app_key[:16]}…")
 
-        # 3. ping
-        self.ping()
+        # ── 3. ping ──
+        try:
+            self.ping()
+        except InitDataExpired:
+            if not self.reauth():
+                UI.stop_panel(); return
 
         stop_reason = "finished"
 
@@ -887,11 +1069,20 @@ class AdTubesBot:
             write_debug(f"CYCLE #{cycle}")
             write_debug("=" * 70)
 
-            if not self.home():
-                UI.warn("CYCLE", "home fail — 30s")
-                UI.set(state="RETRY")
-                UI.countdown(30, "retry"); continue
-            self.ping()
+            # ── home — handle re-auth ──
+            try:
+                if not self.home():
+                    UI.warn("CYCLE", "home fail — 30s")
+                    UI.set(state="RETRY")
+                    UI.countdown(30, "retry"); continue
+                self.ping()
+            except InitDataExpired:
+                UI.warn("CYCLE", "init_data expired mid-run — re-auth")
+                if not self.reauth():
+                    UI.err("FATAL", "reauth gagal — keluar")
+                    stop_reason = "reauth_failed"
+                    break
+                continue
 
             # ── Cek awal: semua network udah limit? ──
             if self._all_networks_limited():
@@ -906,9 +1097,17 @@ class AdTubesBot:
                 if not UI.state["running"]: break
                 UI.set(state="RUNNING", phase=f"{net['name']}…")
 
-                got = self.watch_ad(net)
+                try:
+                    got = self.watch_ad(net)
+                except InitDataExpired:
+                    UI.warn("WATCH", "init_data expired mid-watch — re-auth")
+                    if not self.reauth():
+                        stop_reason = "reauth_failed"
+                        break
+                    # break dari for loop biar cycle di-restart
+                    got = None
+                    break
 
-                # ── CEK: FAIL vs SKIP vs SUCCESS ──
                 if got == "FAIL":
                     fails = int(UI.state.get("ad_fails", 0)) + 1
                     UI.set(ad_fails=fails)
@@ -921,10 +1120,8 @@ class AdTubesBot:
                         stop_reason = "ad_fail_limit"
                         break
                 elif got == "SKIP" or got is None:
-                    # skip / cooldown → gak ngitung fail, gak reset juga
                     pass
                 else:
-                    # reward berhasil → reset fail counter
                     UI.set(ad_fails=0)
                     any_done = True
 
@@ -933,18 +1130,23 @@ class AdTubesBot:
                 UI.warn("PAUSE", f"human pause {pause}s")
                 UI.countdown(pause, "human pause")
 
-            # ── Kalau ke-break karena fail limit, keluar dari while ──
-            if stop_reason == "ad_fail_limit":
+            if stop_reason in ("ad_fail_limit", "reauth_failed"):
                 break
 
-            # ── Refresh network list buat cek updated `today` ──
-            if self.home():
-                if self._all_networks_limited():
-                    UI.ok("DONE", "Semua network daily limit — bot stop")
-                    UI.set(state="DONE", phase="all limited")
-                    write_debug("!!! ALL NETWORKS LIMITED AFTER CYCLE — STOPPING")
-                    stop_reason = "all_limited"
+            # ── Refresh network list ──
+            try:
+                if self.home():
+                    if self._all_networks_limited():
+                        UI.ok("DONE", "Semua network daily limit — bot stop")
+                        UI.set(state="DONE", phase="all limited")
+                        write_debug("!!! ALL NETWORKS LIMITED AFTER CYCLE — STOPPING")
+                        stop_reason = "all_limited"
+                        break
+            except InitDataExpired:
+                if not self.reauth():
+                    stop_reason = "reauth_failed"
                     break
+                continue
 
             if not any_done:
                 UI.warn("CYCLE", "no ad — 60s")
@@ -981,6 +1183,9 @@ def main():
         AdTubesBot().run()
     except KeyboardInterrupt:
         raise
+    except InitDataExpired:
+        UI.stop_panel()
+        print(f"\n{Fore.RED}  ✖ init_data expired — keluar{RESET}\n")
     except Exception as e:
         UI.stop_panel()
         print(f"\n{Fore.RED}  ✖ fatal: {e}{RESET}\n")
