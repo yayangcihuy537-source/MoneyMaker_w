@@ -42,11 +42,6 @@
           "label": "CryptoCrops 🟢",
           "file": "cc.py",
           "runner": "python3"
-        },
-        "9": {
-          "label": "GameRapid 🟢",
-          "file": "Rapid.py",
-          "runner": "python3"
         }
       }
     },
@@ -124,13 +119,13 @@
           "runner": "php"
         },
         "15": {
-          "label": "LiteBits.io 🟢",
-          "file": "LiteBits.io.py",
-          "runner": "python3"
-        },
-        "16": {
           "label": "TheMagicDollar 🟢",
           "file": "THEMAGICDOLLAR.php",
+          "runner": "php"
+        },
+        "16": {
+          "label": "Coming Soon 🔒",
+          "file": "comingsoon.php",
           "runner": "php"
         },
         "17": {
@@ -144,11 +139,6 @@
           "runner": "php"
         },
         "19": {
-          "label": "Coming Soon 🔒",
-          "file": "comingsoon.php",
-          "runner": "php"
-        },
-        "20": {
           "label": "Coming Soon 🔒",
           "file": "comingsoon.php",
           "runner": "php"
