@@ -249,8 +249,8 @@
           "runner": "python3"
         },
         "21": {
-          "label": "AxionetBot 🟢",
-          "file": "Axionetbot.py",
+          "label": "InstaBitcoFaucet 🟢",
+          "file": "InstaBitco.py",
           "runner": "python3"
         },
         "22": {
