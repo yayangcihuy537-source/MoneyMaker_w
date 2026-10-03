@@ -1,6 +1,6 @@
 <?php
 /**
- * FireFaucet — Faucet Only Bot (Hardened)
+ * FireFaucet — Faucet Only Bot
  *   [1] Start faucet claim
  *   [2] Edit config
  *   [3] Reset
@@ -74,14 +74,16 @@ function cstrip($s) { return preg_replace('/\033\[[0-9;]*m/', '', (string)$s); }
 
 function lineBox($left, $right, $w = 62) {
     global $gray, $reset;
-    $lp = cstrip($left); $rp = cstrip($right);
+    $lp = cstrip($left);
+    $rp = cstrip($right);
     $pad = max(0, $w - strlen($lp) - strlen($rp) - 2);
     return $gray . "║" . $reset . " " . $left . str_repeat(" ", $pad) . $right . " " . $gray . "║" . $reset;
 }
 
 function lineCenterBox($text, $w = 62) {
     global $gray, $reset;
-    $p = cstrip($text); $len = strlen($p);
+    $p = cstrip($text);
+    $len = strlen($p);
     $l = (int)floor(($w - $len) / 2);
     $r = $w - $len - $l;
     return $gray . "║" . $reset . str_repeat(" ", max(0, $l)) . $text . str_repeat(" ", max(0, $r)) . $gray . "║" . $reset;
@@ -157,12 +159,11 @@ $GLOBALS['user_agent'] = "";
 $GLOBALS['apikey']     = "";
 
 function req($url, $post = null, $extraHeaders = [], $method = null) {
-    global $cookies, $user_agent, $gray, $reset;
+    global $cookies, $user_agent;
 
     $m = $method ?: ($post !== null ? "POST" : "GET");
     $maxTries = 3;
     $tries = 0;
-    $lastErr = "";
 
     while ($tries++ < $maxTries) {
         $ch = curl_init();
@@ -178,8 +179,8 @@ function req($url, $post = null, $extraHeaders = [], $method = null) {
             CURLOPT_URL            => $url,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => false,
             CURLOPT_CONNECTTIMEOUT => 20,
             CURLOPT_TIMEOUT        => 45,
             CURLOPT_COOKIE         => normalize_cookie($cookies),
@@ -203,26 +204,21 @@ function req($url, $post = null, $extraHeaders = [], $method = null) {
         curl_close($ch);
 
         if ($response === false || $err) {
-            $lastErr = $err;
+            // retry kalau connection reset / timeout / aborted
             $retryable = (
                 stripos($err, 'Connection reset') !== false ||
                 stripos($err, 'timed out') !== false ||
                 stripos($err, 'Operation was aborted') !== false ||
                 stripos($err, 'Empty reply') !== false ||
                 stripos($err, 'Recv failure') !== false ||
-                stripos($err, 'Send failure') !== false ||
-                stripos($err, 'SSL') !== false ||
-                stripos($err, 'handshake') !== false ||
-                stripos($err, 'resolve') !== false
+                stripos($err, 'Send failure') !== false
             );
-
             if ($retryable && $tries < $maxTries) {
-                echo "  " . $gray . "connection error, retry $tries/$maxTries: " . substr($err, 0, 60) . $reset . "\n";
-                sleep(3);
+                global $gray, $yellow, $reset;
+                echo "  " . $gray . "retry ($tries/$maxTries): " . substr($err, 0, 60) . $reset . "\n";
+                sleep(2);
                 continue;
             }
-
-            echo "  " . $gray . "curl fatal: " . substr($err, 0, 100) . $reset . "\n";
             return ["body" => "", "code" => 0, "headers" => "", "err" => $err];
         }
 
@@ -233,139 +229,40 @@ function req($url, $post = null, $extraHeaders = [], $method = null) {
             "err"     => ""
         ];
     }
-    return ["body" => "", "code" => 0, "headers" => "", "err" => "max retries: $lastErr"];
+    return ["body" => "", "code" => 0, "headers" => "", "err" => "max retries"];
 }
 
-/* ═══════════════════════════════════════════════════
-   PAGE DETECTORS — multi-marker
-   ═══════════════════════════════════════════════════ */
-
-/**
- * Deteksi halaman redirect ke login — multi marker.
- * Cek title, meta refresh, HTTP 30x body, dll.
- */
-function isRedirecting($html, $headers = "") {
-    // 1. title redirect (case-insensitive, spasi fleksibel)
-    if (preg_match('/<title>\s*Redirecting[^<]*<\/title>/i', $html)) return true;
-
-    // 2. meta refresh ke login/root
-    if (preg_match('/<meta[^>]*http-equiv=["\']?refresh["\']?[^>]*url=\s*["\']?\/?(?:login|auth)/i', $html)) return true;
-
-    // 3. body cuma berisi "Redirecting..." / "Redirect"
-    $plain = trim(strip_tags($html));
-    if (strlen($plain) < 60 && preg_match('/^redirecting/i', $plain)) return true;
-
-    // 4. header Location ke /login
-    if ($headers && preg_match('/^location:\s*\/?(?:login|auth)/mi', $headers)) return true;
-
-    return false;
+function isRedirecting($html) {
+    return (strpos($html, '<title>Redirecting...') !== false);
 }
-
-/**
- * Deteksi halaman login — multi marker.
- */
-function isLoginPage($html) {
-    $markers = [
-        'au-page-login',
-        'au-form',
-        'au-title-solo',
-        'Welcome back',
-    ];
-    foreach ($markers as $mk) {
-        if (stripos($html, $mk) !== false) return true;
-    }
-    // form login punya username + password
-    if (strpos($html, 'name="username"') !== false && strpos($html, 'name="password"') !== false) return true;
-    return false;
-}
-
-/* ═══════════════════════════════════════════════════
-   PARSER — multi-pattern, tolerant
-   ═══════════════════════════════════════════════════ */
 
 function extractSidebarCsrf($html) {
     if (preg_match('/name="csrf_token_sidebar"\s+value="([^"]+)"/i', $html, $m)) return $m[1];
     if (preg_match('/name="csrf_token"\s+value="([^"]+)"/i', $html, $m)) return $m[1];
-    if (preg_match('/<input[^>]*value="([^"]+)"[^>]*name="csrf_token(?:_sidebar)?"/i', $html, $m)) return $m[1];
-    if (preg_match('/"csrf_token"\s*:\s*"([^"]+)"/i', $html, $m)) return $m[1];
-    if (preg_match('/<meta[^>]*name="csrf-token"[^>]*content="([^"]+)"/i', $html, $m)) return $m[1];
     return null;
 }
 
 function getBalanceFromHome($html) {
-    if (preg_match('/<div[^>]*color:\s*#00a8ff[^>]*>\s*<b>([\d.,]+)<\/b>/i', $html, $m)) return $m[1];
-    if (preg_match('/acp-balance-value[^>]*>\s*([\d.,]+)/i', $html, $m)) return $m[1];
-    if (preg_match('/id="acp[_-]?balance"[^>]*>\s*([\d.,]+)/i', $html, $m)) return $m[1];
-    if (preg_match('/\bACP\b[^0-9]{0,40}([\d.,]+)/i', $html, $m)) return $m[1];
-    if (preg_match('/(?:Balance|balance)[^0-9]{0,40}([\d.,]{2,})/i', $html, $m)) return $m[1];
+    if (preg_match('/<div[^>]*color:#00a8ff[^>]*>\s*<b>([\d,]+)<\/b>/i', $html, $m)) return $m[1];
+    if (preg_match('/acp-balance-value">([\d.,]+)<\/div>/i', $html, $m)) return $m[1];
     return null;
 }
 
 function getUsernameFromHome($html) {
     if (preg_match('/<span class="username-text">([^<]+)<\/span>/i', $html, $m)) return trim($m[1]);
     if (preg_match('/<div class="hub-username">([^<]+)<\/div>/i', $html, $m)) return trim($m[1]);
-    if (preg_match('/class="welcome[^"]*"[^>]*>([^<]{2,32})</i', $html, $m)) return trim($m[1]);
     return null;
 }
 
 function getFuelFromHome($html) {
-    if (preg_match('/autoclaim-fuel-total">\s*([\d,]+)/i', $html, $m)) return $m[1];
-    if (preg_match('/fuel[^0-9]{0,40}([\d,]+)/i', $html, $m)) return $m[1];
+    if (preg_match('/autoclaim-fuel-total">([\d,]+)</i', $html, $m)) return $m[1];
     return null;
 }
 
 function detectProvider($html) {
-    if (preg_match('/value="hcaptcha"/i', $html)) return "hcaptcha";
-    if (preg_match('/value="turnstile"/i', $html)) return "turnstile";
-    if (preg_match('/value="recaptcha"/i', $html)) return "recaptcha";
-    if (preg_match('/selected-captcha["\']?\s*[=:]\s*["\']?hcaptcha/i', $html)) return "hcaptcha";
-    if (preg_match('/selected-captcha["\']?\s*[=:]\s*["\']?turnstile/i', $html)) return "turnstile";
-    if (preg_match('/selected-captcha["\']?\s*[=:]\s*["\']?recaptcha/i', $html)) return "recaptcha";
-    if (stripos($html, 'hCaptcha') !== false) return "hcaptcha";
-    if (stripos($html, 'Turnstile') !== false) return "turnstile";
-    if (stripos($html, 'reCAPTCHA') !== false) return "recaptcha";
-    return null;
-}
-
-/**
- * Extract cooldown.
- *   Return int  (>=0) kalau berhasil
- *   Return null      kalau TIDAK dikenali (caller harus skip)
- */
-function extractCooldown($html) {
-    // cek dulu apakah ada tombol claim aktif → artinya READY (wait 0)
-    $readyMarkers = [
-        'faucet-claim-btn',
-        'Claim My ACP',
-        'claim-button',
-        'faucet-btn-text',
-    ];
-    $hasReady = false;
-    foreach ($readyMarkers as $mk) {
-        if (stripos($html, $mk) !== false) { $hasReady = true; break; }
-    }
-
-    // 1. startCountdown('#faucet-countdown', parseInt('123'))
-    if (preg_match("/startCountdown\('#faucet-countdown',\s*parseInt\('(\d+)'\)/i", $html, $m)) return (int)$m[1];
-    // 2. startCountdown("#...", 123)
-    if (preg_match('/startCountdown\(["\'][^"\']*["\'],\s*(\d+)/i', $html, $m)) return (int)$m[1];
-    // 3. data-countdown
-    if (preg_match('/data-countdown=["\'](\d+)["\']/i', $html, $m)) return (int)$m[1];
-    // 4. data-wait
-    if (preg_match('/data-wait=["\'](\d+)["\']/i', $html, $m)) return (int)$m[1];
-    // 5. var timer/wait/seconds
-    if (preg_match('/var\s+(?:timer|wait|seconds)\s*=\s*(\d+)/i', $html, $m)) return (int)$m[1];
-    // 6. "wait": 123
-    if (preg_match('/"wait"\s*:\s*(\d+)/i', $html, $m)) return (int)$m[1];
-    // 7. "cooldown": 123
-    if (preg_match('/"(?:cooldown|cooldown_seconds)"\s*:\s*(\d+)/i', $html, $m)) return (int)$m[1];
-    // 8. generik: angka 2-5 digit deket 'countdown'/'wait'
-    if (preg_match('/(?:countdown|wait)[^0-9]{0,40}(\d{2,5})/i', $html, $m)) return (int)$m[1];
-
-    // kalau ga nemu countdown tapi ADA tombol claim → ready (wait 0)
-    if ($hasReady) return 0;
-
-    // bener-bener ga bisa dibaca
+    if (strpos($html, 'value="hcaptcha"') !== false) return "hcaptcha";
+    if (strpos($html, 'value="turnstile"') !== false) return "turnstile";
+    if (strpos($html, 'value="recaptcha"') !== false) return "recaptcha";
     return null;
 }
 
@@ -418,8 +315,7 @@ function solveHcaptcha($sitekey, $pageurl = "https://firefaucet.win/faucet/") {
         CURLOPT_POSTFIELDS     => json_encode($body),
         CURLOPT_HTTPHEADER     => ["Content-Type: application/json"],
         CURLOPT_TIMEOUT        => 30,
-        CURLOPT_SSL_VERIFYPEER => true,
-        CURLOPT_SSL_VERIFYHOST => 2,
+        CURLOPT_SSL_VERIFYPEER => false,
         CURLOPT_IPRESOLVE      => CURL_IPRESOLVE_V4,
     ]);
     $resp = curl_exec($ch);
@@ -444,8 +340,7 @@ function solveHcaptcha($sitekey, $pageurl = "https://firefaucet.win/faucet/") {
             CURLOPT_URL            => $pollUrl,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT        => 30,
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_SSL_VERIFYPEER => false,
             CURLOPT_IPRESOLVE      => CURL_IPRESOLVE_V4,
         ]);
         $poll = curl_exec($ch);
@@ -470,7 +365,7 @@ function solveHcaptcha($sitekey, $pageurl = "https://firefaucet.win/faucet/") {
 }
 
 /* ═══════════════════════════════════════════════════
-   CHECK BALANCE
+   CHECK BALANCE (dipanggil sebelum faucet)
    ═══════════════════════════════════════════════════ */
 function checkBalance() {
     info("CHECK", "GET / (verify cookie + balance)");
@@ -480,55 +375,35 @@ function checkBalance() {
     if ($html === "") {
         return ["ok"=>false, "reason"=>"error", "detail"=>$r["err"] ?: "empty response"];
     }
-    if (isRedirecting($html, $r["headers"])) {
-        return ["ok"=>false, "reason"=>"expired", "detail"=>"server redirect ke login"];
+    if (isRedirecting($html)) {
+        return ["ok"=>false, "reason"=>"expired", "detail"=>"cookie expired"];
     }
-    if (isLoginPage($html)) {
-        return ["ok"=>false, "reason"=>"expired", "detail"=>"login page (cookie mati)"];
-    }
-    if (stripos($html, 'Just a moment') !== false || stripos($html, 'challenge-platform') !== false) {
-        return ["ok"=>false, "reason"=>"cf", "detail"=>"Cloudflare challenge"];
-    }
-
     $csrf = extractSidebarCsrf($html);
     if (!$csrf) {
-        $loggedInMarkers = [
-            'logout', '/logout', 'username-text', 'hub-username',
-            'acp-balance', 'side-nav-btns'
-        ];
-        $looksLoggedIn = false;
-        foreach ($loggedInMarkers as $mk) {
-            if (stripos($html, $mk) !== false) { $looksLoggedIn = true; break; }
-        }
-        if ($looksLoggedIn) {
-            return ["ok"=>false, "reason"=>"csrf_missing",
-                    "detail"=>"csrf token tidak ketemu di HTML (tapi kelihatan logged-in). "
-                            . "Format HTML mungkin berubah."];
-        }
-        return ["ok"=>false, "reason"=>"expired",
-                "detail"=>"bukan halaman logged-in (csrf & marker absen)"];
+        return ["ok"=>false, "reason"=>"expired", "detail"=>"bukan halaman logged-in"];
     }
 
     return [
-        "ok"     => true,
-        "reason" => "ok",
-        "user"   => getUsernameFromHome($html),
-        "acp"    => getBalanceFromHome($html),
-        "fuel"   => getFuelFromHome($html),
-        "csrf"   => $csrf,
+        "ok"       => true,
+        "reason"   => "ok",
+        "user"     => getUsernameFromHome($html),
+        "acp"      => getBalanceFromHome($html),
+        "fuel"     => getFuelFromHome($html),
+        "csrf"     => $csrf,
     ];
 }
 
 function printBalanceBox($b) {
-    global $cyan, $white, $neonY, $orange, $reset;
     echo "\n";
-    echo "\033[38;5;46m" . "  ╔" . str_repeat("═", 60) . "╗" . $reset . "\n";
-    echo lineCenterBox("\033[38;5;46m\033[1m" . "✓ SESSION VALID" . $reset) . "\n";
-    echo "\033[38;5;46m" . "  ╠" . str_repeat("═", 60) . "╣" . $reset . "\n";
-    echo lineBox($white . "User   " . $reset . " : " . $cyan . ($b['user'] ?: "?") . $reset, "") . "\n";
-    echo lineBox($white . "ACP    " . $reset . " : " . $neonY . ($b['acp'] ?: "?") . $reset, "") . "\n";
-    echo lineBox($white . "Fuel   " . $reset . " : " . $orange . ($b['fuel'] ?: "?") . $reset, "") . "\n";
-    echo "\033[38;5;46m" . "  ╚" . str_repeat("═", 60) . "╝" . $reset . "\n";
+    echo $neonG_marker = "\033[38;5;46m";
+    echo $neonG_marker . "  ╔" . str_repeat("═", 60) . "╗" . $reset_ = "\033[0m";
+    echo "\n";
+    echo lineCenterBox($neonG_marker . "\033[1m" . "✓ SESSION VALID" . $reset_) . "\n";
+    echo $neonG_marker . "  ╠" . str_repeat("═", 60) . "╣" . $reset_ . "\n";
+    echo lineBox($white . "User   " . $reset_ . " : " . $cyan . ($b['user'] ?: "?") . $reset_, "") . "\n";
+    echo lineBox($white . "ACP    " . $reset_ . " : " . $neonY . ($b['acp'] ?: "?") . $reset_, "") . "\n";
+    echo lineBox($white . "Fuel   " . $reset_ . " : " . $orange . ($b['fuel'] ?: "?") . $reset_, "") . "\n";
+    echo $neonG_marker . "  ╚" . str_repeat("═", 60) . "╝" . $reset_ . "\n";
 }
 
 /* ═══════════════════════════════════════════════════
@@ -540,8 +415,7 @@ function stepFaucet() {
     $html = $r["body"];
 
     if ($html === "") { err("FAUCET", "response kosong: " . $r["err"]); return "error"; }
-    if (isRedirecting($html, $r["headers"])) { err("FAUCET", "redirect ke login"); return "expired"; }
-    if (isLoginPage($html)) { err("FAUCET", "login page — cookie mati"); return "expired"; }
+    if (isRedirecting($html)) { err("FAUCET", "cookie expired"); return "expired"; }
     if (strpos($html, 'Daily Limit Reached') !== false) {
         warn("FAUCET", "daily limit reached");
         return "limit";
@@ -550,11 +424,9 @@ function stepFaucet() {
     $csrf = extractSidebarCsrf($html);
     if (!$csrf) { warn("FAUCET", "csrf not found"); return "skip"; }
 
-    // ==== cooldown handling — null = skip, bukan assume ready ====
-    $wait = extractCooldown($html);
-    if ($wait === null) {
-        warn("FAUCET", "cooldown pattern tidak dikenali — skip round (aman)");
-        return "skip";
+    $wait = 0;
+    if (preg_match("/startCountdown\('#faucet-countdown',\s*parseInt\('(\d+)'\)/", $html, $m)) {
+        $wait = (int)$m[1];
     }
     if ($wait > 0) {
         info("FAUCET", "cooldown $wait s");
@@ -614,6 +486,7 @@ function stepFaucet() {
     $limit  = $data['daily_claim_limit'] ?? 0;
     $limR   = !empty($data['daily_limit_reached']);
 
+    // refresh balance
     $rb = req(HOST . "/");
     $balance = getBalanceFromHome($rb["body"]) ?? '?';
 
@@ -705,20 +578,13 @@ while (true) {
     clear();
     banner("FAUCET CLAIM RUNNING");
 
+    // step 1: check balance dulu
     $check = checkBalance();
     if (!$check["ok"]) {
-        switch ($check["reason"]) {
-            case "expired":
-                err("CHECK", "cookie expired — " . $check["detail"]);
-                break;
-            case "cf":
-                err("CHECK", "Cloudflare challenge — " . $check["detail"]);
-                break;
-            case "csrf_missing":
-                warn("CHECK", "HTML berubah: " . $check["detail"]);
-                break;
-            default:
-                err("CHECK", "gagal konek: " . $check["detail"]);
+        if ($check["reason"] === "expired") {
+            err("CHECK", "cookie expired — " . $check["detail"]);
+        } else {
+            err("CHECK", "gagal konek: " . $check["detail"]);
         }
         echo "\n  Tekan ENTER untuk balik ke menu...";
         fgets(STDIN);
@@ -758,8 +624,11 @@ while (true) {
         if ($r === "ok") {
             $consecError = 0;
             $rb = req(HOST . "/faucet/");
-            $waitNext = extractCooldown($rb["body"]);
-            if ($waitNext === null || $waitNext < 30) $waitNext = 1800;
+            $waitNext = 0;
+            if (preg_match("/startCountdown\('#faucet-countdown',\s*parseInt\('(\d+)'\)/", $rb["body"], $m)) {
+                $waitNext = (int)$m[1];
+            }
+            if ($waitNext < 30) $waitNext = 1800;
             echo $cyan . "  ╰─────────────────────────────────────────╯" . $reset . "\n";
             timer($waitNext + mt_rand(2, 5), "  next claim ");
             continue;
