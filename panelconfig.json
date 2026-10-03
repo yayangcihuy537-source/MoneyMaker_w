@@ -42,6 +42,11 @@
           "label": "CryptoCrops 🟢",
           "file": "cc.py",
           "runner": "python3"
+        },
+        "9": {
+          "label": "Nyxtap 🟢",
+          "file": "nyxtap.py",
+          "runner": "python3"
         }
       }
     },
