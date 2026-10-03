@@ -129,8 +129,8 @@
           "runner": "php"
         },
         "17": {
-          "label": "Coming Soon 🔒",
-          "file": "comingsoon.php",
+          "label": "FireFaucet 🟢",
+          "file": "FireFaucet.php",
           "runner": "php"
         },
         "18": {
