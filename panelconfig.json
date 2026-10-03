@@ -147,6 +147,11 @@
           "label": "Gamefaucet 🟢",
           "file": "Gamefaucet.php",
           "runner": "php"
+        },
+        "20": {
+          "label": "PayubVideo 🟢",
+          "file": "Payub.php",
+          "runner": "php"
         }
       }
     },
