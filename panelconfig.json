@@ -144,8 +144,8 @@
           "runner": "php"
         },
         "19": {
-          "label": "Coming Soon 🔒",
-          "file": "comingsoon.php",
+          "label": "Gamefaucet 🟢",
+          "file": "Gamefaucet.php",
           "runner": "php"
         }
       }
