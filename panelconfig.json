@@ -124,8 +124,8 @@
           "runner": "php"
         },
         "16": {
-          "label": "Coming Soon 🔒",
-          "file": "comingsoon.php",
+          "label": "ClaimCoin 🟢",
+          "file": "Claimcoin.php",
           "runner": "php"
         },
         "17": {
