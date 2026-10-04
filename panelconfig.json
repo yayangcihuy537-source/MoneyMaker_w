@@ -130,8 +130,8 @@
         },
         "16": {
           "label": "ClaimCoin 🟢",
-          "file": "Claimcoin.php",
-          "runner": "php"
+          "file": "Claimcoin.py",
+          "runner": "python3"
         },
         "17": {
           "label": "FireFaucet 🟢",
