@@ -279,8 +279,8 @@
           "runner": "python3"
         },
         "26": {
-          "label": "Coming Soon 🔒",
-          "file": "comingsoon.php",
+          "label": "Adclickers 🟢",
+          "file": "Adclickers.php",
           "runner": "php"
         }
       }
