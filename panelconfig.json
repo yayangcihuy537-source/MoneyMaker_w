@@ -39,7 +39,7 @@
           "runner": "python3"
         },
         "8": {
-          "label": "CryptoCrops 🟢",
+          "label": "CryptoCrops 🔴",
           "file": "cc.py",
           "runner": "python3"
         },
@@ -69,7 +69,7 @@
           "runner": "python3"
         },
         "4": {
-          "label": "Makeyoutask 🟢",
+          "label": "Makeyoutask 🔴",
           "file": "myt.php",
           "runner": "php"
         },
@@ -134,7 +134,7 @@
           "runner": "python3"
         },
         "17": {
-          "label": "FireFaucet 🟢",
+          "label": "FireFaucet 🔴",
           "file": "FireFaucet.php",
           "runner": "php"
         },
@@ -149,7 +149,7 @@
           "runner": "php"
         },
         "20": {
-          "label": "PayubVideo 🟢",
+          "label": "PayubVideo 🟡",
           "file": "Payub.php",
           "runner": "php"
         }
@@ -174,7 +174,7 @@
           "runner": "python3"
         },
         "4": {
-          "label": "CloudEarnBot 🟢",
+          "label": "CloudEarnBot 🔴",
           "file": "Cloud.py",
           "runner": "python3"
         },
@@ -234,7 +234,7 @@
           "runner": "python3"
         },
         "16": {
-          "label": "MangoCash 🟢",
+          "label": "MangoCash 🔴",
           "file": "Mango.py",
           "runner": "python3"
         },
@@ -244,7 +244,7 @@
           "runner": "python3"
         },
         "18": {
-          "label": "Prism1bot 🟢",
+          "label": "Prism1bot 🟡",
           "file": "Prism1bot.py",
           "runner": "python3"
         },
@@ -264,7 +264,7 @@
           "runner": "python3"
         },
         "22": {
-          "label": "PrizeDropApp 🟢",
+          "label": "PrizeDropApp 🔴",
           "file": "PrizeDropApp.py",
           "runner": "python3"
         },
