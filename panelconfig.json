@@ -164,9 +164,9 @@
           "runner": "php"
         },
         "24": {
-          "label": "Coming Soon 🔵",
-          "file": "ComingSoon.php",
-          "runner": "php"
+          "label": "TRXMiner 🟢",
+          "file": "trxminer.py",
+          "runner": "python3"
         }
       }
     },
