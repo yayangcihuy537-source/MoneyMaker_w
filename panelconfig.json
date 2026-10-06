@@ -284,9 +284,9 @@
           "runner": "php"
         },
         "23": {
-          "label": "Coming Soon 🔵",
-          "file": "ComingSoon.php",
-          "runner": "php"
+          "label": "FarmBuddies 🟢",
+          "file": "FarmBuddiesBot.py",
+          "runner": "python3"
         },
         "24": {
           "label": "Coming Soon 🔵",
