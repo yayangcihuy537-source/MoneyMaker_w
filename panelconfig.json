@@ -129,7 +129,7 @@
           "runner": "python3"
         },
         "17": {
-          "label": "FireFaucet 🔴",
+          "label": "FireFaucet 🟢",
           "file": "FireFaucet.php",
           "runner": "php"
         },
