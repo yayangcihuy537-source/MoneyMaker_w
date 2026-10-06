@@ -69,7 +69,7 @@
           "runner": "python3"
         },
         "4": {
-          "label": "Makeyoutask 🔴",
+          "label": "Makeyoutask 🟢",
           "file": "myt.php",
           "runner": "php"
         },
@@ -179,7 +179,7 @@
           "runner": "python3"
         },
         "5": {
-          "label": "FarmBuddiesBot 🟢",
+          "label": "FarmBuddiesBot 🔴",
           "file": "FarmBuddiesBot.py",
           "runner": "python3"
         },
