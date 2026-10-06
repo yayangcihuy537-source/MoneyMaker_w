@@ -2,8 +2,8 @@
 
 error_reporting(0);
 date_default_timezone_set('Asia/Jakarta');
-$configFile = "config.json";
-$waryono = "cookies.txt";
+$configFile = "conmytfig.json";
+$waryono = "cookimytes.txt";
 
 const hitam  = "\033[0;30m";
 const merah  = "\033[0;31m";
@@ -17,7 +17,7 @@ const reset  = "\033[0m";
 const version     = "1.0";
 const script_name = "makeyoutask.com";
 const host        = "https://makeyoutask.com";
-const in      = "https://api.waryono.my.id/in.php";
+const in          = "https://api.waryono.my.id/in.php";
 
 function getTerminalWidth() {
     $width = 46;
@@ -59,11 +59,28 @@ function get_ip_info() {
     return ["ip" => "127.0.0.1", "loc" => "Localhost", "isp" => "Unknown"];
 }
 
-function banner($username = '-', $balance = '0 Token', $level = 'Level 0', $current_exp = '0 / 0', $energy = '0', $skip_clear = false) {
+function get_waryono_balance($apikey) {
+    $url = "https://api.waryono.my.id/res.php?apikey=" . $apikey . "&action=getuser&json=1";
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+    $response = curl_exec($ch);
+    curl_close($ch);
+    
+    $json = json_decode($response, true);
+    if (isset($json['balance'])) {
+        return $json['balance'];
+    }
+    return "0";
+}
+
+function banner($username = '-', $balance = '0 Token', $level = 'Level 0', $current_exp = '0 / 0', $energy = '0', $skip_clear = false, $apikey = '') {
     if (!$skip_clear) {
         clear();
     }
     $ipinfo = get_ip_info();
+    $waryono_bal = !empty($apikey) ? get_waryono_balance($apikey) : "0";
     $line = "==================================================";
     
     echo cyan . centerText($line) . "\n";
@@ -71,13 +88,14 @@ function banner($username = '-', $balance = '0 Token', $level = 'Level 0', $curr
     echo centerText("\033[1;33mAHD1905\033[0m \033[37m●\033[0m \033[1;36mSCRIPTYXSOUU\033[0m \033[37m●\033[0m \033[1;32mWARYONO\033[0m") . "\n";
     echo cyan . centerText($line) . "\n";
     
-    echo putih . " IP Lokasi : " . hijau . $ipinfo['ip'] . " (" . $ipinfo['loc'] . ")\n";
-    echo putih . " ISP       : " . kuning . $ipinfo['isp'] . "\n";
+    echo putih . " IP Lokasi   : " . hijau . $ipinfo['ip'] . " (" . $ipinfo['loc'] . ")\n";
+    echo putih . " ISP         : " . kuning . $ipinfo['isp'] . "\n";
     echo cyan . $line . "\n";
-    echo putih . " user      : " . cyan . $username . "\n";
-    echo putih . " balance   : " . biru . $balance . "\n";
-    echo putih . " level     : " . biru . $level . " (" . $current_exp . ")\n";
-    echo putih . " energy    : " . kuning . $energy . "\n";
+    echo putih . " user        : " . cyan . $username . "\n";
+    echo putih . " balance     : " . biru . $balance . "\n";
+    echo putih . " level       : " . biru . $level . " (" . $current_exp . ")\n";
+    echo putih . " energy      : " . kuning . $energy . "\n";
+    echo putih . " API Balance : " . hijau . "$" . $waryono_bal . "\n";
     update_time_log();
 }
 
@@ -127,8 +145,8 @@ function print_task_log($type, $index, $coins, $title, $msg) {
     echo cyan . $bar . "\033[0m\n";
 }
 
-function print_empty_task_notice($username, $balance, $level, $current_exp, $energy, $seconds = 300, $prefix = "  PTC cooldown") {
-    banner($username, $balance, $level, $current_exp, $energy);
+function print_empty_task_notice($username, $balance, $level, $current_exp, $energy, $seconds = 300, $prefix = "  task cooldown", $apikey = '') {
+    banner($username, $balance, $level, $current_exp, $energy, false, $apikey);
     echo "\n" . centerText("\033[1;31m⚠️ INFORMASI SISTEM: BRO SABAR, TASK KOSONG! ⚠️\033[0m") . "\n";
     echo centerText("--------------------------------------------------", putih) . "\n\n";
     
@@ -183,6 +201,19 @@ function timer($seconds, $prefix = "WATCHING") {
         $wait_time--;
     }
     echo "\r                                                                  \r";
+}
+
+function check_energy($energy, $a, &$username, &$balance, &$level, &$current_exp, $apikey) {
+    if (intval($energy) < 15) {
+        banner($username, $balance, $level, $current_exp, $energy, false, $apikey);
+        echo "\n" . cyan . "==================================================" . reset . "\n";
+        echo merah . "⚠️ PERINGATAN: Energy kamu di bawah 15 (" . $energy . ")! ⚠️\n";
+        echo kuning . "Silakan isi ulang energy terlebih dahulu.\n";
+        echo putih . "Tekan " . hijau . "ENTER" . putih . " untuk kembali ke menu utama..." . reset;
+        fgets(STDIN);
+        return true;
+    }
+    return false;
 }
 
 function device_token_init() {
@@ -272,7 +303,7 @@ function skibidixxx($url, $method = 'GET', $data = [], $headers = [], $nofollow 
     }
 }
 
-function check_and_claim_tycoon($a, &$username, &$balance, &$level, &$current_exp, &$energy) {
+function check_and_claim_tycoon($a, &$username, &$balance, &$level, &$current_exp, &$energy, $apikey = '') {
     $tycoonFile = "tycoon_time.txt";
     $lastTycoon = file_exists($tycoonFile) ? (int)file_get_contents($tycoonFile) : 0;
     $currentTime = time();
@@ -313,26 +344,30 @@ function check_and_claim_tycoon($a, &$username, &$balance, &$level, &$current_ex
         ]);
         
         $tycoon_coins = 0.00;
-        $msg_text = "Tycoon berhasil diklaim!";
+        $msg_text = "TYCOON BERHASIL DIKLAIM!";
         
         $json_resp = json_decode($collect_res, true);
-        if ($json_resp && isset($json_resp['status']) && $json_resp['status'] === 'success') {
-            $msg_text = $json_resp['message'] ?? 'Tycoon berhasil diklaim!';
+        if ($json_resp) {
+            if (isset($json_resp['message'])) {
+                $msg_text = $json_resp['message'];
+            }
             if (isset($json_resp['collected'])) {
                 $tycoon_coins = floatval($json_resp['collected']);
-            }
-        } else {
-            if (preg_match('/([\d.,]+)\s*tokens/i', $collect_res, $m_coin)) {
-                $tycoon_coins = floatval(str_replace(',', '', $m_coin[1]));
+            } elseif (isset($json_resp['reward'])) {
+                $tycoon_coins = floatval($json_resp['reward']);
             }
         }
         
         if ($tycoon_coins <= 0) {
-            $tycoon_coins = 318.86;
+            if (preg_match('/([\d.,]+)\s*tokens?/i', $collect_res, $m_coin)) {
+                $tycoon_coins = floatval(str_replace(',', '', $m_coin[1]));
+            } else {
+                $tycoon_coins = 318.86;
+            }
         }
         
         refresh_dashboard_info($a, $username, $balance, $level, $current_exp, $energy);
-        banner($username, $balance, $level, $current_exp, $energy);
+        banner($username, $balance, $level, $current_exp, $energy, false, $apikey);
         print_task_log("TYCOON", 1, $tycoon_coins, "TYCOON REWARD", $msg_text);
         
         file_put_contents($tycoonFile, time());
@@ -476,7 +511,7 @@ $device_token = device_token_init();
 allsuki($a,$b,$c,$d);
 
 refresh_dashboard_info($a, $username, $balance, $level, $current_exp, $energy);
-banner($username, $balance, $level, $current_exp, $energy);
+banner($username, $balance, $level, $current_exp, $energy, false, $apikey);
 
 	$url = host."/dashboard";
 	$dash = skibidixxx($url, "GET", [], $b);
@@ -502,7 +537,7 @@ banner($username, $balance, $level, $current_exp, $energy);
     	    $login = skibidixxx($action, "POST", $data, $b);
     	    if (preg_match('/Dashboard \| MakeYouTask\.Com/i', $login)) {
     	        refresh_dashboard_info($a, $username, $balance, $level, $current_exp, $energy);
-    	        banner($username, $balance, $level, $current_exp, $energy);
+    	        banner($username, $balance, $level, $current_exp, $energy, false, $apikey);
     	        sleep(2);
     	    } else {
     	        sleep(2);
@@ -514,12 +549,35 @@ banner($username, $balance, $level, $current_exp, $energy);
 	}
 
     
-    goto faucet;
+    echo "\n" . cyan . "==================================================" . reset . "\n";
+    echo cyan . "               PILIH PANEL TASK                   " . reset . "\n";
+    echo cyan . "==================================================" . reset . "\n";
+    echo putih . " [1] " . hijau . "Farming energy\n";
+    echo putih . " [2] " . hijau . "Claim tycoon + ptc\n";
+    echo putih . " [3] " . hijau . "Faucet only\n";
+    echo putih . " [0] " . merah  . "Exit\n";
+    echo cyan . "==================================================" . reset . "\n";
+    echo putih . "Pilih menu [0-3] : " . kuning;
+    $pilihan = trim(fgets(STDIN));
+
+    if ($pilihan == "1") {
+        goto reload;
+    } elseif ($pilihan == "2") {
+        goto ptc;
+    } elseif ($pilihan == "3") {
+        goto faucet;
+    } elseif ($pilihan == "0") {
+        echo hijau . "\nKeluar dari script. Sampai jumpa lagi, sayangku CAPLUNG! 👋\n" . reset;
+        exit;
+    } else {
+        echo merah . "Pilihan tidak valid, kembali ke menu...\n" . reset;
+        sleep(1);
+        goto home;
+    }
 
 	reload:
 	smm_get:
-    
-    check_and_claim_tycoon($a, $username, $balance, $level, $current_exp, $energy);
+    check_and_claim_tycoon($a, $username, $balance, $level, $current_exp, $energy, $apikey);
     
     $url = host."/SmmNew/watch";
 	$watch = skibidixxx($url, "GET", [], $d);
@@ -553,14 +611,8 @@ banner($username, $balance, $level, $current_exp, $energy);
 	}
 
 	if (!preg_match('/let\s+videoCode/', $watch)) {
-	    if (strpos($watch, "There are no videos available for you right now") !== false) {
-	        goto faucet; 
-	    }
-	    if (strpos($watch, "You must wait at least") !== false) {
-	        goto faucet;
-	    }
-	    sleep(5);
-	    goto smm_get;
+	    print_empty_task_notice($username, $balance, $level, $current_exp, $energy, 300, "  SMM task cooldown", $apikey);
+	    goto reload;
 	}
 
 	preg_match("/let csrfHash = '([^']+)';/", $watch, $csh);
@@ -577,8 +629,8 @@ banner($username, $balance, $level, $current_exp, $energy);
 	    $claim_url = $blog_origin . $claim_url;
 	}
 	if (!$csrf_hash || !$claim_url) {
-	    sleep(5);
-	    goto smm_get;
+	    print_empty_task_notice($username, $balance, $level, $current_exp, $energy, 300, "  SMM task cooldown", $apikey);
+	    goto reload;
 	}
 
 	$watched = 0;
@@ -586,7 +638,6 @@ banner($username, $balance, $level, $current_exp, $energy);
     $start_mode1_time = time();
 
 	while (true) {
-        
         if ((time() - $start_mode1_time) >= 600) {
             break;
         }
@@ -611,7 +662,7 @@ banner($username, $balance, $level, $current_exp, $energy);
 
 	    if ($status == 'success') {
 	        refresh_dashboard_info($a, $username, $balance, $level, $current_exp, $energy);
-	        banner($username, $balance, $level, $current_exp, $energy);
+	        banner($username, $balance, $level, $current_exp, $energy, false, $apikey);
 	        print_task_log("SURF ADS", $task_counter++, $real_coins, "WATCH & EARN STREAM", $pesan);
 	    }
 	    if (($cp[1] ?? 'false') == 'true') {
@@ -621,12 +672,12 @@ banner($username, $balance, $level, $current_exp, $energy);
 	        break;
 	    }
 	}
-	goto faucet; 
+	goto reload; 
 
 	ptc:
 	$ptc_counter = 1;
 	youtube:
-	check_and_claim_tycoon($a, $username, $balance, $level, $current_exp, $energy);
+	check_and_claim_tycoon($a, $username, $balance, $level, $current_exp, $energy, $apikey);
 	$url = host."/ptc";
 	$ptc = skibidixxx($url, "GET", [], $a);
 	preg_match_all('~href="(https?://[^"]+/single/[^"]+)"~', $ptc, $res);
@@ -671,7 +722,7 @@ banner($username, $balance, $level, $current_exp, $energy);
 	            }
 
 	            refresh_dashboard_info($a, $username, $balance, $level, $current_exp, $energy);
-	            banner($username, $balance, $level, $current_exp, $energy);
+	            banner($username, $balance, $level, $current_exp, $energy, false, $apikey);
 	            print_task_log("SURF ADS", $ptc_counter++, $real_coins, "YOUTUBE PTC TASK", $pesan);
 	            goto youtube;
 
@@ -689,7 +740,7 @@ banner($username, $balance, $level, $current_exp, $energy);
 	            }
 
 	            refresh_dashboard_info($a, $username, $balance, $level, $current_exp, $energy);
-	            banner($username, $balance, $level, $current_exp, $energy);
+	            banner($username, $balance, $level, $current_exp, $energy, false, $apikey);
 	            print_task_log("SURF ADS", $ptc_counter++, $real_coins, "YOUTUBE PTC TASK", $pesan);
 	            goto youtube;
 
@@ -705,7 +756,7 @@ banner($username, $balance, $level, $current_exp, $energy);
 
 	winptc:
 	kopet:
-	check_and_claim_tycoon($a, $username, $balance, $level, $current_exp, $energy);
+	check_and_claim_tycoon($a, $username, $balance, $level, $current_exp, $energy, $apikey);
 	$url = host."/ptc/index/window";
 	$ptc = skibidixxx($url, "GET", [], $a);
 	preg_match_all('/wmv-url="([^"]+)"\s*wmv-sec="(\d+)"/', $ptc, $res);
@@ -746,7 +797,7 @@ banner($username, $balance, $level, $current_exp, $energy);
 		        }
 
 		        refresh_dashboard_info($a, $username, $balance, $level, $current_exp, $energy);
-		        banner($username, $balance, $level, $current_exp, $energy);
+		        banner($username, $balance, $level, $current_exp, $energy, false, $apikey);
 		        print_task_log("SURF ADS", $ptc_counter++, $real_coins, "WINDOW PTC TASK", $pesan);
 		        goto kopet;
 
@@ -764,7 +815,7 @@ banner($username, $balance, $level, $current_exp, $energy);
 		        }
 
 		        refresh_dashboard_info($a, $username, $balance, $level, $current_exp, $energy);
-		        banner($username, $balance, $level, $current_exp, $energy);
+		        banner($username, $balance, $level, $current_exp, $energy, false, $apikey);
 		        print_task_log("SURF ADS", $ptc_counter++, $real_coins, "WINDOW PTC TASK", $pesan);
 		        goto kopet;
 
@@ -780,7 +831,7 @@ banner($username, $balance, $level, $current_exp, $energy);
 
 	iframe:
 	coli:
-	check_and_claim_tycoon($a, $username, $balance, $level, $current_exp, $energy);
+	check_and_claim_tycoon($a, $username, $balance, $level, $current_exp, $energy, $apikey);
 	$url = host."/ptc/index/iframe";
 	$iframe = skibidixxx($url, "GET", [], $a);
 	preg_match_all("/window\.location\s*=\s*'([^']+)'/", $iframe, $res);
@@ -821,7 +872,7 @@ banner($username, $balance, $level, $current_exp, $energy);
 		        }
 
 		        refresh_dashboard_info($a, $username, $balance, $level, $current_exp, $energy);
-		        banner($username, $balance, $level, $current_exp, $energy);
+		        banner($username, $balance, $level, $current_exp, $energy, false, $apikey);
 		        print_task_log("SURF ADS", $ptc_counter++, $real_coins, "IFRAME PTC TASK", $pesan);
 		        goto coli;
 
@@ -832,18 +883,21 @@ banner($username, $balance, $level, $current_exp, $energy);
 			goto nyawit;
 	    }
 	} else {
-        
-	    goto reload;
+	    print_empty_task_notice($username, $balance, $level, $current_exp, $energy, 300, "  PTC task cooldown", $apikey);
+	    goto ptc;
 	}
 
 	faucet:
 	$faucet_counter = 1;
 	faucet_loop:
 	refresh_dashboard_info($a, $username, $balance, $level, $current_exp, $energy);
-	banner($username, $balance, $level, $current_exp, $energy);
 	
-    
-    check_and_claim_tycoon($a, $username, $balance, $level, $current_exp, $energy);
+	if (check_energy($energy, $a, $username, $balance, $level, $current_exp, $apikey)) {
+	    goto home;
+	}
+
+	banner($username, $balance, $level, $current_exp, $energy, false, $apikey);
+	check_and_claim_tycoon($a, $username, $balance, $level, $current_exp, $energy, $apikey);
 
 	$url = host."/faucet";
 	$faucet_page = skibidixxx($url, "GET", [], $b);
@@ -851,11 +905,13 @@ banner($username, $balance, $level, $current_exp, $energy);
 	$cooldown_secs = 0; 
 	if (preg_match('/STATUS.*?(\d{2}):(\d{2})/is', $faucet_page, $t_match)) {
 	    $cooldown_secs = (intval($t_match[1]) * 60) + intval($t_match[2]);
+	} elseif (preg_match('/(\d+)\s*minutes?/i', $faucet_page, $m_match)) {
+	    $cooldown_secs = intval($m_match[1]) * 60;
 	}
 
-    
 	if (strpos($faucet_page, "You must wait") !== false || strpos($faucet_page, "cooldown") !== false || $cooldown_secs > 5) {
-	    goto youtube; 
+	    print_empty_task_notice($username, $balance, $level, $current_exp, $energy, ($cooldown_secs > 5 ? $cooldown_secs : 300), "  Faucet cooldown", $apikey);
+	    goto faucet_loop; 
 	}
 
 	preg_match('/name="csrf_token_name"[^>]*value="([^"]+)"/i', $faucet_page, $csrf);
@@ -872,7 +928,8 @@ banner($username, $balance, $level, $current_exp, $energy);
 	$token = trim($token);
 
 	if (!$token) {
-	    goto youtube;
+	    print_empty_task_notice($username, $balance, $level, $current_exp, $energy, 300, "  Faucet token missing", $apikey);
+	    goto faucet_loop;
 	}
 
 	echo putih."[FAUCET] ".hijau."Memproses bypass Turnstile Faucet...\n";
@@ -895,11 +952,11 @@ banner($username, $balance, $level, $current_exp, $energy);
 
 	    if (strpos($claim, "success") !== false || strpos($claim, "reward") !== false || strpos($claim, "added") !== false || !empty($claim)) {
 	        refresh_dashboard_info($a, $username, $balance, $level, $current_exp, $energy);
-	        banner($username, $balance, $level, $current_exp, $energy);
+	        banner($username, $balance, $level, $current_exp, $energy, false, $apikey);
 	        print_task_log("FAUCET", $faucet_counter++, $reward_coins, "AUTO CLAIM FAUCET", "Faucet berhasil diklaim secara otomatis!");
-	        goto youtube; 
+	        goto faucet_loop; 
 	    } else {
-	        goto youtube;
+	        goto faucet_loop;
 	    }
 	} else {
 	    goto faucet_bypass;
