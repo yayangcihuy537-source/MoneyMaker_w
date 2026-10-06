@@ -645,26 +645,15 @@ echo box_line(gradient("NEEDBUX AUTO CLAIM", 51, 213));
 echo box_line(fg(240)."─────── SOUU ENGINE ───────".RST);
 echo box_div();
 echo box_line(fg(213).BOLD."PILIH COIN".RST);
-echo box_line(fg(51)."  ".RST.fg(226)."1.".RST.fg(46)." LTC".RST);
-echo box_line(fg(51)."  ".RST.fg(226)."2.".RST.fg(46)." DOGE".RST);
-echo box_line(fg(51)."  ".RST.fg(226)."3.".RST.fg(208)." LOOP ALL (rotasi semua coin)".RST);
+echo box_line(fg(51)."  ".RST.fg(226)."1.".RST.fg(46)." DOGE".RST);
 echo box_line(fg(240)."".RST);
-echo box_line(fg(240)."  ketik 1/2/3 lalu enter".RST);
+echo box_line(fg(240)."  ketik 1 lalu enter".RST);
 echo fg(51)."╚".str_repeat("═",62)."╝".RST."\n";
 echo "\n   ".gradient("PILIH > ", 46, 226).fg(226);
 $pilihan = trim(fgets(STDIN));
 echo reset."\n";
 
 if ($pilihan === '1') {
-    push_log("mode: LTC (loop forever)", 'g');
-    banner();
-    while (true) {
-        claimCoin('ltc', $a, $b, $apikey, $email, false);
-        $GLOBALS['_fails'] = 0;
-        // safety delay biar gak hammer server
-        sleep(2);
-    }
-} elseif ($pilihan === '2') {
     push_log("mode: DOGE (loop forever)", 'g');
     banner();
     while (true) {
@@ -672,41 +661,8 @@ if ($pilihan === '1') {
         $GLOBALS['_fails'] = 0;
         sleep(2);
     }
-} elseif ($pilihan === '3') {
-    // Loop all — scrape coin list
-    $listResp = skibidixxx(host."/instant-faucet-list", "GET", [], $a);
-    $list     = $listResp['body'];
-    preg_match_all('/href="https?:\/\/needbux\.com\/\?faucet=([^"]+)"/i', $list, $matches);
-    $coins = array_values(array_unique($matches[1]));
-
-    if (empty($coins)) {
-        $homeResp = skibidixxx(host, "GET", [], $a);
-        preg_match_all('/href="https?:\/\/needbux\.com\/\?faucet=([^"]+)"/i', $homeResp['body'], $matches);
-        $coins = array_values(array_unique($matches[1]));
-    }
-
-    if (empty($coins)) {
-        $coins = ['ltc', 'doge', 'btc', 'eth', 'trx'];
-        push_log("scrape gagal — pakai fallback coins", 'wr');
-    }
-
-    $upper = array_map('strtoupper', $coins);
-    if (!in_array('DOGE', $upper)) array_unshift($coins, 'doge');
-    if (!in_array('LTC', $upper))  array_unshift($coins, 'ltc');
-
-    $total = count($coins);
-    $round = 0;
-    while (true) {
-        $round++;
-        foreach ($coins as $index => $coin) {
-            push_log("round #".$round." | ".($index + 1)."/".$total." | ".strtoupper($coin), 'i');
-            banner();
-            claimCoin($coin, $a, $b, $apikey, $email, false);
-        }
-        $GLOBALS['_fails'] = 0;
-    }
 } else {
-    echo merah . "[!] Pilihan tidak valid! ketik 1/2/3\n";
+    echo merah . "[!] Pilihan tidak valid! ketik 1\n";
     sleep(3);
     exit;
 }
