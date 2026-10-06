@@ -39,11 +39,6 @@
           "runner": "python3"
         },
         "8": {
-          "label": "CryptoCrops 🔴",
-          "file": "cc.py",
-          "runner": "python3"
-        },
-        "9": {
           "label": "Nyxtap 🟢",
           "file": "nyxtap.py",
           "runner": "python3"
@@ -154,24 +149,24 @@
           "runner": "php"
         },
         "21": {
-          "label": "Coming Soon 🔵",
-          "file": null,
-          "runner": null
+          "label": "CryptoCrops 🟢",
+          "file": "CryptoCrops.py",
+          "runner": "python3"
         },
         "22": {
           "label": "Coming Soon 🔵",
-          "file": null,
-          "runner": null
+          "file": "ComingSoon.php",
+          "runner": "php"
         },
         "23": {
           "label": "Coming Soon 🔵",
-          "file": null,
-          "runner": null
+          "file": "ComingSoon.php",
+          "runner": "php"
         },
         "24": {
           "label": "Coming Soon 🔵",
-          "file": null,
-          "runner": null
+          "file": "ComingSoon.php",
+          "runner": "php"
         }
       }
     },
@@ -290,13 +285,13 @@
         },
         "23": {
           "label": "Coming Soon 🔵",
-          "file": null,
-          "runner": null
+          "file": "ComingSoon.php",
+          "runner": "php"
         },
         "24": {
           "label": "Coming Soon 🔵",
-          "file": null,
-          "runner": null
+          "file": "ComingSoon.php",
+          "runner": "php"
         }
       }
     },
