@@ -159,8 +159,8 @@
           "runner": "php"
         },
         "23": {
-          "label": "Coming Soon 🔵",
-          "file": "ComingSoon.php",
+          "label": "Coinadster 🟢",
+          "file": "coinadster.php",
           "runner": "php"
         },
         "24": {
