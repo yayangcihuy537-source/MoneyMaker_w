@@ -154,8 +154,8 @@
           "runner": "python3"
         },
         "22": {
-          "label": "Coming Soon 🔵",
-          "file": "ComingSoon.php",
+          "label": "BuxFaucet 🟢",
+          "file": "buxfaucet.php",
           "runner": "php"
         },
         "23": {
