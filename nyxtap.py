@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 """
 ═══════════════════════════════════════════════════════════════
- NYXTAP.com Auto Claim Bot v4.6 (SECRET FIX + AUTO-EXTRACT)
- - FIX: antibot_sig secret reverse-engineered ulang dari JS baru
-   Old: be84a90c04f5ea5c  (dipake v4.4-4.5)
-   New: fcc29f0b0f826b4e  (rotate dari PlayNXC)
- - NEW: auto-extract secret dari HTML dump (kalau debug ON)
+ NYXTAP.com Auto Claim Bot v4.7 (RATE LIMIT FIX)
+ - FIX: rate-limit detect → langsung global backoff (5 menit default)
+ - FIX: gak retry 7x lagi kalau kena "Too many attempts"
  - Emoji-match captcha solver via Pillow vision (LOCAL)
- - SOUU Engine UI
+ - antibot_sig auto-extract dari HTML dump
 ═══════════════════════════════════════════════════════════════
 """
 
@@ -28,7 +26,7 @@ from datetime import datetime
 import requests
 
 # ═══════════════════════════════════════════════════════════════
-#  PILLOW DETECTION
+#  PILLOW
 # ═══════════════════════════════════════════════════════════════
 HAS_PIL = False
 PIL_ERR = None
@@ -95,17 +93,23 @@ EMOJI_RE = re.compile(
 _CTX = ssl.create_default_context()
 
 # ═══════════════════════════════════════════════════════════════
-#  ANTIBOT SIGNATURE
-#  Algoritma: FNV-1a 32-bit hash dari "SECRET|nonce|flags"
-#  Secret di-rotate oleh PlayNXC — v4.6 punya auto-extract
+#  EXCEPTIONS
 # ═══════════════════════════════════════════════════════════════
-_SIG_SECRET_DEFAULT = "fcc29f0b0f826b4e"   # reverse-engineered 07/10/2026
+class RateLimitError(Exception):
+    """Rate limit — bukan failure, cuma throttle. Trigger global backoff."""
+    def __init__(self, msg, wait_sec=300):
+        super().__init__(msg)
+        self.wait_sec = wait_sec
+
+# ═══════════════════════════════════════════════════════════════
+#  ANTIBOT SIGNATURE
+# ═══════════════════════════════════════════════════════════════
+_SIG_SECRET_DEFAULT = "fcc29f0b0f826b4e"
 _SIG_SECRET = _SIG_SECRET_DEFAULT
 
 _FNV_PRIME  = 0x01000193
 _FNV_SEED1  = 0x811C9DC5
 _FNV_SEED2  = 0x050C5D1F
-
 
 def _fnv1a_32(s: str, seed: int) -> int:
     h = seed & 0xFFFFFFFF
@@ -114,23 +118,14 @@ def _fnv1a_32(s: str, seed: int) -> int:
         h = (h * _FNV_PRIME) & 0xFFFFFFFF
     return h
 
-
 def antibot_sig(nonce: str, flags: int = 3) -> str:
     payload = f"{_SIG_SECRET}|{nonce}|{flags}"
     h1 = _fnv1a_32(payload, _FNV_SEED1)
     h2 = _fnv1a_32(payload, _FNV_SEED2)
     return f"{h1:08x}{h2:08x}"
 
-
 def extract_sig_secret_from_html(html: str):
-    """
-    Parse obfuscated JS dari PlayNXC HTML, extract SIG secret.
-    Pattern: _x93a=[[idx,a,b],...16 entries...]
-             _e06c3[idx] = charcode(a ^ b)
-    Return: string 16 char atau None
-    """
     try:
-        # cari array 16 triplet [num,num,num]
         m = re.search(
             r'=\s*\[((?:\[\d+,\s*\d+,\s*\d+\]\s*,?\s*){16})\]',
             html
@@ -138,14 +133,11 @@ def extract_sig_secret_from_html(html: str):
         if not m:
             return None
         arr_text = "[" + m.group(1) + "]"
-        # parse pakai json (triplet pake kurung siku — valid JSON array of arrays)
         try:
             arr = json.loads(arr_text)
         except Exception:
-            # fallback: regex manual
             pairs = re.findall(r'\[(\d+),\s*(\d+),\s*(\d+)\]', m.group(1))
             arr = [[int(a), int(b), int(c)] for a, b, c in pairs]
-
         if len(arr) != 16:
             return None
         chars = [''] * 16
@@ -156,16 +148,14 @@ def extract_sig_secret_from_html(html: str):
             if 0 <= idx < 16:
                 chars[idx] = chr(a ^ b)
         result = "".join(chars)
-        # validasi: harus 16 char, hex-lowercase-ish
         if len(result) == 16 and re.match(r'^[0-9a-f]{16}$', result):
             return result
         return None
     except Exception:
         return None
 
-
 # ═══════════════════════════════════════════════════════════════
-#  DEBUG DUMP HELPERS
+#  DEBUG DUMP
 # ═══════════════════════════════════════════════════════════════
 def dump_file(label: str, content) -> str:
     if not DEBUG_MODE:
@@ -197,7 +187,6 @@ def dump_file(label: str, content) -> str:
     except Exception as e:
         return f"(dump gagal: {e})"
 
-
 # ═══════════════════════════════════════════════════════════════
 #  STATE
 # ═══════════════════════════════════════════════════════════════
@@ -217,14 +206,13 @@ STATE = {
     "logs":          [],
     "current_coin":  "-",
     "cooldowns":     {},
+    "rate_limited_at": 0,   # timestamp terakhir kena rate limit
 }
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
-
 def cstrip(s):
     return ANSI_RE.sub("", str(s))
-
 
 def slog(msg, level="INFO"):
     ts = datetime.now().strftime("%H:%M:%S")
@@ -244,17 +232,16 @@ def slog(msg, level="INFO"):
         "DEBUG":  GRY + "● DEBUG " + RST,
         "PIL":    MAG + "◉ PILLOW" + RST,
         "SIG":    CYN + "◉ SIG   " + RST,
+        "RATE":   RED + "◉ RATE  " + RST,
     }
     tag = tags.get(level.upper(), tags["INFO"])
     STATE["logs"].append(GRY + f"[{ts}] " + RST + tag + " " + WHT + msg + RST)
     if len(STATE["logs"]) > 8:
         STATE["logs"].pop(0)
 
-
 def fmt_dur(s):
     s = int(s)
     return f"{s // 3600:02d}:{(s % 3600) // 60:02d}:{s % 60:02d}"
-
 
 # ═══════════════════════════════════════════════════════════════
 #  PILLOW PREFLIGHT
@@ -268,43 +255,35 @@ def pillow_preflight(interactive=True):
     print(RED + BOLD + "║          ⚠  PILLOW BELUM TERINSTALL  ⚠                   ║" + RST)
     print(RED + BOLD + "╚══════════════════════════════════════════════════════════╝" + RST)
     print()
-    print(YEL + "  Pillow dipakai buat solve captcha emoji-match (vision)." + RST)
     print(CYN + "    pip install pillow" + RST)
     print()
     if PIL_ERR:
         print(GRY + f"  Detail: {PIL_ERR}" + RST)
-        print()
     if not interactive:
         return False
-    print(ORG + "  [1] " + RST + WHT + "Coba install otomatis" + RST)
+    print(ORG + "  [1] " + RST + WHT + "Install otomatis" + RST)
     print(ORG + "  [2] " + RST + WHT + "Lanjut aja (random guess)" + RST)
     print(ORG + "  [0] " + RST + WHT + "Exit" + RST)
-    print()
     try:
         pilih = input(GRY + "  >> " + RST).strip()
     except (EOFError, KeyboardInterrupt):
         return False
     if pilih == "1":
-        print(CYN + "  → pip install pillow" + RST)
         try:
             result = subprocess.run(
                 [sys.executable, "-m", "pip", "install", "pillow"],
                 capture_output=True, text=True, timeout=180,
             )
             if result.returncode == 0:
-                print(GRN + "  ✓ Pillow berhasil diinstall!" + RST)
-                print(YEL + "  → Restart script biar aktif." + RST)
+                print(GRN + "  ✓ Pillow berhasil! Restart script." + RST)
                 sys.exit(0)
-            else:
-                print(RED + "  ✗ Install gagal." + RST)
         except Exception as e:
-            print(RED + f"  ✗ Error: {e}" + RST)
+            print(RED + f"  ✗ {e}" + RST)
         input(GRY + "  ENTER untuk lanjut... " + RST)
         return False
     if pilih == "2":
         return True
     sys.exit(0)
-
 
 # ═══════════════════════════════════════════════════════════════
 #  RENDER
@@ -312,41 +291,35 @@ def pillow_preflight(interactive=True):
 def render():
     W = 62
     bd = CYN
-
     def line(content):
         plain_len = len(cstrip(" " + content))
         pad = max(0, W - plain_len)
         return bd + "║" + RST + " " + content + " " * pad + bd + "║" + RST
-
     top = bd + "╔" + "═" * W + "╗" + RST
     mid = bd + "╠" + "═" * W + "╣" + RST
     bot = bd + "╚" + "═" * W + "╝" + RST
-
     print()
     print(top)
     print(line(BOLD + WHT + "NYXTAP AUTO CLAIM" + RST))
-    print(line(DIM + "─────── SOUU ENGINE v4.6 ───────" + RST))
+    print(line(DIM + "─────── SOUU ENGINE v4.7 ───────" + RST))
     print(mid)
-
     print(line(VIO + "CAPTCHA" + RST))
     print(line("├─ Type     : " + YEL + "EMOJI-MATCH (vision)" + RST))
     if HAS_PIL:
         print(line("├─ Solver   : " + GRN + "Pillow ✓" + RST + DIM + " (local)" + RST))
     else:
-        print(line("├─ Solver   : " + RED + "Pillow ✗" + RST + DIM + " (random fallback)" + RST))
+        print(line("├─ Solver   : " + RED + "Pillow ✗" + RST + DIM + " (random)" + RST))
     print(line("├─ Group    : " + NC + TG_GROUP + RST))
     if STATE["solve_attempt"] > 0:
         print(line("└─ Attempt  : " + YEL + f"{STATE['solve_attempt']}/{STATE['max_solve']}" + RST))
     else:
         print(line("└─ Attempt  : " + DIM + "-" + RST))
     print(mid)
-
     print(line(VIO + "ACCOUNT" + RST))
     print(line("├─ User     : " + CYN + STATE["user"] + RST))
     print(line("├─ Email    : " + WHT + STATE["email"] + RST))
     print(line("└─ Coin     : " + CYN + STATE["coins_mode"] + RST))
     print(mid)
-
     run = int(time.time() - STATE["runtime_start"])
     print(line(VIO + "SYSTEM" + RST))
     print(line("├─ Claims     : " + GRN + str(STATE["claims"]) + RST))
@@ -355,7 +328,6 @@ def render():
     print(line("├─ Sig Secret : " + CYN + _SIG_SECRET + RST))
     print(line("└─ Runtime    : " + CYN + fmt_dur(run) + RST + " / " + DIM + fmt_dur(STATE["max_runtime"]) + RST))
     print(mid)
-
     logs = STATE["logs"]
     if not logs:
         print(line(DIM + "─ no activity yet ─" + RST))
@@ -363,13 +335,11 @@ def render():
         for l in logs:
             print(line(l))
     print(bot)
-
     now = datetime.now().strftime("%H:%M:%S")
     print()
     print("   " + GRN + BOLD + "BOT RUNNING" + RST + " " + DIM + "•" + RST + " " + CYN + now + RST)
-    print("   " + DIM + "By Power " + NP + "@SouuXso" + RST + DIM + " • Nyxtap v4.6 | " + CYN + TG_TAG + RST)
+    print("   " + DIM + "By Power " + NP + "@SouuXso" + RST + DIM + " • Nyxtap v4.7 | " + CYN + TG_TAG + RST)
     print()
-
 
 def clear_render():
     if os.name == "nt":
@@ -378,26 +348,22 @@ def clear_render():
         os.system("clear")
     render()
 
-
-def countdown_render(seconds_left, coins_cd):
+def countdown_render(seconds_left, coins_cd, header="ALL COINS ON COOLDOWN"):
     W = 62
     bd = CYN
-
     def line(content):
         plain_len = len(cstrip(" " + content))
         pad = max(0, W - plain_len)
         return bd + "║" + RST + " " + content + " " * pad + bd + "║" + RST
-
     top = bd + "╔" + "═" * W + "╗" + RST
     mid = bd + "╠" + "═" * W + "╣" + RST
     bot = bd + "╚" + "═" * W + "╝" + RST
-
     print()
     print(top)
     print(line(BOLD + WHT + "NYXTAP AUTO CLAIM" + RST))
     print(line(DIM + "─────── SOUU ENGINE ───────" + RST))
     print(mid)
-    print(line(ORG + BOLD + "ALL COINS ON COOLDOWN" + RST))
+    print(line(ORG + BOLD + header + RST))
     print(line(""))
     mins = seconds_left // 60
     secs = seconds_left % 60
@@ -425,15 +391,13 @@ def countdown_render(seconds_left, coins_cd):
     now = datetime.now().strftime("%H:%M:%S")
     print()
     print("   " + ORG + BOLD + "BOT WAITING" + RST + " " + DIM + "•" + RST + " " + CYN + now + RST)
-    print("   " + DIM + "By Power " + NP + "@SouuXso" + RST + DIM + " • Nyxtap v4.6 | " + CYN + TG_TAG + RST)
+    print("   " + DIM + "By Power " + NP + "@SouuXso" + RST + DIM + " • Nyxtap v4.7 | " + CYN + TG_TAG + RST)
     print()
-
 
 # ═══════════════════════════════════════════════════════════════
 #  CONFIG
 # ═══════════════════════════════════════════════════════════════
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nyxtap_config.json")
-
 
 def load_config():
     if not os.path.exists(CONFIG_FILE):
@@ -449,12 +413,10 @@ def load_config():
     except Exception:
         return None
 
-
 def save_config(c):
     c.pop("apikey", None)
     with open(CONFIG_FILE, "w") as f:
         json.dump(c, f, indent=2)
-
 
 def read_line(prompt=""):
     if prompt:
@@ -465,14 +427,13 @@ def read_line(prompt=""):
     except (EOFError, KeyboardInterrupt):
         return ""
 
-
 def setup():
     print()
     print(CYN + "═══ NYXTAP SETUP ═══" + RST)
     print()
     print(DIM + "Email buat terima reward. Solver captcha pake Pillow (lokal)." + RST)
     if not HAS_PIL:
-        print(RED + "⚠ Pillow gak ke-detect — captcha bakal di-random guess." + RST)
+        print(RED + "⚠ Pillow gak ke-detect." + RST)
     print()
     email = ""
     while "@" not in email:
@@ -482,12 +443,10 @@ def setup():
     print()
     return {"email": email, "max_tries": 10}
 
-
 # ═══════════════════════════════════════════════════════════════
 #  EMOJI SOLVER
 # ═══════════════════════════════════════════════════════════════
 _NOTO_TABLE = None
-
 
 def _load_noto_table():
     NOTO_FONT = "/system/fonts/NotoColorEmoji.ttf"
@@ -531,13 +490,11 @@ def _load_noto_table():
     except Exception:
         return None, None, None, None
 
-
 def _noto_table():
     global _NOTO_TABLE
     if _NOTO_TABLE is None:
         _NOTO_TABLE = _load_noto_table()
     return _NOTO_TABLE
-
 
 def fetch_noto_emoji(cp):
     if not HAS_PIL:
@@ -568,7 +525,6 @@ def fetch_noto_emoji(cp):
     except Exception:
         return None
 
-
 def emoji_filename(emoji):
     parts = []
     for ch in emoji:
@@ -576,7 +532,6 @@ def emoji_filename(emoji):
             continue
         parts.append("%x" % ord(ch))
     return "%s.png" % "-".join(parts)
-
 
 def extract_emoji(text):
     runs = []
@@ -597,7 +552,6 @@ def extract_emoji(text):
         "\u200d" in r,
         any(ord(c) in (0xFE0F, 0xFE0E) for c in r),
     ))
-
 
 def fetch_emoji_image(emoji):
     if not HAS_PIL:
@@ -634,7 +588,6 @@ def fetch_emoji_image(emoji):
     except Exception:
         return None
 
-
 def glyph_data(im, size=64):
     im = im.convert("RGBA")
     if im.size != (size, size):
@@ -654,7 +607,6 @@ def glyph_data(im, size=64):
     bbox = (min(xs), min(ys), max(xs), max(ys)) if xs else None
     return im, mask, colors, bbox
 
-
 def norm_glyph_template(im, bbox, n=44):
     x0, y0, x1, y1 = bbox
     crop = im.crop((x0, y0, x1+1, y1+1)).convert("RGBA")
@@ -670,7 +622,6 @@ def norm_glyph_template(im, bbox, n=44):
         if not (a < 40 or (mx > 232 and (mx-mn) < 40)):
             mask[i] = 1
     return mask, gray
-
 
 def template_align(tm, tg, vm, vg, n=44, rng=6):
     best = 0.0
@@ -716,7 +667,6 @@ def template_align(tm, tg, vm, vg, n=44, rng=6):
                 best = score
     return best
 
-
 def color_hist(colors, bins=24):
     h = [0.0] * bins
     for r, g, b in colors:
@@ -737,14 +687,12 @@ def color_hist(colors, bins=24):
         h[hh] += sat
     return h
 
-
 def color_cos(a, b):
     na = sum(v*v for v in a) ** 0.5
     nb = sum(v*v for v in b) ** 0.5
     if not na or not nb:
         return 0.0
     return sum(x*y for x, y in zip(a, b)) / (na * nb)
-
 
 def dump_captcha_images(challenge, target_im, scored, chosen):
     if not DEBUG_MODE or not HAS_PIL:
@@ -768,6 +716,30 @@ def dump_captcha_images(challenge, target_im, scored, chosen):
     except Exception:
         pass
 
+# ═══════════════════════════════════════════════════════════════
+#  RATE LIMIT DETECTION
+# ═══════════════════════════════════════════════════════════════
+_RATE_KEYWORDS = [
+    "too many", "slow down", "rate limit", "too fast",
+    "wait a while", "wait awhile", "try again later",
+    "coba lagi", "terlalu cepat", "batas",
+]
+
+def is_rate_limit(msg: str) -> bool:
+    m = (msg or "").lower()
+    return any(k in m for k in _RATE_KEYWORDS)
+
+def extract_wait_seconds(msg: str, default: int = 300) -> int:
+    """Coba extract durasi dari message kayak 'wait 300 seconds'."""
+    m = (msg or "").lower()
+    # cari "wait N second/minute"
+    mm = re.search(r'(\d+)\s*(s|sec|second|detik)', m)
+    if mm:
+        return max(30, int(mm.group(1)))
+    mm = re.search(r'(\d+)\s*(m|min|minute|menit)', m)
+    if mm:
+        return max(60, int(mm.group(1)) * 60)
+    return default
 
 # ═══════════════════════════════════════════════════════════════
 #  FAUCET CLAIMER
@@ -784,7 +756,7 @@ class FaucetClaimer:
         self.return_url = None
         self.return_token = None
         self.last_prompt = ""
-        self.captcha_html = ""   # simpen HTML captcha page buat auto-extract secret
+        self.captcha_html = ""
 
     def visit_faucet(self, coin):
         url = f"{NYX}/{coin}-faucet"
@@ -810,35 +782,56 @@ class FaucetClaimer:
         return html
 
     def start_claim(self, delay=8):
+        """
+        v4.7: 
+        - max 3 attempt (bukan 7)
+        - rate-limit langsung raise RateLimitError, gak retry
+        """
         body = {"csrf": self.csrf, "coin": self.coin, "website": ""}
         if self.email:
             body["email"] = self.email
+
+        max_attempts = 3
         j = None
-        for attempt in range(1, 8):
-            slog(f"POST /api/claim ({attempt})", "INFO")
+        for attempt in range(1, max_attempts + 1):
+            slog(f"POST /api/claim ({attempt}/{max_attempts})", "INFO")
             try:
                 r = self.s.post(f"{NYX}/api/claim", data=body, timeout=30)
                 j = r.json()
             except (requests.exceptions.RequestException, ValueError) as e:
-                slog(f"net error: {str(e)[:40]} — retry 8s", "ERR")
-                time.sleep(8)
-                continue
+                slog(f"net error: {str(e)[:40]}", "ERR")
+                if attempt < max_attempts:
+                    time.sleep(8)
+                    continue
+                raise RuntimeError(f"net error: {e}")
+
             if not isinstance(j, dict):
-                time.sleep(5)
-                continue
+                slog(f"resp bukan JSON: {str(j)[:40]}", "WARN")
+                if attempt < max_attempts:
+                    time.sleep(5)
+                    continue
+                raise RuntimeError("resp bukan JSON")
+
             if j.get("success"):
                 break
+
             msg = j.get("message", "") or ""
-            cooldown = (r.status_code == 429) or ("Slow down" in msg) or ("Too many attempts" in msg)
-            too_fast = "Too fast" in msg
-            if (cooldown or too_fast) and attempt < 7:
-                wait = 60 if cooldown else delay * (2 ** (attempt - 1))
-                slog(f"{msg[:30]} — tunggu {wait}s", "WAIT")
-                time.sleep(wait)
+
+            # ── RATE LIMIT: STOP, jangan retry ──
+            if is_rate_limit(msg):
+                wait_sec = extract_wait_seconds(msg, default=300)
+                raise RateLimitError(msg[:80], wait_sec=wait_sec)
+
+            # ── Other error ──
+            slog(f"resp: {msg[:50]}", "WARN")
+            if attempt < max_attempts:
+                time.sleep(delay * attempt)
                 continue
             raise RuntimeError(f"claim refused: {msg}")
+
         if not j or not j.get("success"):
-            raise RuntimeError(f"claim refused: {j.get('message', '?') if j else '?'}")
+            raise RuntimeError("claim refused (unknown)")
+
         d = j.get("data") or {}
         if DEBUG_MODE:
             dump_file("start_claim_resp", j)
@@ -855,12 +848,9 @@ class FaucetClaimer:
             r = self.s.get(solve_url, allow_redirects=True)
         html = r.text
         self.captcha_html = html
-
         if DEBUG_MODE:
             p = dump_file("captcha_page", html)
             slog(f"captcha dumped: {os.path.basename(p)}", "DEBUG")
-
-        # ── AUTO-EXTRACT SIG SECRET ──
         global _SIG_SECRET
         extracted = extract_sig_secret_from_html(html)
         if extracted:
@@ -871,7 +861,6 @@ class FaucetClaimer:
                 slog(f"secret ok ({_SIG_SECRET[:8]}...)", "SIG")
         else:
             slog(f"secret extract gagal — pakai default", "WARN")
-
         m = re.search(r'var\s+CSRF\s*=\s*"([0-9a-fA-F]+)"', html)
         csrf = m.group(1) if m else None
         if not csrf:
@@ -943,7 +932,6 @@ class FaucetClaimer:
             dump_file("prompt_info", {
                 "prompt": self.last_prompt,
                 "prompt_repr": repr(self.last_prompt),
-                "prompt_codepoints": [hex(ord(c)) for c in self.last_prompt],
                 "required": required,
                 "tiles_count": len(challenge.get("tiles", [])),
                 "tile_ids": [t.get("id") for t in challenge.get("tiles", [])],
@@ -1072,14 +1060,22 @@ class FaucetClaimer:
             time.sleep(1)
         raise RuntimeError(f"failed captcha in {max_tries} tries")
 
-
 # ═══════════════════════════════════════════════════════════════
 #  CLAIM WRAPPER
 # ═══════════════════════════════════════════════════════════════
 def claim_once(email, coin, max_tries):
+    """
+    Return: (status, result)
+    status: True | False | "RATE_LIMIT"
+    """
     claimer = FaucetClaimer(email=email)
     try:
         result = claimer.run(coin, max_tries=max_tries)
+    except RateLimitError as e:
+        # rate limit — bukan failure, jangan increment counter
+        slog(f"RATE LIMIT: {str(e)[:50]} (wait {e.wait_sec}s)", "RATE")
+        clear_render()
+        return "RATE_LIMIT", e
     except (RuntimeError, requests.exceptions.RequestException) as e:
         STATE["failures"] += 1
         slog(f"{str(e)[:55]}", "ERR")
@@ -1090,6 +1086,7 @@ def claim_once(email, coin, max_tries):
         slog(f"unexpected: {str(e)[:45]}", "ERR")
         clear_render()
         return False, None
+
     if not isinstance(result, dict):
         STATE["failures"] += 1
         clear_render()
@@ -1108,7 +1105,6 @@ def claim_once(email, coin, max_tries):
     clear_render()
     return True, result
 
-
 # ═══════════════════════════════════════════════════════════════
 #  COOLDOWN
 # ═══════════════════════════════════════════════════════════════
@@ -1117,17 +1113,18 @@ def check_cooldown(coin):
     left = end - time.time()
     return max(0, int(left))
 
-
 def set_cooldown(coin, seconds):
     STATE["cooldowns"][coin.upper()] = time.time() + seconds
 
+def set_all_cooldown(coins_list, seconds):
+    for c in coins_list:
+        set_cooldown(c, seconds)
 
 def all_coins_cd(coins_list):
     for c in coins_list:
         if check_cooldown(c) <= 0:
             return False
     return True
-
 
 def min_cooldown(coins_list):
     best = None
@@ -1138,11 +1135,10 @@ def min_cooldown(coins_list):
                 best = cd
     return best if best is not None else 0
 
-
 # ═══════════════════════════════════════════════════════════════
 #  RUNNER
 # ═══════════════════════════════════════════════════════════════
-def wait_all_cd(coins_list):
+def wait_all_cd(coins_list, header="ALL COINS ON COOLDOWN"):
     while all_coins_cd(coins_list):
         left = min_cooldown(coins_list)
         if left <= 0:
@@ -1152,9 +1148,8 @@ def wait_all_cd(coins_list):
             os.system("cls")
         else:
             os.system("clear")
-        countdown_render(left, coins_cd)
+        countdown_render(left, coins_cd, header=header)
         time.sleep(1)
-
 
 def run_claims(cfg, coins_list, mode_label):
     email = cfg.get("email", "")
@@ -1172,6 +1167,7 @@ def run_claims(cfg, coins_list, mode_label):
     STATE["logs"] = []
     STATE["cooldowns"] = {}
     STATE["solve_attempt"] = 0
+    STATE["rate_limited_at"] = 0
     slog(f"Starting — {mode_label}", "AUTH")
     slog(f"Sig secret: {_SIG_SECRET}", "SIG")
     clear_render()
@@ -1205,13 +1201,32 @@ def run_claims(cfg, coins_list, mode_label):
                 STATE["current_coin"] = c.upper()
                 slog(f"Claim {c.upper()}", "INFO")
                 clear_render()
-                ok, _ = claim_once(email, c, max_tries)
-                if ok:
+
+                status, data = claim_once(email, c, max_tries)
+
+                # ── RATE LIMIT: global backoff ──
+                if status == "RATE_LIMIT":
+                    wait_sec = getattr(data, "wait_sec", 300)
+                    STATE["rate_limited_at"] = time.time()
+                    slog(
+                        f"Server rate-limit — semua coin CD {wait_sec}s",
+                        "RATE"
+                    )
+                    clear_render()
+                    set_all_cooldown(coins_list, wait_sec)
+                    # Langsung tampilin countdown
+                    wait_all_cd(coins_list, header="RATE LIMITED — COOLDOWN")
+                    clear_render()
+                    # Lanjut ke round berikutnya
+                    break
+
+                if status is True:
                     set_cooldown(c, 300)
                     if len(coins_list) > 1:
                         time.sleep(random.randint(3, 6))
                 else:
                     set_cooldown(c, 60)
+
             if all_coins_cd(coins_list):
                 left = min_cooldown(coins_list)
                 m = left // 60
@@ -1233,25 +1248,22 @@ def run_claims(cfg, coins_list, mode_label):
     print("  " + DIM + f"Claims: {STATE['claims']}  |  Failures: {STATE['failures']}  |  Rewards: +{STATE['rewards']:.4f} {STATE['currency']}" + RST)
     print()
 
-
 # ═══════════════════════════════════════════════════════════════
 #  MENU
 # ═══════════════════════════════════════════════════════════════
 def show_menu(cfg):
     os.system("clear")
     W = 62
-
     def line(content):
         plain = len(cstrip(" " + content))
         pad = max(0, W - plain)
         return CYN + "║" + RST + " " + content + " " * pad + CYN + "║" + RST
-
     print()
     print(CYN + "╔" + "═" * W + "╗" + RST)
     title = BOLD + WHT + "NYXTAP AUTO CLAIM" + RST
     pad = (W - len(cstrip(title))) // 2
     print(CYN + "║" + RST + " " * pad + title + " " * (W - pad - len(cstrip(title))) + CYN + "║" + RST)
-    sub = DIM + "─────── SOUU ENGINE v4.6 ───────" + RST
+    sub = DIM + "─────── SOUU ENGINE v4.7 ───────" + RST
     pad = (W - len(cstrip(sub))) // 2
     print(CYN + "║" + RST + " " * pad + sub + " " * (W - pad - len(cstrip(sub))) + CYN + "║" + RST)
     print(CYN + "╠" + "═" * W + "╣" + RST)
@@ -1283,7 +1295,6 @@ def show_menu(cfg):
     except (EOFError, KeyboardInterrupt):
         return "0"
 
-
 def choose_coin():
     os.system("clear")
     print()
@@ -1303,7 +1314,6 @@ def choose_coin():
     if inp in COINS:
         return inp
     return "usdt"
-
 
 # ═══════════════════════════════════════════════════════════════
 #  MAIN
@@ -1373,7 +1383,6 @@ def main():
             run_claims(cfg, COINS[:], f"ALL — {len(COINS)} COINS")
             input("\n  Tekan ENTER untuk balik ke menu...")
             continue
-
 
 if __name__ == "__main__":
     try:
