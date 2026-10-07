@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
 ═══════════════════════════════════════════════════════════════
- NYXTAP.com Auto Claim Bot
- - Cookie/session mode (email only)
- - Emoji-match captcha solver via Pillow vision (LOCAL, no API)
- - SOUU Engine UI (clean dashboard)
- - CD → auto skip ke coin lain (mode all)
- - All-CD → countdown "next claim in XX:XX"
+ NYXTAP.com Auto Claim Bot v4.6 (SECRET FIX + AUTO-EXTRACT)
+ - FIX: antibot_sig secret reverse-engineered ulang dari JS baru
+   Old: be84a90c04f5ea5c  (dipake v4.4-4.5)
+   New: fcc29f0b0f826b4e  (rotate dari PlayNXC)
+ - NEW: auto-extract secret dari HTML dump (kalau debug ON)
+ - Emoji-match captcha solver via Pillow vision (LOCAL)
+ - SOUU Engine UI
 ═══════════════════════════════════════════════════════════════
 """
 
@@ -17,6 +18,7 @@ import os
 import random
 import re
 import ssl
+import subprocess
 import sys
 import time
 import urllib.parse
@@ -25,11 +27,22 @@ from datetime import datetime
 
 import requests
 
+# ═══════════════════════════════════════════════════════════════
+#  PILLOW DETECTION
+# ═══════════════════════════════════════════════════════════════
+HAS_PIL = False
+PIL_ERR = None
 try:
     from PIL import Image
     HAS_PIL = True
-except ImportError:
-    HAS_PIL = False
+except ImportError as e:
+    PIL_ERR = str(e)
+
+# ═══════════════════════════════════════════════════════════════
+#  DEBUG
+# ═══════════════════════════════════════════════════════════════
+DEBUG_MODE = False
+DEBUG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_debug_nyxtap")
 
 # ═══════════════════════════════════════════════════════════════
 #  COLORS
@@ -82,6 +95,110 @@ EMOJI_RE = re.compile(
 _CTX = ssl.create_default_context()
 
 # ═══════════════════════════════════════════════════════════════
+#  ANTIBOT SIGNATURE
+#  Algoritma: FNV-1a 32-bit hash dari "SECRET|nonce|flags"
+#  Secret di-rotate oleh PlayNXC — v4.6 punya auto-extract
+# ═══════════════════════════════════════════════════════════════
+_SIG_SECRET_DEFAULT = "fcc29f0b0f826b4e"   # reverse-engineered 07/10/2026
+_SIG_SECRET = _SIG_SECRET_DEFAULT
+
+_FNV_PRIME  = 0x01000193
+_FNV_SEED1  = 0x811C9DC5
+_FNV_SEED2  = 0x050C5D1F
+
+
+def _fnv1a_32(s: str, seed: int) -> int:
+    h = seed & 0xFFFFFFFF
+    for ch in s:
+        h ^= ord(ch)
+        h = (h * _FNV_PRIME) & 0xFFFFFFFF
+    return h
+
+
+def antibot_sig(nonce: str, flags: int = 3) -> str:
+    payload = f"{_SIG_SECRET}|{nonce}|{flags}"
+    h1 = _fnv1a_32(payload, _FNV_SEED1)
+    h2 = _fnv1a_32(payload, _FNV_SEED2)
+    return f"{h1:08x}{h2:08x}"
+
+
+def extract_sig_secret_from_html(html: str):
+    """
+    Parse obfuscated JS dari PlayNXC HTML, extract SIG secret.
+    Pattern: _x93a=[[idx,a,b],...16 entries...]
+             _e06c3[idx] = charcode(a ^ b)
+    Return: string 16 char atau None
+    """
+    try:
+        # cari array 16 triplet [num,num,num]
+        m = re.search(
+            r'=\s*\[((?:\[\d+,\s*\d+,\s*\d+\]\s*,?\s*){16})\]',
+            html
+        )
+        if not m:
+            return None
+        arr_text = "[" + m.group(1) + "]"
+        # parse pakai json (triplet pake kurung siku — valid JSON array of arrays)
+        try:
+            arr = json.loads(arr_text)
+        except Exception:
+            # fallback: regex manual
+            pairs = re.findall(r'\[(\d+),\s*(\d+),\s*(\d+)\]', m.group(1))
+            arr = [[int(a), int(b), int(c)] for a, b, c in pairs]
+
+        if len(arr) != 16:
+            return None
+        chars = [''] * 16
+        for item in arr:
+            if len(item) != 3:
+                continue
+            idx, a, b = int(item[0]), int(item[1]), int(item[2])
+            if 0 <= idx < 16:
+                chars[idx] = chr(a ^ b)
+        result = "".join(chars)
+        # validasi: harus 16 char, hex-lowercase-ish
+        if len(result) == 16 and re.match(r'^[0-9a-f]{16}$', result):
+            return result
+        return None
+    except Exception:
+        return None
+
+
+# ═══════════════════════════════════════════════════════════════
+#  DEBUG DUMP HELPERS
+# ═══════════════════════════════════════════════════════════════
+def dump_file(label: str, content) -> str:
+    if not DEBUG_MODE:
+        return "(debug off)"
+    try:
+        os.makedirs(DEBUG_DIR, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if isinstance(content, (dict, list)):
+            ext = "json"
+            data = json.dumps(content, indent=2, ensure_ascii=False)
+        elif isinstance(content, bytes):
+            ext = "bin"
+            data = content
+        else:
+            s = str(content)
+            if s.lstrip().startswith("<!DOCTYPE") or s.lstrip().startswith("<html"):
+                ext = "html"
+            elif s.lstrip().startswith("{"):
+                ext = "json"
+            else:
+                ext = "txt"
+            data = s
+        path = os.path.join(DEBUG_DIR, f"{ts}_{label}.{ext}")
+        mode = "wb" if isinstance(data, bytes) else "w"
+        kw = {} if isinstance(data, bytes) else {"encoding": "utf-8"}
+        with open(path, mode, **kw) as f:
+            f.write(data)
+        return path
+    except Exception as e:
+        return f"(dump gagal: {e})"
+
+
+# ═══════════════════════════════════════════════════════════════
 #  STATE
 # ═══════════════════════════════════════════════════════════════
 STATE = {
@@ -125,6 +242,8 @@ def slog(msg, level="INFO"):
         "LOGIN":  CYN + "◉ LOGIN " + RST,
         "CD":     ORG + "◉ COOLDN" + RST,
         "DEBUG":  GRY + "● DEBUG " + RST,
+        "PIL":    MAG + "◉ PILLOW" + RST,
+        "SIG":    CYN + "◉ SIG   " + RST,
     }
     tag = tags.get(level.upper(), tags["INFO"])
     STATE["logs"].append(GRY + f"[{ts}] " + RST + tag + " " + WHT + msg + RST)
@@ -138,7 +257,57 @@ def fmt_dur(s):
 
 
 # ═══════════════════════════════════════════════════════════════
-#  RENDER (SOUU ENGINE)
+#  PILLOW PREFLIGHT
+# ═══════════════════════════════════════════════════════════════
+def pillow_preflight(interactive=True):
+    global HAS_PIL, PIL_ERR
+    if HAS_PIL:
+        return True
+    print()
+    print(RED + BOLD + "╔══════════════════════════════════════════════════════════╗" + RST)
+    print(RED + BOLD + "║          ⚠  PILLOW BELUM TERINSTALL  ⚠                   ║" + RST)
+    print(RED + BOLD + "╚══════════════════════════════════════════════════════════╝" + RST)
+    print()
+    print(YEL + "  Pillow dipakai buat solve captcha emoji-match (vision)." + RST)
+    print(CYN + "    pip install pillow" + RST)
+    print()
+    if PIL_ERR:
+        print(GRY + f"  Detail: {PIL_ERR}" + RST)
+        print()
+    if not interactive:
+        return False
+    print(ORG + "  [1] " + RST + WHT + "Coba install otomatis" + RST)
+    print(ORG + "  [2] " + RST + WHT + "Lanjut aja (random guess)" + RST)
+    print(ORG + "  [0] " + RST + WHT + "Exit" + RST)
+    print()
+    try:
+        pilih = input(GRY + "  >> " + RST).strip()
+    except (EOFError, KeyboardInterrupt):
+        return False
+    if pilih == "1":
+        print(CYN + "  → pip install pillow" + RST)
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "pillow"],
+                capture_output=True, text=True, timeout=180,
+            )
+            if result.returncode == 0:
+                print(GRN + "  ✓ Pillow berhasil diinstall!" + RST)
+                print(YEL + "  → Restart script biar aktif." + RST)
+                sys.exit(0)
+            else:
+                print(RED + "  ✗ Install gagal." + RST)
+        except Exception as e:
+            print(RED + f"  ✗ Error: {e}" + RST)
+        input(GRY + "  ENTER untuk lanjut... " + RST)
+        return False
+    if pilih == "2":
+        return True
+    sys.exit(0)
+
+
+# ═══════════════════════════════════════════════════════════════
+#  RENDER
 # ═══════════════════════════════════════════════════════════════
 def render():
     W = 62
@@ -156,13 +325,15 @@ def render():
     print()
     print(top)
     print(line(BOLD + WHT + "NYXTAP AUTO CLAIM" + RST))
-    print(line(DIM + "─────── SOUU ENGINE ───────" + RST))
+    print(line(DIM + "─────── SOUU ENGINE v4.6 ───────" + RST))
     print(mid)
 
-    # ---------- CAPTCHA ----------
     print(line(VIO + "CAPTCHA" + RST))
     print(line("├─ Type     : " + YEL + "EMOJI-MATCH (vision)" + RST))
-    print(line("├─ Solver   : " + CYN + "Pillow (local)" + RST))
+    if HAS_PIL:
+        print(line("├─ Solver   : " + GRN + "Pillow ✓" + RST + DIM + " (local)" + RST))
+    else:
+        print(line("├─ Solver   : " + RED + "Pillow ✗" + RST + DIM + " (random fallback)" + RST))
     print(line("├─ Group    : " + NC + TG_GROUP + RST))
     if STATE["solve_attempt"] > 0:
         print(line("└─ Attempt  : " + YEL + f"{STATE['solve_attempt']}/{STATE['max_solve']}" + RST))
@@ -170,23 +341,21 @@ def render():
         print(line("└─ Attempt  : " + DIM + "-" + RST))
     print(mid)
 
-    # ---------- ACCOUNT ----------
     print(line(VIO + "ACCOUNT" + RST))
     print(line("├─ User     : " + CYN + STATE["user"] + RST))
     print(line("├─ Email    : " + WHT + STATE["email"] + RST))
     print(line("└─ Coin     : " + CYN + STATE["coins_mode"] + RST))
     print(mid)
 
-    # ---------- SYSTEM ----------
     run = int(time.time() - STATE["runtime_start"])
     print(line(VIO + "SYSTEM" + RST))
     print(line("├─ Claims     : " + GRN + str(STATE["claims"]) + RST))
     print(line("├─ Rewards    : " + GRN + f"+{STATE['rewards']:.4f} {STATE['currency']}" + RST))
     print(line("├─ Failures   : " + RED + str(STATE["failures"]) + RST + " / " + str(STATE["max_failures"])))
+    print(line("├─ Sig Secret : " + CYN + _SIG_SECRET + RST))
     print(line("└─ Runtime    : " + CYN + fmt_dur(run) + RST + " / " + DIM + fmt_dur(STATE["max_runtime"]) + RST))
     print(mid)
 
-    # ---------- LOG FEED ----------
     logs = STATE["logs"]
     if not logs:
         print(line(DIM + "─ no activity yet ─" + RST))
@@ -195,11 +364,10 @@ def render():
             print(line(l))
     print(bot)
 
-    # ---------- FOOTER ----------
     now = datetime.now().strftime("%H:%M:%S")
     print()
     print("   " + GRN + BOLD + "BOT RUNNING" + RST + " " + DIM + "•" + RST + " " + CYN + now + RST)
-    print("   " + DIM + "By Power " + NP + "@SouuXso" + RST + DIM + " • Nyxtap Edition | Fixed " + CYN + TG_TAG + RST)
+    print("   " + DIM + "By Power " + NP + "@SouuXso" + RST + DIM + " • Nyxtap v4.6 | " + CYN + TG_TAG + RST)
     print()
 
 
@@ -212,7 +380,6 @@ def clear_render():
 
 
 def countdown_render(seconds_left, coins_cd):
-    """Tampilan khusus saat semua coin CD."""
     W = 62
     bd = CYN
 
@@ -230,8 +397,6 @@ def countdown_render(seconds_left, coins_cd):
     print(line(BOLD + WHT + "NYXTAP AUTO CLAIM" + RST))
     print(line(DIM + "─────── SOUU ENGINE ───────" + RST))
     print(mid)
-
-    # ---------- COOLDOWN ----------
     print(line(ORG + BOLD + "ALL COINS ON COOLDOWN" + RST))
     print(line(""))
     mins = seconds_left // 60
@@ -247,8 +412,6 @@ def countdown_render(seconds_left, coins_cd):
     print(bd + "║" + RST + " " * pad_l + DIM + label + RST + " " * pad_r + bd + "║" + RST)
     print(line(""))
     print(mid)
-
-    # ---------- PER-COIN CD ----------
     for coin, cd in coins_cd:
         m = cd // 60
         s = cd % 60
@@ -259,11 +422,10 @@ def countdown_render(seconds_left, coins_cd):
         row = f"  {CYN}{coin.ljust(6)}{RST}  {bar}  {YEL}{m:02d}:{s:02d}{RST}"
         print(line(row))
     print(bot)
-
     now = datetime.now().strftime("%H:%M:%S")
     print()
     print("   " + ORG + BOLD + "BOT WAITING" + RST + " " + DIM + "•" + RST + " " + CYN + now + RST)
-    print("   " + DIM + "By Power " + NP + "@SouuXso" + RST + DIM + " • Nyxtap Edition | Fixed " + CYN + TG_TAG + RST)
+    print("   " + DIM + "By Power " + NP + "@SouuXso" + RST + DIM + " • Nyxtap v4.6 | " + CYN + TG_TAG + RST)
     print()
 
 
@@ -309,20 +471,20 @@ def setup():
     print(CYN + "═══ NYXTAP SETUP ═══" + RST)
     print()
     print(DIM + "Email buat terima reward. Solver captcha pake Pillow (lokal)." + RST)
+    if not HAS_PIL:
+        print(RED + "⚠ Pillow gak ke-detect — captcha bakal di-random guess." + RST)
     print()
-
     email = ""
     while "@" not in email:
         email = read_line(YEL + "FaucetPay Email : " + RST)
         if "@" not in email:
             print(RED + "  ✗ Email gak valid" + RST)
-
     print()
     return {"email": email, "max_tries": 10}
 
 
 # ═══════════════════════════════════════════════════════════════
-#  EMOJI SOLVER (vision — NotoColorEmoji + CDN fallback)
+#  EMOJI SOLVER
 # ═══════════════════════════════════════════════════════════════
 _NOTO_TABLE = None
 
@@ -378,6 +540,8 @@ def _noto_table():
 
 
 def fetch_noto_emoji(cp):
+    if not HAS_PIL:
+        return None
     cmap, glyph_order, glyph_to_png, pngs = _noto_table()
     if cmap is None or cp not in cmap:
         return None
@@ -415,7 +579,8 @@ def emoji_filename(emoji):
 
 
 def extract_emoji(text):
-    runs = []; cur = []
+    runs = []
+    cur = []
     for ch in text:
         if EMOJI_RE.match(ch):
             cur.append(ch)
@@ -427,10 +592,16 @@ def extract_emoji(text):
         runs.append("".join(cur))
     if not runs:
         return None
-    return max(runs, key=len)
+    return max(runs, key=lambda r: (
+        len(r),
+        "\u200d" in r,
+        any(ord(c) in (0xFE0F, 0xFE0E) for c in r),
+    ))
 
 
 def fetch_emoji_image(emoji):
+    if not HAS_PIL:
+        return None
     cp = 0
     for ch in emoji:
         o = ord(ch)
@@ -469,7 +640,8 @@ def glyph_data(im, size=64):
     if im.size != (size, size):
         im = im.resize((size, size), Image.LANCZOS)
     px = im.tobytes()
-    mask = []; colors = []
+    mask = []
+    colors = []
     for i in range(size * size):
         r, g, b, a = px[4*i:4*i+4]
         mx, mn = max(r, g, b), min(r, g, b)
@@ -501,42 +673,47 @@ def norm_glyph_template(im, bbox, n=44):
 
 
 def template_align(tm, tg, vm, vg, n=44, rng=6):
-    best = -1.0
+    best = 0.0
     for ay in range(-rng, rng+1):
         for ax in range(-rng, rng+1):
-            s = 0; cnt = 0
+            inter = 0
+            diff_sum = 0
+            diff_cnt = 0
+            tm_sum = 0
+            vm_sum = 0
             for y in range(n):
-                rv = y*n
+                rv = y * n
                 ty = y - ay
-                if not (0 <= ty < n): continue
-                rt = ty*n
+                if not (0 <= ty < n):
+                    for x in range(n):
+                        if vm[rv + x]:
+                            vm_sum += 1
+                    continue
+                rt = ty * n
                 for x in range(n):
                     tx = x - ax
+                    v = vm[rv + x]
+                    if v:
+                        vm_sum += 1
                     if 0 <= tx < n:
-                        if vm[rv+x] and tm[rt+tx]:
-                            s += 1 - abs(tg[rt+tx] - vg[rv+x]) / 255.0
-                            cnt += 1
-                        elif vm[rv+x]:
-                            s += 1 - abs(255 - vg[rv+x]) / 255.0
-                            cnt += 1
-                    else:
-                        if vm[rv+x]:
-                            s += 1 - abs(255 - vg[rv+x]) / 255.0
-                            cnt += 1
-            for ty in range(n):
-                rt = ty*n
-                by = ty + ay
-                if not (0 <= by < n): continue
-                rv = by*n
-                for tx in range(n):
-                    bx = tx + ax
-                    if not (0 <= bx < n) and tm[rt+tx]:
-                        s += 1 - abs(tg[rt+tx] - 255) / 255.0
-                        cnt += 1
-            if cnt:
-                score = s / cnt
-                if score > best:
-                    best = score
+                        tm_v = tm[rt + tx]
+                        if tm_v:
+                            tm_sum += 1
+                        if v and tm_v:
+                            inter += 1
+                            diff_sum += abs(tg[rt + tx] - vg[rv + x])
+                            diff_cnt += 1
+                        elif v and not tm_v:
+                            diff_sum += 255
+                            diff_cnt += 1
+            if tm_sum == 0 or vm_sum == 0:
+                continue
+            union = tm_sum + vm_sum - inter
+            iou = inter / union if union else 0.0
+            pixel_sim = 1.0 - (diff_sum / (diff_cnt * 255.0)) if diff_cnt else 0.0
+            score = 0.6 * iou + 0.4 * pixel_sim
+            if score > best:
+                best = score
     return best
 
 
@@ -544,13 +721,18 @@ def color_hist(colors, bins=24):
     h = [0.0] * bins
     for r, g, b in colors:
         mx, mn = max(r, g, b), min(r, g, b)
-        if mx == 0: continue
+        if mx == 0:
+            continue
         sat = (mx - mn) / 255.0
-        if sat < 0.15: continue
+        if sat < 0.15:
+            continue
         delta = mx - mn
-        if mx == r:   hue = ((g - b) / delta) % 6
-        elif mx == g: hue = (b - r) / delta + 2
-        else:         hue = (r - g) / delta + 4
+        if mx == r:
+            hue = ((g - b) / delta) % 6
+        elif mx == g:
+            hue = (b - r) / delta + 2
+        else:
+            hue = (r - g) / delta + 4
         hh = int(hue / 6.0 * bins) % bins
         h[hh] += sat
     return h
@@ -559,8 +741,32 @@ def color_hist(colors, bins=24):
 def color_cos(a, b):
     na = sum(v*v for v in a) ** 0.5
     nb = sum(v*v for v in b) ** 0.5
-    if not na or not nb: return 0.0
+    if not na or not nb:
+        return 0.0
     return sum(x*y for x, y in zip(a, b)) / (na * nb)
+
+
+def dump_captcha_images(challenge, target_im, scored, chosen):
+    if not DEBUG_MODE or not HAS_PIL:
+        return
+    try:
+        os.makedirs(DEBUG_DIR, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if target_im is not None:
+            target_im.save(os.path.join(DEBUG_DIR, f"{ts}_target.png"))
+        for t in challenge.get("tiles", []):
+            try:
+                b64 = t["image"].split(",", 1)[1]
+                tim = Image.open(io.BytesIO(base64.b64decode(b64)))
+                tim.save(os.path.join(DEBUG_DIR, f"{ts}_tile_{t['id']}.png"))
+            except Exception:
+                pass
+        with open(os.path.join(DEBUG_DIR, f"{ts}_scores.txt"), "w") as f:
+            f.write(f"chosen: {chosen}\n")
+            for sc in scored:
+                f.write(f"  #{sc[1]} total={sc[0]:.3f} shape={sc[2]:.3f} color={sc[3]:.3f}\n")
+    except Exception:
+        pass
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -578,6 +784,7 @@ class FaucetClaimer:
         self.return_url = None
         self.return_token = None
         self.last_prompt = ""
+        self.captcha_html = ""   # simpen HTML captcha page buat auto-extract secret
 
     def visit_faucet(self, coin):
         url = f"{NYX}/{coin}-faucet"
@@ -592,8 +799,9 @@ class FaucetClaimer:
                 time.sleep(5)
         else:
             raise RuntimeError("faucet page gagal load")
-
         html = r.text
+        if DEBUG_MODE:
+            dump_file("faucet_page", html)
         m = re.search(r'var\s+csrf\s*=\s*"([0-9a-fA-F]+)"', html)
         self.csrf = m.group(1) if m else None
         if not self.csrf:
@@ -605,7 +813,6 @@ class FaucetClaimer:
         body = {"csrf": self.csrf, "coin": self.coin, "website": ""}
         if self.email:
             body["email"] = self.email
-
         j = None
         for attempt in range(1, 8):
             slog(f"POST /api/claim ({attempt})", "INFO")
@@ -616,15 +823,11 @@ class FaucetClaimer:
                 slog(f"net error: {str(e)[:40]} — retry 8s", "ERR")
                 time.sleep(8)
                 continue
-
             if not isinstance(j, dict):
-                slog(f"resp bukan JSON: {str(j)[:40]}", "WARN")
                 time.sleep(5)
                 continue
-
             if j.get("success"):
                 break
-
             msg = j.get("message", "") or ""
             cooldown = (r.status_code == 429) or ("Slow down" in msg) or ("Too many attempts" in msg)
             too_fast = "Too fast" in msg
@@ -634,13 +837,11 @@ class FaucetClaimer:
                 time.sleep(wait)
                 continue
             raise RuntimeError(f"claim refused: {msg}")
-
-        if not j or not isinstance(j, dict):
-            raise RuntimeError("start_claim: no valid response")
-        if not j.get("success"):
-            raise RuntimeError(f"claim refused: {j.get('message', '?')}")
-
+        if not j or not j.get("success"):
+            raise RuntimeError(f"claim refused: {j.get('message', '?') if j else '?'}")
         d = j.get("data") or {}
+        if DEBUG_MODE:
+            dump_file("start_claim_resp", j)
         if d.get("redirect"):
             return j, d.get("solve_url"), (d.get("fields") or {})
         return j, None, d
@@ -653,8 +854,29 @@ class FaucetClaimer:
             slog(f"GET captcha page", "INFO")
             r = self.s.get(solve_url, allow_redirects=True)
         html = r.text
+        self.captcha_html = html
+
+        if DEBUG_MODE:
+            p = dump_file("captcha_page", html)
+            slog(f"captcha dumped: {os.path.basename(p)}", "DEBUG")
+
+        # ── AUTO-EXTRACT SIG SECRET ──
+        global _SIG_SECRET
+        extracted = extract_sig_secret_from_html(html)
+        if extracted:
+            if extracted != _SIG_SECRET:
+                slog(f"SECRET updated: {_SIG_SECRET} → {extracted}", "SIG")
+                _SIG_SECRET = extracted
+            else:
+                slog(f"secret ok ({_SIG_SECRET[:8]}...)", "SIG")
+        else:
+            slog(f"secret extract gagal — pakai default", "WARN")
+
         m = re.search(r'var\s+CSRF\s*=\s*"([0-9a-fA-F]+)"', html)
         csrf = m.group(1) if m else None
+        if not csrf:
+            m = re.search(r'var\s+csrf\s*=\s*"([0-9a-fA-F]+)"', html)
+            csrf = m.group(1) if m else None
         if not csrf:
             raise RuntimeError("no CSRF on captcha page")
         return csrf
@@ -662,7 +884,14 @@ class FaucetClaimer:
     def load_challenge(self, csrf):
         r = self.s.post(f"{PXC}/api/captcha",
                         data={"action": "challenge", "csrf_token": csrf})
-        j = r.json()
+        try:
+            j = r.json()
+        except Exception:
+            if DEBUG_MODE:
+                dump_file("challenge_raw", r.text)
+            raise RuntimeError("challenge bukan JSON")
+        if DEBUG_MODE:
+            dump_file("challenge_json", j)
         if not j.get("success"):
             raise RuntimeError(f"challenge failed: {j.get('message')}")
         return j["data"]["challenge"]
@@ -673,27 +902,53 @@ class FaucetClaimer:
             return None
         t_norm_mask, t_gray = norm_glyph_template(t_im, t_bbox)
         t_hist = color_hist(t_colors)
+        t_bytes = t_im.tobytes()
         scored = []
+        exact = []
         for t in challenge.get("tiles", []):
             tid = t["id"]
-            b64 = t["image"].split(",", 1)[1]
-            tim = Image.open(io.BytesIO(base64.b64decode(b64)))
+            try:
+                b64 = t["image"].split(",", 1)[1]
+                tim = Image.open(io.BytesIO(base64.b64decode(b64)))
+            except Exception:
+                continue
+            if tim.size == t_im.size and tim.tobytes() == t_bytes:
+                exact.append(tid)
             _, _, colors, bbox = glyph_data(tim)
             if not bbox:
                 scored.append((0.0, tid, 0.0, 0.0))
                 continue
             v_norm_mask, v_gray = norm_glyph_template(tim, bbox)
-            template = template_align(t_norm_mask, t_gray, v_norm_mask, v_gray)
-            csim = color_cos(t_hist, color_hist(colors))
-            scored.append((template + 0.8 * csim, tid, template, csim))
+            shape = template_align(t_norm_mask, t_gray, v_norm_mask, v_gray)
+            csim = max(0.0, color_cos(t_hist, color_hist(colors)))
+            total = 0.7 * shape + 0.3 * csim
+            scored.append((total, tid, shape, csim))
+        required = challenge.get("required", 1)
+        if exact and len(exact) >= required:
+            slog(f"EXACT match: {exact[:required]}", "CAP")
+            for tid in exact[:required]:
+                for i, s in enumerate(scored):
+                    if s[1] == tid:
+                        scored[i] = (1.0, s[1], 1.0, 1.0)
         scored.sort(key=lambda x: x[0], reverse=True)
         if scored:
-            slog(f"emoji={emoji} → #{scored[0][1]} (score {scored[0][0]:.2f})", "CAP")
+            top3 = " | ".join(f"#{s[1]}={s[0]:.2f}" for s in scored[:3])
+            slog(f"emoji={emoji} → top3 {top3}", "CAP")
         return scored
 
     def solve_challenge(self, challenge):
         required = challenge.get("required", 1)
         self.last_prompt = challenge.get("prompt", "")
+        if DEBUG_MODE:
+            dump_file("prompt_info", {
+                "prompt": self.last_prompt,
+                "prompt_repr": repr(self.last_prompt),
+                "prompt_codepoints": [hex(ord(c)) for c in self.last_prompt],
+                "required": required,
+                "tiles_count": len(challenge.get("tiles", [])),
+                "tile_ids": [t.get("id") for t in challenge.get("tiles", [])],
+                "nonce_k": challenge.get("k"),
+            })
         target = None
         emoji = None
         if HAS_PIL:
@@ -708,26 +963,56 @@ class FaucetClaimer:
             if target is not None:
                 scored = self.score_challenge(challenge, emoji or "", target)
                 if scored:
-                    return [t[1] for t in scored[:required]]
+                    chosen = [t[1] for t in scored[:required]]
+                    dump_captcha_images(challenge, target, scored, chosen)
+                    return chosen
         slog("no vision — guessing random", "WARN")
         ids = [t["id"] for t in challenge.get("tiles", [])]
         return random.sample(ids, min(required, len(ids)))
 
     def verify_captcha(self, csrf, challenge, chosen):
-        now = int(time.time() * 1000)
         clicks = []
-        for i, tid in enumerate(chosen):
-            if i:
-                now += random.randint(700, 1600)
+        for tid in chosen:
             clicks.append(("antibot_order[]", tid))
-            clicks.append(("antibot_click_ms[]", str(now)))
-        body = [("action", "verify"), ("csrf_token", csrf)] + clicks
+            clicks.append(("antibot_click_ms[]", str(int(time.time() * 1000))))
+        nonce = challenge.get("k", "")
+        if not nonce:
+            raise RuntimeError("no nonce (challenge.k)")
+        sig = antibot_sig(nonce, flags=3)
+        slog(f"sig={sig} nonce={nonce}", "SIG")
+        body = (
+            [("action", "verify"), ("csrf_token", csrf)]
+            + clicks
+            + [("antibot_sig", sig)]
+        )
+        if DEBUG_MODE:
+            dump_file("verify_request", {
+                "url": f"{PXC}/api/captcha",
+                "csrf": csrf,
+                "chosen": chosen,
+                "nonce": nonce,
+                "sig": sig,
+                "flags": 3,
+                "secret_used": _SIG_SECRET,
+                "payload_str": "&".join(f"{k}={v}" for k, v in body),
+            })
         r = self.s.post(f"{PXC}/api/captcha", data=body)
-        j = r.json()
+        if DEBUG_MODE:
+            try:
+                resp_j = r.json()
+                dump_file("verify_response", {"status": r.status_code, "body": resp_j})
+            except Exception:
+                dump_file("verify_response_raw", r.text)
+        try:
+            j = r.json()
+        except Exception:
+            return None
         if j.get("success"):
             return j["data"]["redirect_url"]
         if j.get("errors") and j["errors"].get("locked"):
             raise RuntimeError("captcha locked")
+        if j.get("message"):
+            slog(f"verify resp: {j.get('message')[:45]}", "VERIFY")
         return None
 
     def confirm_and_claim(self):
@@ -754,15 +1039,12 @@ class FaucetClaimer:
 
     def run(self, coin, max_tries=10):
         self.visit_faucet(coin)
-
         delay = random.randint(2, 4)
         slog(f"wait {delay}s human delay", "WAIT")
         time.sleep(delay)
-
         claim_j, solve_url, payload = self.start_claim()
         if not solve_url:
             return claim_j
-
         q = urllib.parse.urlparse(solve_url)
         qp = urllib.parse.parse_qs(q.query)
         fields = payload
@@ -770,7 +1052,6 @@ class FaucetClaimer:
         self.sub_id = fields.get("sub_id") or (qp.get("sub_id") or [None])[0]
         if not self.sub_id:
             raise RuntimeError("no sub_id")
-
         csrf = self.enter_captcha(solve_url, fields)
         for attempt in range(1, max_tries + 1):
             STATE["solve_attempt"] = attempt
@@ -809,17 +1090,13 @@ def claim_once(email, coin, max_tries):
         slog(f"unexpected: {str(e)[:45]}", "ERR")
         clear_render()
         return False, None
-
     if not isinstance(result, dict):
         STATE["failures"] += 1
-        slog("response bukan dict", "ERR")
         clear_render()
         return False, None
-
     d = result.get("data") if isinstance(result.get("data"), dict) else result
     coin_str = d.get("coin", coin) or coin
     amount   = d.get("coin_amount", "") or d.get("units", "") or "?"
-
     STATE["claims"] += 1
     STATE["failures"] = 0
     STATE["currency"] = str(coin_str).upper()
@@ -827,14 +1104,13 @@ def claim_once(email, coin, max_tries):
         STATE["rewards"] += float(str(amount).replace(",", "") or 0)
     except Exception:
         pass
-
     slog(f"CLAIMED +{amount} {str(coin_str).upper()}", "OK")
     clear_render()
     return True, result
 
 
 # ═══════════════════════════════════════════════════════════════
-#  COOLDOWN HELPERS
+#  COOLDOWN
 # ═══════════════════════════════════════════════════════════════
 def check_cooldown(coin):
     end = STATE["cooldowns"].get(coin.upper(), 0)
@@ -847,7 +1123,6 @@ def set_cooldown(coin, seconds):
 
 
 def all_coins_cd(coins_list):
-    """True kalau SEMUA coin masih CD."""
     for c in coins_list:
         if check_cooldown(c) <= 0:
             return False
@@ -855,7 +1130,6 @@ def all_coins_cd(coins_list):
 
 
 def min_cooldown(coins_list):
-    """Detik CD paling cepat."""
     best = None
     for c in coins_list:
         cd = check_cooldown(c)
@@ -869,34 +1143,26 @@ def min_cooldown(coins_list):
 #  RUNNER
 # ═══════════════════════════════════════════════════════════════
 def wait_all_cd(coins_list):
-    """Tampilin countdown sampe ada minimal 1 coin yang ready."""
     while all_coins_cd(coins_list):
         left = min_cooldown(coins_list)
         if left <= 0:
             break
-
-        # data CD per coin
         coins_cd = [(c.upper(), check_cooldown(c)) for c in coins_list]
-
-        # render countdown
         if os.name == "nt":
             os.system("cls")
         else:
             os.system("clear")
         countdown_render(left, coins_cd)
-
         time.sleep(1)
 
 
 def run_claims(cfg, coins_list, mode_label):
     email = cfg.get("email", "")
     max_tries = int(cfg.get("max_tries", 10))
-
     if not email:
         print(RED + "email kosong. Edit config [3]" + RST)
         input("\n  ENTER...")
         return
-
     STATE["email"] = email
     STATE["coins_mode"] = mode_label
     STATE["claims"] = 0
@@ -906,10 +1172,9 @@ def run_claims(cfg, coins_list, mode_label):
     STATE["logs"] = []
     STATE["cooldowns"] = {}
     STATE["solve_attempt"] = 0
-
     slog(f"Starting — {mode_label}", "AUTH")
+    slog(f"Sig secret: {_SIG_SECRET}", "SIG")
     clear_render()
-
     round_n = 0
     try:
         while True:
@@ -917,23 +1182,18 @@ def run_claims(cfg, coins_list, mode_label):
                 slog("max runtime reached", "WARN")
                 clear_render()
                 break
-
             if STATE["failures"] >= STATE["max_failures"]:
                 slog(f"max failures ({STATE['max_failures']})", "ERR")
                 clear_render()
                 break
-
             round_n += 1
             slog(f"Round #{round_n}", "INFO")
             clear_render()
-
             for c in coins_list:
-                # cek runtime tiap iterasi
                 if (time.time() - STATE["runtime_start"]) >= STATE["max_runtime"]:
                     break
                 if STATE["failures"] >= STATE["max_failures"]:
                     break
-
                 cd = check_cooldown(c)
                 if cd > 0:
                     STATE["current_coin"] = c.upper()
@@ -942,41 +1202,31 @@ def run_claims(cfg, coins_list, mode_label):
                     slog(f"{c.upper()} CD {m:02d}:{s:02d} — skip", "CD")
                     clear_render()
                     continue
-
                 STATE["current_coin"] = c.upper()
                 slog(f"Claim {c.upper()}", "INFO")
                 clear_render()
-
                 ok, _ = claim_once(email, c, max_tries)
-
                 if ok:
-                    set_cooldown(c, 300)   # 5 menit
+                    set_cooldown(c, 300)
                     if len(coins_list) > 1:
                         time.sleep(random.randint(3, 6))
                 else:
-                    set_cooldown(c, 60)    # 1 menit
-
-            # kalau SEMUA coin CD, tampilin countdown
+                    set_cooldown(c, 60)
             if all_coins_cd(coins_list):
-                # log ke feed dulu
                 left = min_cooldown(coins_list)
                 m = left // 60
                 s = left % 60
                 slog(f"All CD — next claim in {m:02d}:{s:02d}", "WAIT")
                 wait_all_cd(coins_list)
                 clear_render()
-
-            # jeda pendek antar cycle
             slog("Cycle done — sleep 3s", "WAIT")
             clear_render()
             for _ in range(3):
                 time.sleep(1)
-
     except KeyboardInterrupt:
         slog("interrupted", "WARN")
         clear_render()
         time.sleep(1)
-
     clear_render()
     print()
     print("  " + CYN + "◉ Bot stopped." + RST)
@@ -1001,29 +1251,33 @@ def show_menu(cfg):
     title = BOLD + WHT + "NYXTAP AUTO CLAIM" + RST
     pad = (W - len(cstrip(title))) // 2
     print(CYN + "║" + RST + " " * pad + title + " " * (W - pad - len(cstrip(title))) + CYN + "║" + RST)
-    sub = DIM + "─────── SOUU ENGINE ───────" + RST
+    sub = DIM + "─────── SOUU ENGINE v4.6 ───────" + RST
     pad = (W - len(cstrip(sub))) // 2
     print(CYN + "║" + RST + " " * pad + sub + " " * (W - pad - len(cstrip(sub))) + CYN + "║" + RST)
     print(CYN + "╠" + "═" * W + "╣" + RST)
-
     email_short = cfg.get("email", "?")
     if len(email_short) > 30:
         email_short = email_short[:16] + "..." + email_short[-10:]
-
+    pil_str = (GRN + "✓ AKTIF" + RST) if HAS_PIL else (RED + "✗ TIDAK ADA" + RST)
+    dbg_str = (GRN + "ON" + RST) if DEBUG_MODE else (DIM + "off" + RST)
     print(line("├─ Email    : " + CYN + email_short + RST))
     print(line("├─ Max tries: " + CYN + str(cfg.get("max_tries", 10)) + RST))
+    print(line("├─ Pillow   : " + pil_str))
+    print(line("├─ Sig Key  : " + CYN + _SIG_SECRET + RST))
+    print(line("├─ Debug    : " + dbg_str))
     print(line("├─ Group    : " + NC + TG_GROUP + RST))
     print(line("└─ Credit   : " + NP + "@SouuXso" + RST + DIM + " / " + CYN + TG_TAG + RST))
     print(CYN + "╠" + "═" * W + "╣" + RST)
-
     print(line(ORG + "[1]" + RST + " Single coin"))
     print(line(ORG + "[2]" + RST + " All claim coins"))
     print(line(ORG + "[3]" + RST + " Edit config"))
     print(line(ORG + "[4]" + RST + " Reset config"))
+    print(line(ORG + "[6]" + RST + " Toggle debug dump"))
+    if not HAS_PIL:
+        print(line(MAG + "[5]" + RST + " " + RED + "Install Pillow" + RST))
     print(line(GRY + "[0]" + RST + " Exit"))
     print(CYN + "╚" + "═" * W + "╝" + RST)
     print()
-
     try:
         return input("  " + GRY + ">> " + RST).strip()
     except (EOFError, KeyboardInterrupt):
@@ -1055,12 +1309,15 @@ def choose_coin():
 #  MAIN
 # ═══════════════════════════════════════════════════════════════
 def main():
+    global DEBUG_MODE
+    pillow_preflight(interactive=True)
     cfg = load_config()
     if cfg:
         os.system("clear")
         print()
         print("  " + GRN + "✓ Config found" + RST)
         print("  " + DIM + f"Email : {cfg['email']}" + RST)
+        print("  " + DIM + f"Secret: " + CYN + _SIG_SECRET + RST)
         print()
         ans = read_line("  " + YEL + "Use saved? (y/n): " + RST).lower()
         if ans == "n":
@@ -1069,17 +1326,25 @@ def main():
     else:
         cfg = setup()
         save_config(cfg)
-
     while True:
         choice = show_menu(cfg)
-
         if choice == "0":
             os.system("clear")
             print()
             print("  " + YEL + "Bye bos." + RST)
             print()
             return
-
+        if choice == "5" and not HAS_PIL:
+            pillow_preflight(interactive=True)
+            continue
+        if choice == "6":
+            DEBUG_MODE = not DEBUG_MODE
+            print()
+            print("  " + (GRN + "✓ Debug ON" if DEBUG_MODE else YEL + "✓ Debug OFF") + RST)
+            if DEBUG_MODE:
+                print("  " + DIM + f"Dump folder: {DEBUG_DIR}" + RST)
+            time.sleep(1.5)
+            continue
         if choice == "3":
             try:
                 os.remove(CONFIG_FILE)
@@ -1088,7 +1353,6 @@ def main():
             cfg = setup()
             save_config(cfg)
             continue
-
         if choice == "4":
             try:
                 os.remove(CONFIG_FILE)
@@ -1100,13 +1364,11 @@ def main():
             cfg = setup()
             save_config(cfg)
             continue
-
         if choice == "1":
             coin = choose_coin()
             run_claims(cfg, [coin], f"SINGLE — {coin.upper()}")
             input("\n  Tekan ENTER untuk balik ke menu...")
             continue
-
         if choice == "2":
             run_claims(cfg, COINS[:], f"ALL — {len(COINS)} COINS")
             input("\n  Tekan ENTER untuk balik ke menu...")
