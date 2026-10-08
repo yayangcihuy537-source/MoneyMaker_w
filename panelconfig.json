@@ -64,7 +64,7 @@
           "runner": "python3"
         },
         "4": {
-          "label": "Makeyoutask 🔴",
+          "label": "Makeyoutask 🟢",
           "file": "myt.php",
           "runner": "php"
         },
