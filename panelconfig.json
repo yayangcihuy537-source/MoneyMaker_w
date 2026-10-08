@@ -164,9 +164,9 @@
           "runner": "python3"
         },
         "24": {
-          "label": "Coming Soon 🔵",
-          "file": "ComingSoon.php",
-          "runner": "php"
+          "label": "Bigbtc.win",
+          "file": "bigbtcwin.js",
+          "runner": "node"
         }
       }
     },
