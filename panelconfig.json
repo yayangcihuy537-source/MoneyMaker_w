@@ -79,7 +79,7 @@
           "runner": "python3"
         },
         "7": {
-          "label": "99Faucet 🟢",
+          "label": "99Faucet 🔴",
           "file": "99faucet.php",
           "runner": "php"
         },
@@ -109,7 +109,7 @@
           "runner": "php"
         },
         "13": {
-          "label": "CryptoFuture 🟢",
+          "label": "CryptoFuture 🔴",
           "file": "Future.php",
           "runner": "php"
         },
@@ -129,7 +129,7 @@
           "runner": "python3"
         },
         "17": {
-          "label": "FireFaucet 🟢",
+          "label": "FireFaucet 🔴",
           "file": "FireFaucet.php",
           "runner": "php"
         },
@@ -229,7 +229,7 @@
           "runner": "python3"
         },
         "12": {
-          "label": "MineSlpy 🟢",
+          "label": "MineSlpy 🟡",
           "file": "fruit.py",
           "runner": "python3"
         },
@@ -254,7 +254,7 @@
           "runner": "python3"
         },
         "17": {
-          "label": "NewTube 🟢",
+          "label": "NewTube 🔴",
           "file": "newtube.py",
           "runner": "python3"
         },
