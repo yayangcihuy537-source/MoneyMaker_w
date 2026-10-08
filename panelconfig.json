@@ -4,7 +4,7 @@
       "name": "NonApikey ",
       "items": {
         "1": {
-          "label": "TronBlow 🔴",
+          "label": "TronBlow 🟢",
           "file": "Tronblow.php",
           "runner": "php"
         },
@@ -19,7 +19,7 @@
           "runner": "php"
         },
         "4": {
-          "label": "Aruble 🔴",
+          "label": "Aruble 🟢",
           "file": "aruble.php",
           "runner": "php"
         },
@@ -29,18 +29,8 @@
           "runner": "python3"
         },
         "6": {
-          "label": "freeflarcrypto 🔴",
-          "file": "solono.py",
-          "runner": "python3"
-        },
-        "7": {
-          "label": "CentPay 🔴",
+          "label": "CentPay X freeflarcrypto 🟢",
           "file": "CentPay.py",
-          "runner": "python3"
-        },
-        "8": {
-          "label": "Nyxtap 🔴",
-          "file": "nyxtap.py",
           "runner": "python3"
         }
       }
@@ -149,7 +139,7 @@
           "runner": "php"
         },
         "21": {
-          "label": "Coinadster 🔴",
+          "label": "Coinadster 🟢",
           "file": "coinadster.php",
           "runner": "php"
         },
@@ -169,7 +159,7 @@
       "name": "Telegram / MiniApp ",
       "items": {
         "1": {
-          "label": "CoinFree X FaucetMini X Coinplay X FaucetFi 🔴",
+          "label": "CoinFree X FaucetMini X Coinplay X FaucetFi 🟡",
           "file": "4in1.php",
           "runner": "php"
         },
