@@ -11,7 +11,7 @@
 error_reporting(0);
 set_time_limit(0);
 
-define("SOOU_VERSION", "v2.4");
+define("SOOU_VERSION", "v2.5");
 define("SOOU_AUTHOR",  "MoneyMaker_w");
 define("SOOU_TAGLINE", "No AdGate • No Shortlink • Direct Claim");
 define("CONFIG_FILE",  __DIR__ . "/souu_config.json");
@@ -670,6 +670,147 @@ function extract_title($html) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  TASK REQUIRED PAUSE
+// ═══════════════════════════════════════════════════════════════
+function task_required_pause($msg, $taskNeeded, $cfg, $api) {
+    global $DASH;
+
+    dash_set('stage', 'TASK');
+    dash_set('status', "Task required — {$taskNeeded} needed");
+
+    dash_log("[!]", "TASK  ", "faucet butuh {$taskNeeded} task tambahan", "\033[1;33m");
+    dash_log("[i]", "TASK  ", "selesaikan offers/PTC/shortlinks/videos dulu", "\033[1;36m");
+    dash_render();
+
+    // Box UI
+    echo "\n";
+    echo "\033[38;5;208m╔══════════════════════════════════════════════════════════════╗\033[0m\n";
+    echo "\033[38;5;208m║\033[0m  \033[1;33m⚠  TASK REQUIRED — ACTION NEEDED\033[0m                          \033[38;5;208m║\033[0m\n";
+    echo "\033[38;5;208m╠══════════════════════════════════════════════════════════════╣\033[0m\n";
+    echo "\033[38;5;208m║\033[0m                                                              \033[38;5;208m║\033[0m\n";
+    echo "\033[38;5;208m║\033[0m  \033[1;37mServer message:\033[0m                                           \033[38;5;208m║\033[0m\n";
+
+    // wrap message
+    $cleanMsg = strip_tags($msg);
+    $lines = explode("\n", wordwrap($cleanMsg, 56, "\n", true));
+    foreach ($lines as $line) {
+        $pad = 56 - mb_strlen($line);
+        if ($pad < 0) $pad = 0;
+        echo "\033[38;5;208m║\033[0m  \033[38;5;245m" . $line . str_repeat(" ", $pad) . "\033[0m  \033[38;5;208m║\033[0m\n";
+    }
+    echo "\033[38;5;208m║\033[0m                                                              \033[38;5;208m║\033[0m\n";
+    echo "\033[38;5;208m╠══════════════════════════════════════════════════════════════╣\033[0m\n";
+    echo "\033[38;5;208m║\033[0m  \033[1;33mLangkah yang harus lo lakuin:\033[0m                            \033[38;5;208m║\033[0m\n";
+    echo "\033[38;5;208m║\033[0m                                                              \033[38;5;208m║\033[0m\n";
+    echo "\033[38;5;208m║\033[0m  \033[1;37m1. Buka browser, login ke aruble.net\033[0m                       \033[38;5;208m║\033[0m\n";
+    echo "\033[38;5;208m║\033[0m  \033[1;37m2. Selesaikan \033[1;36m" . str_pad($taskNeeded, 2, " ", STR_PAD_LEFT) . " task\033[0m \033[1;37m(offers/PTC/shortlinks/videos)\033[0m  \033[38;5;208m║\033[0m\n";
+    echo "\033[38;5;208m║\033[0m  \033[1;37m3. Balik ke script ini, ketik \033[1;32my\033[0m \033[1;37mbuat lanjut\033[0m              \033[38;5;208m║\033[0m\n";
+    echo "\033[38;5;208m║\033[0m                                                              \033[38;5;208m║\033[0m\n";
+    echo "\033[38;5;208m╠══════════════════════════════════════════════════════════════╣\033[0m\n";
+    echo "\033[38;5;208m║\033[0m  \033[1;32m[y]\033[0m \033[1;37mTask udah selesai, lanjut claim\033[0m                    \033[38;5;208m║\033[0m\n";
+    echo "\033[38;5;208m║\033[0m  \033[1;33m[c]\033[0m \033[1;37mCek status task lagi\033[0m                            \033[38;5;208m║\033[0m\n";
+    echo "\033[38;5;208m║\033[0m  \033[1;31m[q]\033[0m \033[1;37mKeluar dari farming\033[0m                              \033[38;5;208m║\033[0m\n";
+    echo "\033[38;5;208m╚══════════════════════════════════════════════════════════════╝\033[0m\n\n";
+
+    while (true) {
+        echo "\033[1;35mSouuEngine\033[0m \033[1;36m»\033[0m \033[1;33mPilih\033[0m \033[1;37m[\033[1;32my\033[1;37m/\033[1;33mc\033[1;37m/\033[1;31mq\033[1;37m]\033[0m \033[1;35m>\033[0m ";
+        $ans = strtolower(trim(fgets(STDIN)));
+
+        if ($ans === 'y') {
+            dash_log("[>]", "TASK  ", "user lanjut, verify ulang faucet...", "\033[1;36m");
+
+            $check = http_get('https://aruble.net/faucet', $api);
+            sleep(2);
+            $checkBody = $check['body'];
+
+            // cek masih ada task required atau engga
+            if (preg_match('/complete\s+(\d+)\s+more\s+task/i', $checkBody, $tm2)) {
+                $newNeeded = (int)$tm2[1];
+                dash_log("[!]", "TASK  ", "task belum selesai, masih butuh {$newNeeded}", "\033[1;31m");
+                echo "\n \033[38;5;208m⚠ Task belum selesai. Selesaikan {$newNeeded} task lagi, terus ketik 'y'.\033[0m\n\n";
+                continue;
+            }
+
+            // coba claim ulang
+            dash_log("[>]", "FAUCET", "coba claim ulang...", "\033[1;36m");
+            $csrf2 = extract_csrf($checkBody);
+            if (!$csrf2) {
+                dash_log("[X]", "FAUCET", "no csrf, back to loop", "\033[1;31m");
+                return;
+            }
+
+            // handle meta refresh
+            if (preg_match('/<meta http-equiv="refresh" content="0;url=([^"]+)"/i', $checkBody, $mr)) {
+                $check = http_get(trim($mr[1]), $api);
+                sleep(2);
+                $csrf2 = extract_csrf($check['body']);
+                if (!$csrf2) {
+                    dash_log("[X]", "FAUCET", "no csrf after refresh", "\033[1;31m");
+                    return;
+                }
+            }
+
+            $token = souuSolve($csrf2, $api, '/faucet');
+            if (!$token) {
+                dash_log("[X]", "FAUCET", "captcha failed, balik loop", "\033[1;31m");
+                return;
+            }
+
+            dash_set('status', 'Faucet - retry claim');
+            $body2 = "dest=account&wc_id=0&captcha_token=$token&fp=0d2be167b01027c02ec8e88326aaa91d26c20f1794b4c221d905fa603846c7c3&_csrf_token=$csrf2";
+            $retry = http_post('https://aruble.net/faucet/claim', $body2, $api, 'https://aruble.net/faucet');
+            $retryData = json_decode($retry, true);
+
+            if ($retryData && ($retryData['success'] ?? false)) {
+                $amount    = $retryData['amount'];
+                $symbol    = $retryData['symbol'];
+                $balance   = $retryData['balance_after'];
+                $cooldownF = $retryData['next_claim_in'];
+                $DASH['claims']++;
+                $DASH['total_reward'] += (float)$amount;
+                $DASH['last_reward'] = $amount;
+                $DASH['currency'] = $symbol;
+                $DASH['balance'] = $balance;
+                dash_log("[OK]", "FAUCET", "+{$amount} {$symbol} | Balance {$balance}", "\033[1;32m");
+                dash_log("[>]", "TASK  ", "task clear, balik ke cycle", "\033[1;32m");
+                dash_timer($cooldownF, "Cooldown");
+                return;
+            } else {
+                $retryMsg = $retryData['message'] ?? 'unknown';
+                if (preg_match('/complete\s+(\d+)\s+more\s+task/i', $retryMsg, $tm3)) {
+                    $newNeeded = (int)$tm3[1];
+                    dash_log("[!]", "TASK  ", "masih butuh {$newNeeded} task, ulangi", "\033[1;33m");
+                    continue;
+                } else {
+                    dash_log("[X]", "FAUCET", "retry failed: {$retryMsg}", "\033[1;31m");
+                    return;
+                }
+            }
+        }
+
+        if ($ans === 'c') {
+            dash_log("[>]", "TASK  ", "re-check status task...", "\033[1;36m");
+            $check = http_get('https://aruble.net/faucet', $api);
+            sleep(2);
+
+            if (preg_match('/complete\s+(\d+)\s+more\s+task[^<]*/i', $check['body'], $mm)) {
+                dash_log("[!]", "TASK  ", "masih butuh task: " . trim($mm[0]), "\033[1;33m");
+            } else {
+                dash_log("[OK]", "TASK  ", "task udah selesai, ketik 'y' buat lanjut", "\033[1;32m");
+            }
+            continue;
+        }
+
+        if ($ans === 'q') {
+            dash_log("[!]", "TASK  ", "keluar dari farming", "\033[1;33m");
+            return;
+        }
+
+        echo "\n \033[1;31m⚠ Pilihan ga valid. Ketik y / c / q.\033[0m\n\n";
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  FARMING
 // ═══════════════════════════════════════════════════════════════
 function start_farming($cfg) {
@@ -937,7 +1078,6 @@ function start_farming($cfg) {
             start_farming($cfg);
             return;
         } else {
-            // Cek cooldown — kalau > 0 baru tunggu, kalau 0 lanjut
             $cd = 0;
             if (preg_match('/globalCooldown\s*:\s*(\d+)/', $r['body'], $m)) {
                 $cd = (int)$m[1];
@@ -969,7 +1109,12 @@ function start_farming($cfg) {
                         dash_timer($cooldownF, "Cooldown");
                     } else {
                         $msg = $data['message'] ?? 'failed';
-                        if (stripos($msg, 'daily limit') !== false) {
+
+                        // ═══ DETEKSI TASK REQUIRED ═══
+                        if (preg_match('/complete\s+(\d+)\s+more\s+task/i', $msg, $tm)) {
+                            $taskNeeded = (int)$tm[1];
+                            task_required_pause($msg, $taskNeeded, $cfg, $api);
+                        } elseif (stripos($msg, 'daily limit') !== false) {
                             dash_log("[!]", "FAUCET", "daily limit, next cycle", "\033[1;33m");
                         } else {
                             dash_log("[X]", "FAUCET", $msg, "\033[1;31m");
