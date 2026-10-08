@@ -2,8 +2,8 @@
 
 error_reporting(0);
 date_default_timezone_set('Asia/Jakarta');
-$configFile = "conmytfig.json";
-$waryono = "cookimytes.txt";
+$configFile = "myt.json";
+$waryono = "myt.txt";
 
 const hitam  = "\033[0;30m";
 const merah  = "\033[0;31m";
