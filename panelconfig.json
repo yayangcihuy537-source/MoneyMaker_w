@@ -164,7 +164,7 @@
           "runner": "python3"
         },
         "24": {
-          "label": "Bigbtc.win",
+          "label": "Bigbtc.win 🟢",
           "file": "bigbtcwin.js",
           "runner": "node"
         }
