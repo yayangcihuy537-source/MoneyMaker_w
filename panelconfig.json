@@ -14,7 +14,7 @@
           "runner": "python3"
         },
         "3": {
-          "label": "ClaimX 🔴",
+          "label": "ClaimX 🟢",
           "file": "ClaimX.php",
           "runner": "php"
         },
@@ -79,7 +79,7 @@
           "runner": "python3"
         },
         "7": {
-          "label": "99Faucet 🔴",
+          "label": "99Faucet 🟢",
           "file": "99faucet.php",
           "runner": "php"
         },
@@ -124,7 +124,7 @@
           "runner": "python3"
         },
         "16": {
-          "label": "FireFaucet 🔴",
+          "label": "FireFaucet 🟢",
           "file": "FireFaucet.php",
           "runner": "php"
         },
@@ -254,7 +254,7 @@
           "runner": "python3"
         },
         "17": {
-          "label": "NewTube 🔴",
+          "label": "NewTube 🟢",
           "file": "newtube.py",
           "runner": "python3"
         },
