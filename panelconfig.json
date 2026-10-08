@@ -4,7 +4,7 @@
       "name": "NonApikey ",
       "items": {
         "1": {
-          "label": "TronBlow 🟢",
+          "label": "TronBlow 🔴",
           "file": "Tronblow.php",
           "runner": "php"
         },
@@ -29,17 +29,17 @@
           "runner": "python3"
         },
         "6": {
-          "label": "freeflarcrypto 🟢",
+          "label": "freeflarcrypto 🔴",
           "file": "solono.py",
           "runner": "python3"
         },
         "7": {
-          "label": "CentPay 🟢",
+          "label": "CentPay 🔴",
           "file": "CentPay.py",
           "runner": "python3"
         },
         "8": {
-          "label": "Nyxtap 🟢",
+          "label": "Nyxtap 🔴",
           "file": "nyxtap.py",
           "runner": "python3"
         }
@@ -64,7 +64,7 @@
           "runner": "python3"
         },
         "4": {
-          "label": "Makeyoutask 🟢",
+          "label": "Makeyoutask 🔴",
           "file": "myt.php",
           "runner": "php"
         },
@@ -119,7 +119,7 @@
           "runner": "php"
         },
         "15": {
-          "label": "ClaimCoin 🟢",
+          "label": "ClaimCoin 🔴",
           "file": "Claimcoin.py",
           "runner": "python3"
         },
@@ -154,7 +154,7 @@
           "runner": "php"
         },
         "22": {
-          "label": "Coinadster 🟢",
+          "label": "Coinadster 🔴",
           "file": "coinadster.php",
           "runner": "php"
         },
@@ -174,7 +174,7 @@
       "name": "Telegram / MiniApp ",
       "items": {
         "1": {
-          "label": "CoinFree X FaucetMini X Coinplay X FaucetFi 🟡",
+          "label": "CoinFree X FaucetMini X Coinplay X FaucetFi 🔴",
           "file": "4in1.php",
           "runner": "php"
         },
@@ -229,7 +229,7 @@
           "runner": "python3"
         },
         "12": {
-          "label": "MineSlpy 🟡",
+          "label": "MineSlpy 🔴",
           "file": "fruit.py",
           "runner": "python3"
         },
@@ -244,7 +244,7 @@
           "runner": "python3"
         },
         "15": {
-          "label": "Prism1bot 🟡",
+          "label": "Prism1bot 🔴",
           "file": "Prism1bot.py",
           "runner": "python3"
         },
