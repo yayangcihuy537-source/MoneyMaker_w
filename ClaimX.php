@@ -1,7 +1,9 @@
 <?php
 /**
- * CLAIMX AUTO CLAIM BOT v8.2
- * Fixed: fetch fail detection + auto re-login + retry
+ * CLAIMX AUTO CLAIM BOT v9.0
+ * + Auto-detect VIP (limit 100 → 300)
+ * + Unlimited mode (pop-faucet, no limit)
+ * + Auto-switch mode kalau limit reached
  */
 
 error_reporting(E_ALL & ~E_WARNING & ~E_NOTICE & ~E_DEPRECATED);
@@ -20,15 +22,18 @@ define('B_GREEN', "\033[1;32m");
 define('B_YELLOW',"\033[1;33m");
 define('B_CYAN',  "\033[1;36m");
 define('B_WHITE', "\033[1;37m");
+define('B_MAGENTA',"\033[1;35m");
 define('DIM',     "\033[2m");
 
 // ─── CONFIG ───
 const HOST = 'https://claimx.online';
-const MAX_DAILY_CLAIMS = 100;
+const MAX_DAILY_CLAIMS_DEFAULT = 100;
+const MAX_DAILY_CLAIMS_VIP = 300;
 const CONFIG_FILE = 'claimx_config.json';
 const COOKIE_FILE = 'claimx_cookie.txt';
 const DAILY_FILE  = 'claimx_daily.txt';
 const AD_VIEW_SECONDS = 6;
+const POP_VIEW_SECONDS = 10;
 const MIN_CLAIM_DELAY = 3;
 const MAX_CLAIM_DELAY = 6;
 
@@ -38,11 +43,11 @@ function clearScreen() { (PHP_OS == "Linux") ? system('clear') : pclose(popen('c
 function printBanner() {
     clearScreen();
     echo B_CYAN . "==================================================\n";
-    echo B_CYAN . "  " . B_WHITE . "ClaimX Auto Claim Bot v8.2" . B_CYAN . "  \n";
+    echo B_CYAN . "  " . B_WHITE . "ClaimX Auto Claim Bot v9.0" . B_CYAN . "  \n";
     echo B_CYAN . "==================================================\n";
-    echo B_CYAN . "  Icon Captcha + Ad-Verify API\n";
-    echo B_CYAN . "  Limit: " . MAX_DAILY_CLAIMS . " claim/day\n";
-    echo B_CYAN . "  Cooldown server: ~2s\n";
+    echo B_CYAN . "  Unlimited Faucet + VIP Auto-Detect\n";
+    echo B_CYAN . "  Regular: 100/day  |  VIP: 300/day\n";
+    echo B_CYAN . "  Unlimited Mode: no daily limit\n";
     echo B_CYAN . "==================================================\n\n";
 }
 
@@ -150,8 +155,8 @@ function parseIconCaptcha($html) {
     $target = null;
     $choices = [];
 
-    // Target icon
-    if (preg_match_all('/<div[^>]*class=["\'][^"\']*border-warning[^"\']*["\'][^>]*>\s*<i[^>]*class=["\']([^"\']+)["\'][^>]*>\s*<\/i>/si', $html, $ms)) {
+    // Target: cari div dengan class yang mengandung text-warning / border-warning
+    if (preg_match_all('/<div[^>]*class=["\'][^"\']*(?:text-warning|border-warning)[^"\']*["\'][^>]*>\s*<i[^>]*class=["\']([^"\']+)["\'][^>]*>\s*<\/i>/si', $html, $ms)) {
         foreach ($ms[1] as $cls) {
             if (preg_match('/\bbi-[a-z0-9\-]+/i', $cls, $ic)) {
                 $target = $ic[0];
@@ -160,16 +165,8 @@ function parseIconCaptcha($html) {
         }
     }
 
-    if (!$target) {
-        if (preg_match('/<div[^>]*class=["\'][^"\']*text-warning[^"\']*["\'][^>]*>\s*<i[^>]*class=["\']([^"\']+)["\'][^>]*>\s*<\/i>/si', $html, $m)) {
-            if (preg_match('/\bbi-[a-z0-9\-]+/i', $m[1], $ic)) {
-                $target = $ic[0];
-            }
-        }
-    }
-
-    // Choices
-    if (preg_match_all('/<button[^>]*data-key=["\']([^"\']+)["\'][^>]*>(.*?)<\/button>/si', $html, $ms, PREG_SET_ORDER)) {
+    // Choices: button dengan data-key
+    if (preg_match_all('/<button[^>]*class=["\'][^"\']*icon-captcha-btn[^"\']*["\'][^>]*data-key=["\']([^"\']+)["\'][^>]*>(.*?)<\/button>/si', $html, $ms, PREG_SET_ORDER)) {
         foreach ($ms as $m) {
             $key = $m[1];
             $inner = $m[2];
@@ -187,24 +184,92 @@ function parseIconCaptcha($html) {
 function matchIcon($target, $choices) {
     if (!$target || empty($choices)) return null;
 
-    $targetIcon = null;
-    if (preg_match('/\bbi-[a-z0-9\-]+/i', $target, $m)) {
-        $targetIcon = $m[0];
-    } else {
-        $targetIcon = $target;
-    }
+    $targetIcon = preg_match('/\bbi-[a-z0-9\-]+/i', $target, $m) ? $m[0] : $target;
 
     foreach ($choices as $c) {
         if (strcasecmp($targetIcon, $c['icon']) === 0) return $c['key'];
     }
-
     $targetPart = preg_replace('/^bi-/', '', $targetIcon);
     foreach ($choices as $c) {
         $choicePart = preg_replace('/^bi-/', '', $c['icon']);
         if (strcasecmp($targetPart, $choicePart) === 0) return $c['key'];
     }
-
     return null;
+}
+
+/**
+ * Auto-detect VIP status dari HTML page.
+ * Return: ['vip'=>bool, 'tier'=>string, 'limit'=>int]
+ */
+function detectVIP($html) {
+    $vip = false;
+    $tier = 'Free';
+    $limit = MAX_DAILY_CLAIMS_DEFAULT;
+
+    // Cari badge VIP / plan name
+    $vipKeywords = [
+        'VIP Member', 'VIP Member Active', 'Premium', 'PRO Plan',
+        'VIP Plan', 'Plan: VIP', 'Membership: VIP',
+        'badge-vip', 'vip-badge', 'plan-vip',
+        'bi-gem-fill text-warning', // VIP icon di navbar
+    ];
+
+    foreach ($vipKeywords as $kw) {
+        if (stripos($html, $kw) !== false) {
+            $vip = true;
+            break;
+        }
+    }
+
+    // Cari tier spesifik
+    if (preg_match('/(?:VIP|Premium|PRO|Plan)[\s:]*(?:<[^>]+>)*([A-Za-z0-9 ]+?)(?:<|\n|$)/i', $html, $m)) {
+        $tier = trim($m[1]);
+    }
+
+    // Cari daily limit yang tertulis di page
+    if (preg_match('/daily\s+limit[^0-9]*(\d+)/i', $html, $m)) {
+        $limit = (int)$m[1];
+    }
+    if (preg_match('/(\d+)\s*(?:claims?|claim).*?(?:per|\/)\s*day/i', $html, $m)) {
+        $limit = (int)$m[1];
+    }
+    if (preg_match('/remaining.*?(\d+)\s*(?:of|\/)\s*(\d+)/i', $html, $m)) {
+        $limit = (int)$m[2];
+    }
+
+    // Kalau ketemu badge VIP, naikin limit
+    if ($vip && $limit <= MAX_DAILY_CLAIMS_DEFAULT) {
+        $limit = MAX_DAILY_CLAIMS_VIP;
+    }
+
+    return ['vip' => $vip, 'tier' => $tier, 'limit' => $limit];
+}
+
+function isLoginPage($html) {
+    return strpos($html, 'FaucetPay Email Address') !== false
+        && strpos($html, 'Enter Faucet Portal') !== false;
+}
+
+function isCooldownPage($html) {
+    return strpos($html, 'countdownClock') !== false
+        || strpos($html, 'Faucet Cooling Down') !== false;
+}
+
+function isReadyToClaim($html) {
+    return strpos($html, 'id="faucetForm"') !== false
+        || strpos($html, 'id="popFaucetForm"') !== false;
+}
+
+function parseCooldownSeconds($html) {
+    if (preg_match('/id="countdownClock"[^>]*data-seconds=["\']?(\d+)/i', $html, $m)) {
+        return (int)$m[1];
+    }
+    return 0;
+}
+
+function isPopFaucet($html) {
+    return strpos($html, 'id="popFaucetForm"') !== false
+        || strpos($html, 'Pop-Under Faucet') !== false;
 }
 
 // ═══════════════ DAILY ═══════════════
@@ -242,27 +307,6 @@ function checkDailyLimit($html) {
     return strpos($html, 'Daily Limit Reached') !== false
         || strpos($html, 'You have completed all') !== false
         || strpos($html, 'Upgrade Membership') !== false;
-}
-
-function isLoginPage($html) {
-    return strpos($html, 'FaucetPay Email Address') !== false
-        && strpos($html, 'Enter Faucet Portal') !== false;
-}
-
-function isCooldownPage($html) {
-    return strpos($html, 'countdownClock') !== false
-        || strpos($html, 'Faucet Cooling Down') !== false;
-}
-
-function isReadyToClaim($html) {
-    return strpos($html, 'id="faucetForm"') !== false;
-}
-
-function parseCooldownSeconds($html) {
-    if (preg_match('/id="countdownClock"[^>]*data-seconds=["\']?(\d+)/i', $html, $m)) {
-        return (int)$m[1];
-    }
-    return 0;
 }
 
 // ═══════════════ LOGIN ═══════════════
@@ -337,13 +381,11 @@ function fetchAdToken($csrf) {
     if (is_array($j) && !empty($j['success']) && !empty($j['token'])) {
         return ['ok'=>true, 'token'=>$j['token'], 'raw'=>$r];
     }
-
     return ['ok'=>false, 'token'=>null, 'raw'=>$r];
 }
 
-// ═══════════════ CLAIM ═══════════════
+// ═══════════════ CLAIM: REGULAR FAUCET ═══════════════
 function claimFaucet(&$info) {
-    // ── Fetch /faucet dengan retry 3x ──
     $html = false;
     for ($try = 1; $try <= 3; $try++) {
         $html = req(HOST . '/faucet');
@@ -353,7 +395,7 @@ function claimFaucet(&$info) {
         echo "  " . B_YELLOW . "[fetch] try {$try}/3 gagal | "
              . "errno=" . ($dbg['errno'] ?? '?') . " code=" . ($dbg['code'] ?? '?')
              . " len=" . ($dbg['len'] ?? '?')
-             . " msg=" . substr($dbg['errmsg'] ?? '-', 0, 60) . RESET . "\n";
+             . RESET . "\n";
 
         if ($try < 3) sleep(rand(3, 5));
     }
@@ -362,12 +404,9 @@ function claimFaucet(&$info) {
         $dbg = $GLOBALS['LAST_REQ'] ?? [];
         $code = (int)($dbg['code'] ?? 0);
         if ($code == 0 || $code >= 500) {
-            echo B_RED . "  [NETWORK] server gak respon / 5xx → tunggu 30s" . RESET . "\n";
             return ['cooldown' => 30];
         }
-        // HTTP 200 tapi body kosong → kemungkinan cookie expired / Cloudflare
         if ($code == 200 && ($dbg['len'] ?? 0) < 500) {
-            echo B_RED . "  [FETCH] response kosong → re-login attempt" . RESET . "\n";
             return 'session_invalid';
         }
         return 'fetch_fail';
@@ -376,12 +415,10 @@ function claimFaucet(&$info) {
     if (isLoginPage($html)) return 'session_invalid';
     if (checkDailyLimit($html)) return 'limit_reached';
 
-    // Cooldown state?
     if (!isReadyToClaim($html)) {
         if (isCooldownPage($html)) {
             $s = parseCooldownSeconds($html);
-            if ($s > 0) return ['cooldown' => $s];
-            return ['cooldown' => 3];
+            return ['cooldown' => $s > 0 ? $s : 3];
         }
         return 'no_form';
     }
@@ -389,34 +426,26 @@ function claimFaucet(&$info) {
     $csrf = parseCSRF($html);
     if (!$csrf) return 'no_csrf';
 
-    echo B_CYAN . "  [FAUCET] Processing...\n" . RESET;
+    echo B_CYAN . "  [FAUCET] Regular claim processing...\n" . RESET;
 
-    // ── Ad view ──
     for ($i = AD_VIEW_SECONDS; $i > 0; $i--) {
-        echo "\r  " . B_CYAN . "[AD] Viewing sponsored ad: " . B_WHITE . "{$i}s" . RESET . "   ";
+        echo "\r  " . B_CYAN . "[AD] Viewing ad: " . B_WHITE . "{$i}s" . RESET . "   ";
         sleep(1);
     }
     echo "\r" . str_repeat(' ', 50) . "\r";
 
-    // ── Fetch ad-token ──
-    echo B_CYAN . "  [AD] Requesting verify-ad token...\n" . RESET;
     $tokRes = fetchAdToken($csrf);
-
     if (!$tokRes['ok'] && stripos($tokRes['raw'], 'at least 5 seconds') !== false) {
-        echo "  " . B_YELLOW . "[AD] Server minta 5s+, tunggu 4s lagi..." . RESET . "\n";
         sleep(4);
         $tokRes = fetchAdToken($csrf);
     }
 
     if (!$tokRes['ok']) {
-        echo B_RED . "  [AD] token gagal | " . substr($tokRes['raw'], 0, 120) . "\n" . RESET;
         return 'ad_token_fail';
     }
 
     $token = $tokRes['token'];
-    echo B_CYAN . "  [AD] token: " . substr($token, 0, 16) . "...\n" . RESET;
 
-    // ── Icon captcha ──
     $postArr = [
         'csrf_token' => $csrf,
         'ad_verification_token' => $token,
@@ -429,14 +458,10 @@ function claimFaucet(&$info) {
             echo B_CYAN . "  [CAPTCHA] {$target} → {$key}\n" . RESET;
             $postArr['icon_captcha_selected'] = $key;
         } else {
-            echo B_YELLOW . "  [CAPTCHA] ikon ga match, skip round" . RESET . "\n";
             return 'captcha_skip';
         }
-    } else {
-        echo B_CYAN . "  [CAPTCHA] kosong di page, skip" . RESET . "\n";
     }
 
-    // ── POST /faucet/claim ──
     $r = req(HOST . '/faucet/claim', 'POST', http_build_query($postArr), [
         'Content-Type: application/x-www-form-urlencoded',
         'Origin: ' . HOST,
@@ -447,7 +472,6 @@ function claimFaucet(&$info) {
     if (isLoginPage($r)) return 'session_invalid';
     if (checkDailyLimit($r)) return 'limit_reached';
 
-    // ── Parse result ──
     $amount = null;
     if (preg_match('/Claim successful!\s*Received\s*\+?([0-9.]+)\s*USDT/i', $r, $m)) {
         $amount = $m[1];
@@ -464,7 +488,6 @@ function claimFaucet(&$info) {
     if (preg_match('/alert-(?:danger|warning)[^>]*>([^<]+)</i', $r, $m)) {
         $err = trim($m[1]);
         echo B_RED . "  [SERVER] {$err}\n" . RESET;
-
         if (stripos($err, 'adblock') !== false) return ['cooldown' => rand(30, 45)];
         if (stripos($err, 'wait') !== false || stripos($err, 'cooldown') !== false) {
             $cd = 3;
@@ -477,44 +500,178 @@ function claimFaucet(&$info) {
     }
 
     if (strlen($r) < 100) return 'fetch_fail';
-
-    file_put_contents("claim_fail.html", $r);
-    echo B_RED . "  [ERROR] Claim unknown → claim_fail.html\n" . RESET;
     return 'unknown';
 }
 
-// ═══════════════ FARMING ═══════════════
-function startFarming($email, $password) {
+// ═══════════════ CLAIM: POP-UNDER / UNLIMITED FAUCET ═══════════════
+function claimPopFaucet(&$info) {
+    $html = false;
+    for ($try = 1; $try <= 3; $try++) {
+        $html = req(HOST . '/pop-faucet');
+        if ($html && strlen($html) > 500) break;
+        $dbg = $GLOBALS['LAST_REQ'] ?? [];
+        echo "  " . B_YELLOW . "[fetch-pop] try {$try}/3 gagal | code="
+             . ($dbg['code'] ?? '?') . " len=" . ($dbg['len'] ?? '?') . RESET . "\n";
+        if ($try < 3) sleep(rand(3, 5));
+    }
+
+    if (!$html || strlen($html) < 500) {
+        $dbg = $GLOBALS['LAST_REQ'] ?? [];
+        $code = (int)($dbg['code'] ?? 0);
+        if ($code == 0 || $code >= 500) return ['cooldown' => 30];
+        if ($code == 200 && ($dbg['len'] ?? 0) < 500) return 'session_invalid';
+        return 'fetch_fail';
+    }
+
+    if (isLoginPage($html)) return 'session_invalid';
+
+    if (!isReadyToClaim($html)) {
+        // pop-faucet kadang ke-redirect balik ke /faucet kalau ada cooldown
+        if (isCooldownPage($html)) {
+            $s = parseCooldownSeconds($html);
+            return ['cooldown' => $s > 0 ? $s : 5];
+        }
+        return 'no_form';
+    }
+
+    $csrf = parseCSRF($html);
+    if (!$csrf) return 'no_csrf';
+
+    echo B_MAGENTA . "  [UNLIMITED] Pop-Under claim processing...\n" . RESET;
+
+    // ── Icon captcha (WAJIB di pop-faucet) ──
+    list($target, $choices) = parseIconCaptcha($html);
+    if (!$target || empty($choices)) {
+        echo B_YELLOW . "  [CAPTCHA-POP] target/choices kosong" . RESET . "\n";
+        return 'captcha_skip';
+    }
+    $key = matchIcon($target, $choices);
+    if (!$key) {
+        echo B_YELLOW . "  [CAPTCHA-POP] ikon ga match" . RESET . "\n";
+        return 'captcha_skip';
+    }
+    echo B_CYAN . "  [CAPTCHA-POP] {$target} → {$key}\n" . RESET;
+
+    // ── Simulasi "view ad" 10 detik (server cuma tracking durasi) ──
+    for ($i = POP_VIEW_SECONDS; $i > 0; $i--) {
+        echo "\r  " . B_MAGENTA . "[POP-AD] Watching: " . B_WHITE . "{$i}s" . RESET . "   ";
+        sleep(1);
+    }
+    echo "\r" . str_repeat(' ', 50) . "\r";
+
+    // ── POST ke /pop-faucet/claim ──
+    $postArr = [
+        'csrf_token' => $csrf,
+        'icon_captcha_selected' => $key,
+    ];
+
+    $r = req(HOST . '/pop-faucet/claim', 'POST', http_build_query($postArr), [
+        'Content-Type: application/x-www-form-urlencoded',
+        'Origin: ' . HOST,
+        'Referer: ' . HOST . '/pop-faucet',
+    ]);
+    if ($r === false) return 'fetch_fail';
+
+    if (isLoginPage($r)) return 'session_invalid';
+
+    // ── Parse result ──
+    $amount = null;
+    if (preg_match('/Pop-Under Faucet claim successful!\s*Received\s*\+?([0-9.]+)\s*USDT/i', $r, $m)) {
+        $amount = $m[1];
+    } elseif (preg_match('/alert-success[^>]*>([^<]*?Received[^<]*?)</i', $r, $m)) {
+        if (preg_match('/([0-9.]+)/', $m[1], $n)) $amount = $n[1];
+    } elseif (preg_match('/Received\s*\+?([0-9.]+)\s*USDT/i', $r, $m)) {
+        $amount = $m[1];
+    }
+
+    if ($amount) {
+        echo B_GREEN . "  [SUCCESS-UNLIMITED] +{$amount} USDT\n" . RESET;
+        $info = ['amount' => $amount];
+        return true;
+    }
+
+    // Error handling
+    if (preg_match('/alert-(?:danger|warning)[^>]*>([^<]+)</i', $r, $m)) {
+        $err = trim($m[1]);
+        echo B_RED . "  [SERVER-POP] {$err}\n" . RESET;
+
+        if (stripos($err, 'wait') !== false || stripos($err, 'cooldown') !== false) {
+            $cd = 5;
+            if (preg_match('/(\d+)\s*second/i', $err, $s)) $cd = (int)$s[1];
+            return ['cooldown' => $cd];
+        }
+        if (stripos($err, 'captcha') !== false || stripos($err, 'token') !== false) {
+            return 'captcha_skip';
+        }
+        if (stripos($err, 'ad') !== false && stripos($err, 'view') !== false) {
+            // Server minta ad view dulu
+            return ['cooldown' => 3];
+        }
+    }
+
+    if (strlen($r) < 100) return 'fetch_fail';
+    return 'unknown';
+}
+
+// ═══════════════ FARMING MODE ═══════════════
+/**
+ * $mode: 'regular' | 'unlimited' | 'auto'
+ *  - regular   : cuma /faucet (100-300/day)
+ *  - unlimited : cuma /pop-faucet (no limit)
+ *  - auto      : coba regular dulu, kalau limit → switch unlimited
+ */
+function startFarming($email, $password, $mode = 'auto') {
     if (!doLogin($email, $password)) return;
+
+    // ── VIP detection ──
+    $dashHtml = req(HOST . '/dashboard');
+    if (!$dashHtml) $dashHtml = '';
+    $vipInfo = detectVIP($dashHtml);
+    $isVip = $vipInfo['vip'];
+    $maxDaily = $vipInfo['limit'];
 
     $balance = getBalance();
     $dailyCount = getDailyCount();
-    echo B_CYAN . "  [BALANCE] " . B_WHITE . $balance . " USDT\n" . RESET;
-    echo B_CYAN . "  [DAILY] " . B_WHITE . $dailyCount . "/" . MAX_DAILY_CLAIMS . "\n" . RESET;
-    echo B_CYAN . "  [START] Bot jalan...\n\n" . RESET;
+
+    echo B_CYAN . "  [ACCOUNT] " . B_WHITE . $email . RESET . "\n";
+    echo B_CYAN . "  [VIP]     " . ($isVip ? B_GREEN . "YES ({$vipInfo['tier']})" : B_YELLOW . "NO (Free)") . RESET . "\n";
+    echo B_CYAN . "  [LIMIT]   " . B_WHITE . "{$maxDaily}/day" . RESET . "\n";
+    echo B_CYAN . "  [BALANCE] " . B_WHITE . $balance . " USDT" . RESET . "\n";
+    echo B_CYAN . "  [DAILY]   " . B_WHITE . $dailyCount . "/" . $maxDaily . RESET . "\n";
+    echo B_CYAN . "  [MODE]    " . B_WHITE . strtoupper($mode) . RESET . "\n\n";
 
     $claims = 0; $failures = 0; $skips = 0;
+    $unlimitedClaims = 0;
     $maxFailures = 15;
     $sessionInvalidCount = 0;
+    $currentMode = $mode;
 
     while (true) {
-        if (resetDailyIfNeeded()) $dailyCount = 0;
+        if (resetDailyIfNeeded()) { $dailyCount = 0; }
 
-        $round = $claims + $failures + $skips + 1;
-        echo "\n" . B_CYAN . "  ╔══ ROUND #{$round} ─ " . date('H:i:s') . " ═══╗" . RESET . "\n";
+        $round = $claims + $failures + $skips + $unlimitedClaims + 1;
+        echo "\n" . B_CYAN . "  ╔══ ROUND #{$round} ─ " . date('H:i:s')
+             . " [{$currentMode}] ═══╗" . RESET . "\n";
 
-        if ($dailyCount >= MAX_DAILY_CLAIMS) {
-            echo "  " . B_RED . "[LIMIT] Habis kuota harian, tunggu reset." . RESET . "\n";
-            timer(strtotime('tomorrow 00:00:00') - time());
+        // ── Cek limit kalau mode regular ──
+        if ($currentMode === 'regular' && $dailyCount >= $maxDaily) {
+            echo "  " . B_YELLOW . "[LIMIT] Regular limit habis, switch ke unlimited..." . RESET . "\n";
+            $currentMode = 'unlimited';
             continue;
         }
 
         $info = [];
-        $res = claimFaucet($info);
+        if ($currentMode === 'unlimited') {
+            $res = claimPopFaucet($info);
+        } else {
+            $res = claimFaucet($info);
+        }
 
+        // ── Handle responses ──
         if ($res === 'limit_reached') {
-            echo "  " . B_RED . "[LIMIT] Daily limit reached." . RESET . "\n";
-            break;
+            echo "  " . B_YELLOW . "[LIMIT] Regular limit reached, switch ke unlimited..." . RESET . "\n";
+            $currentMode = 'unlimited';
+            continue;
         }
         elseif ($res === 'session_invalid') {
             $sessionInvalidCount++;
@@ -522,7 +679,6 @@ function startFarming($email, $password) {
             sleep(5);
 
             if (!doLogin($email, $password)) {
-                echo "  " . B_RED . "[STOP] Re-login gagal." . RESET . "\n";
                 if ($sessionInvalidCount >= 3) break;
                 sleep(30);
                 continue;
@@ -560,13 +716,19 @@ function startFarming($email, $password) {
             timer($cd, "Cooldown");
         }
         elseif ($res === true) {
-            $claims++; $dailyCount++;
-            updateDailyCount($dailyCount);
+            if ($currentMode === 'unlimited') {
+                $unlimitedClaims++;
+            } else {
+                $claims++; $dailyCount++;
+                updateDailyCount($dailyCount);
+            }
             $failures = 0;
             $balance = getBalance();
             echo B_CYAN . "  [BALANCE] " . B_WHITE . $balance . " USDT\n" . RESET;
-            echo B_CYAN . "  [DAILY] " . B_WHITE . $dailyCount . "/" . MAX_DAILY_CLAIMS . "\n" . RESET;
-            echo B_GREEN . "  [TOTAL] {$claims} success" . RESET . "\n";
+            if ($currentMode === 'regular') {
+                echo B_CYAN . "  [DAILY] " . B_WHITE . $dailyCount . "/" . $maxDaily . "\n" . RESET;
+            }
+            echo B_GREEN . "  [TOTAL] {$claims} regular | {$unlimitedClaims} unlimited" . RESET . "\n";
 
             $waitS = rand(MIN_CLAIM_DELAY, MAX_CLAIM_DELAY);
             sleep($waitS);
@@ -582,15 +744,23 @@ function startFarming($email, $password) {
     }
 
     $balance = getBalance();
-    echo "\n" . B_CYAN . "  [FINAL] " . B_WHITE . $balance . " USDT | ";
-    echo $claims . " success / " . $skips . " skip / " . $failures . " fail" . RESET . "\n";
+    echo "\n" . B_CYAN . "  [FINAL] " . B_WHITE . $balance . " USDT" . RESET . "\n";
+    echo "  " . B_GREEN . "{$claims} regular" . RESET . " | "
+         . B_MAGENTA . "{$unlimitedClaims} unlimited" . RESET . " | "
+         . B_YELLOW . "{$skips} skip" . RESET . " | "
+         . B_RED . "{$failures} fail" . RESET . "\n";
 }
 
 // ═══════════════ MENU ═══════════════
 function printMenu() {
     printBanner();
-    echo B_CYAN . "  [1] " . B_GREEN . "Start Farming\n";
-    echo B_CYAN . "  [2] " . B_YELLOW . "Config Email & Password\n";
+    echo B_CYAN . "  [1] " . B_GREEN . "Start Farming (AUTO mode)\n";
+    echo B_CYAN . "      " . DIM . "Regular dulu, auto-switch unlimited kalau limit\n" . RESET;
+    echo B_CYAN . "  [2] " . B_MAGENTA . "Unlimited Mode Only\n";
+    echo B_CYAN . "      " . DIM . "Pop-Under faucet, no daily limit\n" . RESET;
+    echo B_CYAN . "  [3] " . B_YELLOW . "Regular Mode Only\n";
+    echo B_CYAN . "  [4] " . B_WHITE . "Config Email & Password\n";
+    echo B_CYAN . "  [5] " . B_CYAN . "Check Account Info (VIP detect)\n";
     echo B_CYAN . "  [0] " . B_RED . "Exit\n";
     echo B_CYAN . "==================================================\n";
     echo B_WHITE . "  Pilih: " . RESET;
@@ -607,6 +777,33 @@ function configEmailPassword() {
     file_put_contents(CONFIG_FILE, json_encode(['email'=>$e, 'password'=>$p], JSON_PRETTY_PRINT));
     echo B_GREEN . "\n  ✅ Config disimpan!\n" . RESET;
     echo B_WHITE . "\n  Tekan Enter untuk kembali...\n" . RESET;
+    fgets(STDIN);
+}
+
+function checkAccountInfo($email, $password) {
+    clearScreen();
+    printBanner();
+    echo B_CYAN . "  ── Account Info ──\n\n";
+
+    if (!doLogin($email, $password)) {
+        echo B_RED . "  Login gagal.\n" . RESET;
+        echo B_WHITE . "\n  Tekan Enter..." . RESET;
+        fgets(STDIN);
+        return;
+    }
+
+    $dash = req(HOST . '/dashboard');
+    $vipInfo = detectVIP($dash ?: '');
+    $balance = getBalance();
+
+    echo B_CYAN . "  Email       : " . B_WHITE . $email . RESET . "\n";
+    echo B_CYAN . "  VIP Status  : " . ($vipInfo['vip'] ? B_GREEN . "YES" : B_YELLOW . "NO") . RESET . "\n";
+    echo B_CYAN . "  Tier        : " . B_WHITE . $vipInfo['tier'] . RESET . "\n";
+    echo B_CYAN . "  Daily Limit : " . B_WHITE . $vipInfo['limit'] . "/day" . RESET . "\n";
+    echo B_CYAN . "  Balance     : " . B_WHITE . $balance . " USDT" . RESET . "\n";
+    echo B_CYAN . "  Unlimited   : " . B_MAGENTA . "Available (via /pop-faucet)" . RESET . "\n";
+
+    echo B_WHITE . "\n  Tekan Enter..." . RESET;
     fgets(STDIN);
 }
 
@@ -630,15 +827,28 @@ while (true) {
 
     switch ($choice) {
         case '1':
-            startFarming($email, $password);
+            startFarming($email, $password, 'auto');
             echo "\n  " . DIM . "Enter untuk kembali..." . RESET;
             fgets(STDIN);
             break;
         case '2':
+            startFarming($email, $password, 'unlimited');
+            echo "\n  " . DIM . "Enter untuk kembali..." . RESET;
+            fgets(STDIN);
+            break;
+        case '3':
+            startFarming($email, $password, 'regular');
+            echo "\n  " . DIM . "Enter untuk kembali..." . RESET;
+            fgets(STDIN);
+            break;
+        case '4':
             configEmailPassword();
             $cfg = json_decode(file_get_contents(CONFIG_FILE), true);
             $email = $cfg['email'] ?? '';
             $password = $cfg['password'] ?? '';
+            break;
+        case '5':
+            checkAccountInfo($email, $password);
             break;
         case '0':
             echo "\n" . B_GREEN . "  Bye." . RESET . "\n";
