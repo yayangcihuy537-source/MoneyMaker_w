@@ -74,9 +74,9 @@
           "runner": "python3"
         },
         "6": {
-          "label": "litecoinpick 🟡",
-          "file": "pick.py",
-          "runner": "python3"
+          "label": "TronPick 🟢",
+          "file": "pick.php",
+          "runner": "php"
         },
         "7": {
           "label": "99Faucet 🟢",
