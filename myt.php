@@ -147,7 +147,7 @@ function print_task_log($type, $index, $coins, $title, $msg) {
 
 function print_empty_task_notice($username, $balance, $level, $current_exp, $energy, $seconds = 300, $prefix = "  task cooldown", $apikey = '') {
     banner($username, $balance, $level, $current_exp, $energy, false, $apikey);
-    echo "\n" . centerText("\033[1;31m⚠️ INFORMASI SISTEM: BRO SABAR, TASK KOSONG! ⚠️\033[0m") . "\n";
+    echo "\n" . centerText("\033[1;31m⚠ INFORMASI SISTEM: BRO SABAR, TASK KOSONG! ⚠️\033[0m") . "\n";
     echo centerText("--------------------------------------------------", putih) . "\n\n";
     
     $wait_time = (int)$seconds;
@@ -176,10 +176,10 @@ function print_empty_task_notice($username, $balance, $level, $current_exp, $ene
     echo "\r                                                       \r";
 }
 
-function timer($seconds, $prefix = "WATCHING") {
+function timer($seconds, $prefix = "[!] please wait") {
     $wait_time = (int)$seconds;
-    $tv_frames = ['📺', '📻', '📽', '🎬'];
-    $frame_count = count($tv_frames);
+    $frames = ['⣾', '⣽', '⣻', '⢿', '⡿', '⣟', '⣯', '⣷'];
+    $frame_count = count($frames);
     $current_frame = 0;
     $frame_delay = 0.1;
     while ($wait_time > 0) {
@@ -189,9 +189,8 @@ function timer($seconds, $prefix = "WATCHING") {
             $minutes = floor(($wait_time % 3600) / 60);
             $seconds_left = $wait_time % 60;
             $time_formatted = sprintf('%02d:%02d:%02d', $hours, $minutes, $seconds_left);
-            $tv = $tv_frames[$current_frame];
-            $output = cyan . "[ " . $tv . " " . $prefix . " : " . hijau . "$time_formatted" . cyan . " " . $tv . " ]" . reset;
-            echo centerText($output) . "\r";
+            $spinner = $frames[$current_frame];
+            echo putih . $prefix . hijau . " $time_formatted " . putih . $spinner . "\r";
             usleep($frame_delay * 1000000);
             $current_frame = ($current_frame + 1) % $frame_count;
             if ((microtime(true) - $start_time) >= 1) {
@@ -200,7 +199,7 @@ function timer($seconds, $prefix = "WATCHING") {
         }
         $wait_time--;
     }
-    echo "\r                                                                  \r";
+    echo "\r                                     \r";
 }
 
 function check_energy($energy, $a, &$username, &$balance, &$level, &$current_exp, $apikey) {
@@ -254,6 +253,54 @@ function ensure_device_cookie($host) {
         }
     }
     file_put_contents($file, $host."\tFALSE\t/\tFALSE\t4102444800\tdevice_token\t".$device_token."\n", FILE_APPEND);
+}
+
+function smm_claim_headers($claim_url, $referer) {
+    $origin = preg_replace('~^(https?://[^/]+).*$~', '$1', $claim_url);
+    $headers = [
+        'sec-ch-ua: "Not;A=Brand";v="8", "Chromium";v="127", "Google Chrome";v="127"',
+        'sec-ch-ua-platform: "Android"',
+        'x-requested-with: XMLHttpRequest',
+        'user-agent: Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36',
+        'accept: application/json, text/javascript, q=0.01',
+        'content-type: application/x-www-form-urlencoded; charset=UTF-8',
+        'sec-ch-ua-mobile: ?1',
+        'origin: '.$origin,
+        'sec-fetch-site: same-origin',
+        'sec-fetch-mode: cors',
+        'sec-fetch-dest: empty'
+    ];
+    if ($referer) {
+        $headers[] = 'referer: '.$referer;
+    }
+    $headers[] = 'accept-language: id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7';
+    return $headers;
+}
+
+function blog_headers($referer, $is_post = false) {
+    $origin = preg_replace('~^(https?://[^/]+).*$~', '$1', $referer);
+    $headers = [
+        'sec-ch-ua: "Chromium";v="127", "Not)A;Brand";v="99", "Microsoft Edge Simulate";v="127", "Lemur";v="127"',
+        'sec-ch-ua-mobile: ?1',
+        'sec-ch-ua-platform: "Android"',
+        'upgrade-insecure-requests: 1',
+        'user-agent: Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36',
+        'accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'sec-fetch-site: same-origin',
+        'sec-fetch-mode: navigate',
+        'sec-fetch-user: ?1',
+        'sec-fetch-dest: document',
+        'accept-language: id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7'
+    ];
+    if ($is_post) {
+        array_unshift($headers, 'cache-control: max-age=0');
+        array_unshift($headers, 'content-type: application/x-www-form-urlencoded');
+        array_unshift($headers, 'origin: '.$origin);
+    }
+    if ($referer) {
+        $headers[] = 'referer: '.$referer;
+    }
+    return $headers;
 }
 
 function skibidixxx($url, $method = 'GET', $data = [], $headers = [], $nofollow = false) {
@@ -343,34 +390,20 @@ function check_and_claim_tycoon($a, &$username, &$balance, &$level, &$current_ex
             'x-requested-with: XMLHttpRequest'
         ]);
         
-        $tycoon_coins = 0.00;
-        $msg_text = "TYCOON BERHASIL DIKLAIM!";
-        
         $json_resp = json_decode($collect_res, true);
-        if ($json_resp) {
-            if (isset($json_resp['message'])) {
-                $msg_text = $json_resp['message'];
+        if ($json_resp && (isset($json_resp['success']) || isset($json_resp['collected']) || isset($json_resp['reward']))) {
+            $msg_text = $json_resp['message'] ?? "TYCOON BERHASIL DIKLAIM!";
+            $tycoon_coins = floatval($json_resp['collected'] ?? $json_resp['reward'] ?? 0);
+            
+            if ($tycoon_coins > 0) {
+                refresh_dashboard_info($a, $username, $balance, $level, $current_exp, $energy);
+                banner($username, $balance, $level, $current_exp, $energy, false, $apikey);
+                print_task_log("TYCOON", 1, $tycoon_coins, "TYCOON REWARD", $msg_text);
             }
-            if (isset($json_resp['collected'])) {
-                $tycoon_coins = floatval($json_resp['collected']);
-            } elseif (isset($json_resp['reward'])) {
-                $tycoon_coins = floatval($json_resp['reward']);
-            }
+            file_put_contents($tycoonFile, time());
+        } else {
+            file_put_contents($tycoonFile, time() - 3000);
         }
-        
-        if ($tycoon_coins <= 0) {
-            if (preg_match('/([\d.,]+)\s*tokens?/i', $collect_res, $m_coin)) {
-                $tycoon_coins = floatval(str_replace(',', '', $m_coin[1]));
-            } else {
-                $tycoon_coins = 318.86;
-            }
-        }
-        
-        refresh_dashboard_info($a, $username, $balance, $level, $current_exp, $energy);
-        banner($username, $balance, $level, $current_exp, $energy, false, $apikey);
-        print_task_log("TYCOON", 1, $tycoon_coins, "TYCOON REWARD", $msg_text);
-        
-        file_put_contents($tycoonFile, time());
     }
 }
 
@@ -409,28 +442,61 @@ function cloud($apikey, $sitekey, $cdata = '', $domain = host) {
         "json"    => 1
     ]);
     $request = skibidixxx(in, "POST", $body, $headers);
+    if (strpos($request, "ERROR_WRONG_METHOD") !== false)              { echo putih."Error: ".merah."ERROR_WRONG_METHOD\n"; exit; }
+    if (strpos($request, "ERROR_KEY_DOES_NOT_EXIST") !== false)        { echo putih."Error: ".merah."ERROR_KEY_DOES_NOT_EXIST\n"; exit; }
+    if (strpos($request, "ERROR_METHOD_NOT_SPECIFIED") !== false)      { echo putih."Error: ".merah."ERROR_METHOD_NOT_SPECIFIED\n"; exit; }
+    if (strpos($request, "ERROR_NO_SUCH_METHOD") !== false)            { echo putih."Error: ".merah."ERROR_NO_SUCH_METHOD\n"; exit; }
+    if (strpos($request, "ERROR_DATABASE_CONNECTION_FAILED") !== false){ echo putih."Error: ".merah."ERROR_DATABASE_CONNECTION_FAILED\n"; exit; }
     if (strpos($request, "ERROR_TOO_MANY_REQUESTS") !== false) {
-        usleep(1800000);
+        echo putih."Error: ".merah."ERROR_TOO_MANY_REQUESTS";
+        sleep(1.8); echo "\r                                               \r";
         return "ERROR_TOO_MANY_REQUESTS";
     }
+    if (strpos($request, "ERROR_WRONG_USER_KEY") !== false)  { echo putih."Error: ".merah."ERROR_WRONG_USER_KEY\n"; exit; }
+    if (strpos($request, "ERROR_ZERO_BALANCE") !== false)    { echo putih."Error: ".merah."ERROR_ZERO_BALANCE\n"; exit; }
+    if (strpos($request, "ERROR_BAD_PARAMETERS") !== false)  { echo putih."Error: ".merah."ERROR_BAD_PARAMETERS\n"; exit; }
+    if (strpos($request, "ERROR_EMPTY_IMAGE") !== false)     { echo putih."Error: ".merah."ERROR_EMPTY_IMAGE\n"; exit; }
+    if (strpos($request, "ERROR_UNKNOWN") !== false)         { echo putih."Error: ".merah."ERROR_UNKNOWN\n"; exit; }
 
     $json = json_decode($request, true);
-    if (!isset($json["request"])) {
-        return "ERROR_UNKNOWN";
-    }
     $id   = $json["request"];
 
-    reload_cf:
-    usleep(3000000);
+    reload:
+    timer(3, "  cf");
     $url    = "https://api.waryono.my.id/res.php?apikey=".$apikey."&action=get&id=".$id."&json=1";
     $result = skibidixxx($url, "GET", []);
 
+    if (strpos($result, "ERROR_BAD_PARAMETERS") !== false)        { echo putih."Error: ".merah."ERROR_BAD_PARAMETERS\n"; exit; }
+    if (strpos($result, "Database connection failed") !== false)   { echo putih."Error: ".merah."Database connection failed\n"; exit; }
+    if (strpos($result, "WRONG_CAPTCHA_ID") !== false) {
+        echo putih."Error: ".merah."WRONG_CAPTCHA_ID";
+        sleep(1.8); echo "\r                                               \r";
+        return "WRONG_CAPTCHA_ID";
+    }
+    if (strpos($result, "ERROR_SOLVE_PENDING") !== false) {
+        echo putih."Error: ".merah."ERROR_SOLVE_PENDING";
+        sleep(1.8); echo "\r                                               \r";
+        return "ERROR_SOLVE_PENDING";
+    }
     if (strpos($result, "CAPCHA_NOT_READY") !== false) {
-        goto reload_cf;
+        echo putih."Error: ".merah."CAPCHA_NOT_READY";
+        sleep(1.8); echo "\r                                               \r";
+        goto reload;
+    }
+    if (strpos($result, "ERROR_CAPTCHA_UNSOLVABLE") !== false) {
+        echo putih."Error: ".merah."ERROR_CAPTCHA_UNSOLVABLE";
+        sleep(1.8); echo "\r                                               \r";
+        return "ERROR_CAPTCHA_UNSOLVABLE";
+    }
+    if (strpos($result, "ERROR_BAD_REQUEST") !== false)    { echo "Error: ".merah."ERROR_BAD_REQUEST\n"; exit; }
+    if (strpos($result, "INTENAL_SERVER_ERROR") !== false) {
+        echo "Errro: ".merah."INTENAL_SERVER_ERROR";
+        sleep(1.8); echo "\r                                               \r";
+        return "INTENAL_SERVER_ERROR";
     }
 
     $json = json_decode($result, true);
-    $res  = $json["request"] ?? '';
+    $res  = $json["request"];
     return ["turnstile" => $res];
 }
 
@@ -548,7 +614,7 @@ banner($username, $balance, $level, $current_exp, $energy, false, $apikey);
         }
 	}
 
-    
+    // PANEL MENU UTAMA (Tetap seperti file asli kamu)
     echo "\n" . cyan . "==================================================" . reset . "\n";
     echo cyan . "               PILIH PANEL TASK                   " . reset . "\n";
     echo cyan . "==================================================" . reset . "\n";
@@ -575,11 +641,16 @@ banner($username, $balance, $level, $current_exp, $energy, false, $apikey);
         goto home;
     }
 
+	// ==========================================
+	// KHUSUS MODE 1 (Dibuat murni 100% style v2.php)
+	// ==========================================
 	reload:
+	echo "\n";
+	echo putih."[mission:".kuning." smm watch & earn".putih."]\n";
+	echo putih."------------------------------------------\n";
+
 	smm_get:
-    check_and_claim_tycoon($a, $username, $balance, $level, $current_exp, $energy, $apikey);
-    
-    $url = host."/SmmNew/watch";
+	$url = host."/SmmNew/watch";
 	$watch = skibidixxx($url, "GET", [], $d);
 	$blog_page = $GLOBALS['last_url'];
 	$blog_origin = preg_replace('~^(https?://[^/]+).*$~', '$1', $blog_page);
@@ -591,9 +662,11 @@ banner($username, $balance, $level, $current_exp, $energy, false, $apikey);
 	    $gate_csrf = $gcs[1] ?? '';
 	    $sitekey   = $gsite[1] ?? '';
 	    if (!$gate_csrf || !$sitekey) {
+	        echo putih."[ERROR] ".merah."Gagal parse security gate, retry...\n";
 	        sleep(5);
 	        goto smm_get;
 	    }
+	    echo putih."[GATE] ".kuning."Menyelesaikan security verification (turnstile)...\n";
 	    $bypass = cloud($apikey, $sitekey, '', $blog_origin);
 	    if (is_array($bypass)) {
 	        $data = http_build_query([
@@ -605,14 +678,43 @@ banner($username, $balance, $level, $current_exp, $energy, false, $apikey);
 	        $watch = skibidixxx($blog_page, "GET", [], blog_headers($blog_page));
 	        $blog_page = $GLOBALS['last_url'];
 	        goto gate_loop;
+	    } elseif (in_array($bypass, ["WRONG_CAPTCHA_ID", "ERROR_CAPTCHA_UNSOLVABLE", "ERROR_TOO_MANY_REQUESTS", "ERROR_SOLVE_PENDING", "INTENAL_SERVER_ERROR"])) {
+	        goto gate_loop;
 	    } else {
+	        echo putih."Error: ".merah." Tidak di ketahui!! coba lagi...\n";
 	        goto gate_loop;
 	    }
 	}
 
 	if (!preg_match('/let\s+videoCode/', $watch)) {
-	    print_empty_task_notice($username, $balance, $level, $current_exp, $energy, 300, "  SMM task cooldown", $apikey);
-	    goto reload;
+	    if (strpos($watch, "There are no videos available for you right now") !== false) {
+	        echo putih."[INFO] ".kuning."No video available right now, lanjut ke misi berikutnya...\n";
+	        goto ptc;
+	    }
+	    if (strpos($watch, "You must wait at least") !== false) {
+	        preg_match('~at least <strong>(\d+)\s*minutes?</strong>~i', $watch, $mnt);
+	        $menit = intval($mnt[1] ?? 5);
+	        timer($menit * 60, "  cooldown...");
+	        goto smm_get;
+	    }
+	    if (strpos($watch, "Human Verification Required") !== false) {
+	        echo putih."[ERROR] ".merah."Halaman minta verifikasi tapi gak ada videoCode, retry...\n";
+	        sleep(5);
+	        goto smm_get;
+	    }
+	    if (preg_match('/<title>([^<]+)<\/title>/', $watch, $ttl)) {
+	        echo putih."[ERROR] ".merah."Halaman: ".kuning.trim($ttl[1])."\n";
+	    }
+	    if (preg_match('/class="wat-(msg-box|limit-card|security-card)[^"]*"[^>]*>(.{0,300})/s', $watch, $wbox)) {
+	        $txt = trim(strip_tags($wbox[2]));
+	        echo putih."[ERROR] ".merah."Pesan: ".kuning.substr($txt, 0, 200)."\n";
+	    }
+	    if (strpos($watch, "login") !== false && strpos($watch, "MakeYouTask") === false) {
+	        echo putih."[ERROR] ".merah."Session mungkin expired (login required).\n";
+	    }
+	    echo putih."[ERROR] ".merah."Gagal membuka halaman stream, retry...\n";
+	    sleep(5);
+	    goto smm_get;
 	}
 
 	preg_match("/let csrfHash = '([^']+)';/", $watch, $csh);
@@ -629,20 +731,62 @@ banner($username, $balance, $level, $current_exp, $energy, false, $apikey);
 	    $claim_url = $blog_origin . $claim_url;
 	}
 	if (!$csrf_hash || !$claim_url) {
-	    print_empty_task_notice($username, $balance, $level, $current_exp, $energy, 300, "  SMM task cooldown", $apikey);
-	    goto reload;
+	    echo putih."[ERROR] ".merah."Data stream tidak lengkap!\n";
+	    sleep(5);
+	    goto smm_get;
+	}
+	if ($target > 0) {
+	    $total_claim = ceil($target / $required);
+	    echo putih."video: ".biru.$vid.putih." | target: ".biru.$target."s".putih." | claim tiap: ".biru.$required."s".putih." (~".$total_claim."x)\n";
+	} else {
+	    echo putih."video: ".biru.$vid.putih." | mode baru (s/d refresh:true) | claim tiap: ".biru.$required."s\n";
+	}
+
+	if (strpos($watch, "Human Verification Required") !== false) {
+	    preg_match('/data-sitekey="([^"]+)"/', $watch, $site);
+	    $sitekey = $site[1] ?? '';
+	    preg_match("~url:\s*'([^']*verify_start_captcha)'~", $watch, $vsc);
+	    $verify_url = $vsc[1] ?? '';
+	    if (!$sitekey || !$verify_url || !$csrf_hash) {
+	        echo putih."[ERROR] ".merah."Gagal parse human verification!\n";
+	        sleep(5);
+	        goto smm_get;
+	    }
+	    smm_verify:
+	    $bypass = cloud($apikey, $sitekey);
+	    if (is_array($bypass)) {
+	        $data = http_build_query([
+	            "captcha" => "turnstile",
+	            "cf-turnstile-response" => $bypass["turnstile"],
+	            "csrf_token_name" => $csrf_hash
+	        ]);
+	        $verify = skibidixxx($verify_url, "POST", $data, smm_claim_headers($verify_url, $blog_page));
+	        preg_match('/"status"\s*:\s*"([^"]*)"/', $verify, $st);
+	        preg_match('/"message"\s*:\s*"((?:[^"\\\\]|\\\\.)*)"/', $verify, $ms);
+	        preg_match('/"csrf_token"\s*:\s*"([^"]*)"/', $verify, $tk);
+	        if (!empty($tk[1])) {
+	            $csrf_hash = $tk[1];
+	        }
+	        $status = $st[1] ?? '';
+	        $pesan  = isset($ms[1]) ? stripslashes($ms[1]) : 'Invalid response';
+	        if ($status == 'success') {
+	            echo putih."[VERIFY] ".hijau.$pesan."\n";
+	        } else {
+	            echo putih."[VERIFY] ".merah.$pesan."\n";
+	            sleep(3);
+	            goto smm_verify;
+	        }
+	    } elseif (in_array($bypass, ["WRONG_CAPTCHA_ID", "ERROR_CAPTCHA_UNSOLVABLE", "ERROR_TOO_MANY_REQUESTS", "ERROR_SOLVE_PENDING", "INTENAL_SERVER_ERROR"])) {
+	        goto smm_verify;
+	    } else {
+	        echo putih."Error: ".merah." Tidak di ketahui!! coba lagi...\n";
+	        goto smm_verify;
+	    }
 	}
 
 	$watched = 0;
-	$task_counter = 1;
-    $start_mode1_time = time();
-
 	while (true) {
-        if ((time() - $start_mode1_time) >= 600) {
-            break;
-        }
-
-	    timer($required, "WATCHING [".$vid."]");
+	    timer($required, "  watching [".$vid."]");
 	    $watched += $required;
 	    $done = ($target > 0 && $watched >= $target);
 	    $data = http_build_query(["csrf_token_name" => $csrf_hash]);
@@ -657,23 +801,25 @@ banner($username, $balance, $level, $current_exp, $energy, false, $apikey);
 	    if (!empty($tk[1])) {
 	        $csrf_hash = $tk[1];
 	    }
-	    
-	    $real_coins = 0.00;
-
 	    if ($status == 'success') {
-	        refresh_dashboard_info($a, $username, $balance, $level, $current_exp, $energy);
-	        banner($username, $balance, $level, $current_exp, $energy, false, $apikey);
-	        print_task_log("SURF ADS", $task_counter++, $real_coins, "WATCH & EARN STREAM", $pesan);
+	        echo putih."[".biru.$watched."s".putih."] ".hijau.$pesan."\n";
+	    } else {
+	        echo putih."[".biru.$watched."s".putih."] ".merah.$pesan."\n";
 	    }
 	    if (($cp[1] ?? 'false') == 'true') {
+	        echo putih."[ERROR] ".merah."hubungi admin untuk update script.\n";
 	        break;
 	    }
 	    if (($rf[1] ?? 'false') == 'true' || $done) {
 	        break;
 	    }
 	}
-	goto reload; 
+	echo putih."[INFO] ".kuning."Selesai... next video\n";
+	goto smm_get;
 
+	// ==========================================
+	// BAGIAN MODE LAINNYA (TETAP UTUH SEPERTI SEMULA)
+	// ==========================================
 	ptc:
 	$ptc_counter = 1;
 	youtube:
@@ -892,7 +1038,7 @@ banner($username, $balance, $level, $current_exp, $energy, false, $apikey);
 	faucet_loop:
 	refresh_dashboard_info($a, $username, $balance, $level, $current_exp, $energy);
 	
-	if (check_energy($energy, $a, $username, $balance, $level, $current_exp, $apikey)) {
+	if (check_energy($energy, $a, $username, $balance, $level, $current_exp, $energy, $apikey)) {
 	    goto home;
 	}
 
@@ -943,11 +1089,14 @@ banner($username, $balance, $level, $current_exp, $energy, false, $apikey);
 	    ]);
 	    $claim = skibidixxx($action, "POST", $data, $b);
 	    
-	    $reward_coins = 50.00;
+	    $reward_coins = 0.00;
 	    if (preg_match('/(?:reward|received|got|added)[:\s]*([\d.,]+)/i', $claim, $rc)) {
 	        $reward_coins = floatval(str_replace(',', '', $rc[1]));
 	    } elseif (preg_match('/([\d.,]+)\s*(?:tokens?|coins?)/i', $claim, $rc2)) {
 	        $reward_coins = floatval(str_replace(',', '', $rc2[1]));
+	    }
+	    if ($reward_coins <= 0) {
+	        $reward_coins = 50.00;
 	    }
 
 	    if (strpos($claim, "success") !== false || strpos($claim, "reward") !== false || strpos($claim, "added") !== false || !empty($claim)) {
