@@ -119,51 +119,46 @@
           "runner": "php"
         },
         "15": {
-          "label": "ClaimCoin 🔴",
-          "file": "Claimcoin.py",
-          "runner": "python3"
-        },
-        "16": {
           "label": "FireFaucet 🟢",
           "file": "FireFaucet.php",
           "runner": "php"
         },
-        "17": {
+        "16": {
           "label": "Earnbitmoon 🟢",
           "file": "Earnbitmoon.php",
           "runner": "php"
         },
-        "18": {
+        "17": {
           "label": "Gamefaucet 🟢",
           "file": "Gamefaucet.php",
           "runner": "php"
         },
-        "19": {
+        "18": {
           "label": "PayubVideo 🟡",
           "file": "Payub.php",
           "runner": "php"
         },
-        "20": {
+        "19": {
           "label": "CryptoCrops 🟢",
           "file": "CryptoCrops.py",
           "runner": "python3"
         },
-        "21": {
+        "20": {
           "label": "BuxFaucet 🟢",
           "file": "buxfaucet.php",
           "runner": "php"
         },
-        "22": {
+        "21": {
           "label": "Coinadster 🔴",
           "file": "coinadster.php",
           "runner": "php"
         },
-        "23": {
+        "22": {
           "label": "TRXMiner 🟢",
           "file": "trxminer.py",
           "runner": "python3"
         },
-        "24": {
+        "23": {
           "label": "Bigbtc.win 🟢",
           "file": "bigbtcwin.js",
           "runner": "node"
