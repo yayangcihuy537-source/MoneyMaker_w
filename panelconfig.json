@@ -142,6 +142,31 @@
           "label": "Bigbtc.win 🟢",
           "file": "bigbtcwin.py",
           "runner": "python3"
+        },
+        "22": {
+          "label": "DRFaucet 🟢",
+          "file": "DrFaucet.py",
+          "runner": "python3"
+        },
+        "23": {
+          "label": "Coming Soon 🔵",
+          "file": "ComingSoon2.php",
+          "runner": "php"
+        },
+        "24": {
+          "label": "Coming Soon 🔵",
+          "file": "ComingSoon3.php",
+          "runner": "php"
+        },
+        "25": {
+          "label": "Coming Soon 🔵",
+          "file": "ComingSoon4.php",
+          "runner": "php"
+        },
+        "26": {
+          "label": "Coming Soon 🔵",
+          "file": "ComingSoon5.php",
+          "runner": "php"
         }
       }
     },
