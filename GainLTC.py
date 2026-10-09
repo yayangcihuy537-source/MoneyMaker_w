@@ -9,7 +9,7 @@ import time
 import random
 import threading
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -19,22 +19,31 @@ except ImportError:
     print("pip install requests")
     sys.exit(1)
 
-# ==================== CONFIG LOCATION ====================
-# Simpan di folder yg sama dengan script
-SCRIPT_DIR = Path(__file__).resolve().parent
+# ==================== CONFIG ====================
+SCRIPT_DIR  = Path(__file__).resolve().parent
 CONFIG_PATH = SCRIPT_DIR / "gainltc_config.json"
 
 BASE       = "https://gainltc.com"
 SOLVER_IN  = "https://api.waryono.my.id/in.php"
 SOLVER_RES = "https://api.waryono.my.id/res.php"
 
+DEFAULT_UA = ("Mozilla/5.0 (Linux; Android 10; K) "
+              "AppleWebKit/537.36 (KHTML, like Gecko) "
+              "Chrome/127.0.0.0 Mobile Safari/537.36")
+
 DEFAULT_CONFIG = {
-    "u": "",            # email
-    "p": "",            # password
-    "k": "",            # waryono apikey
+    "u": "",
+    "p": "",
+    "k": "",
     "s": "05e4f926-1cc6-4438-8018-3a388392ea26",
+    "ua": "",       # User-Agent (kosong = pakai DEFAULT_UA)
     "d": True,
 }
+
+MAX_LOGIN_ATTEMPTS  = 2
+RATE_LIMIT_DEFAULT  = 90
+RATE_LIMIT_MAX      = 600
+BACKOFF_BASE        = 5
 
 # ==================== COLORS ====================
 class C:
@@ -54,14 +63,17 @@ STATE = {
     "total_claims": 0, "total_reward": 0,
     "next_claim_at": 0.0, "csrf_token": None,
     "logged_in": False,
+    "rate_limit_until": 0.0,
 }
 
 # ==================== UTILS ====================
 def clear():
     os.system("cls" if os.name == "nt" else "clear")
 
+
 def now_str():
     return datetime.now().strftime("%H:%M:%S")
+
 
 def fmt_duration(seconds):
     seconds = int(max(0, seconds))
@@ -69,6 +81,7 @@ def fmt_duration(seconds):
     m, s = divmod(rem, 60)
     if h > 0: return f"{h:02d}:{m:02d}:{s:02d}"
     return f"{m:02d}:{s:02d}"
+
 
 def banner():
     clear()
@@ -78,25 +91,29 @@ def banner():
    ╚══════════════════════════════════════════════════════════════╝
 """)
 
+
 def log(msg, level="info"):
     icons = {
-        "info":    f"{C.CYAN}ℹ{C.R}", "ok": f"{C.GREEN}✔{C.R}",
-        "warn":    f"{C.YELLOW}⚠{C.R}", "err": f"{C.RED}✖{C.R}",
-        "coin":    f"{C.YELLOW}🪙{C.R}", "auth": f"{C.BLUE}🔐{C.R}",
+        "info": f"{C.CYAN}ℹ{C.R}", "ok": f"{C.GREEN}✔{C.R}",
+        "warn": f"{C.YELLOW}⚠{C.R}", "err": f"{C.RED}✖{C.R}",
+        "coin": f"{C.YELLOW}🪙{C.R}", "auth": f"{C.BLUE}🔐{C.R}",
         "captcha": f"{C.BLUE}🛡 {C.R}", "wait": f"{C.GRAY}⏳{C.R}",
-        "bal":     f"{C.GREEN}💰{C.R}", "dbg": f"{C.MAGENTA}🐛{C.R}",
-        "slider":  f"{C.MAGENTA}🎯{C.R}",
+        "bal": f"{C.GREEN}💰{C.R}", "dbg": f"{C.MAGENTA}🐛{C.R}",
+        "slider": f"{C.MAGENTA}🎯{C.R}", "sleep": f"{C.GRAY}💤{C.R}",
+        "limit": f"{C.RED}🚫{C.R}",
     }
     icon = icons.get(level, icons["info"])
     sys.stdout.write("\r\033[K")
     sys.stdout.flush()
     print(f"{C.GRAY}[{now_str()}]{C.R} {icon}  {msg}")
 
+
 def section(title):
     sys.stdout.write("\r\033[K")
     sys.stdout.flush()
     print(f"\n{C.BOLD}{C.GREEN}▸ {title.upper()}{C.R}")
     print(f"{C.GRAY}{'─' * 60}{C.R}")
+
 
 def spinner_line(text):
     global _spin_idx
@@ -106,9 +123,43 @@ def spinner_line(text):
     sys.stdout.write(f"\r\033[K{C.CYAN}{frame}{C.R}  {text}")
     sys.stdout.flush()
 
+
 def clear_line():
     sys.stdout.write("\r\033[K")
     sys.stdout.flush()
+
+
+def countdown_sleep(seconds, label="wait"):
+    total = int(seconds)
+    if total <= 0:
+        return
+    print()
+    last_sec = -1
+    end = time.time() + total
+    while True:
+        left = int(end - time.time())
+        if left <= 0:
+            break
+        if left != last_sec:
+            sys.stdout.write(f"\r\033[K{C.GRAY}[{now_str()}]{C.R} {C.GRAY}💤{C.R}  {label}: {C.YELLOW}{fmt_duration(left)}{C.R}")
+            sys.stdout.flush()
+            last_sec = left
+        time.sleep(0.3)
+    sys.stdout.write("\r\033[K")
+    sys.stdout.flush()
+
+
+def safe_input(prompt=""):
+    try:
+        sys.stdout.write(prompt)
+        sys.stdout.flush()
+        line = sys.stdin.readline()
+        if not line:
+            return ""
+        return line.rstrip("\r\n").strip()
+    except (EOFError, KeyboardInterrupt):
+        return ""
+
 
 # ==================== CONFIG ====================
 def load_config():
@@ -120,9 +171,11 @@ def load_config():
     except Exception:
         return None
 
+
 def save_config(cfg):
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2)
+
 
 def ensure_config():
     cfg = load_config()
@@ -137,58 +190,76 @@ def ensure_config():
         return cfg
     return dict(DEFAULT_CONFIG)
 
+
+def get_user_agent(cfg):
+    """Ambil UA dari config, fallback ke default."""
+    ua = (cfg or {}).get("ua", "").strip()
+    return ua if ua else DEFAULT_UA
+
+
 # ==================== MENU ====================
 def menu():
     banner()
     cfg = load_config() or {}
-
     u = cfg.get("u", "") or "(empty)"
     k = cfg.get("k", "")
     k_disp = f"{k[:8]}..." if k else "(empty)"
+    ua = cfg.get("ua", "") or "(default)"
 
-    print(f"{C.GRAY}Account :{C.R} {C.CYAN}{u}{C.R}")
-    print(f"{C.GRAY}API Key :{C.R} {C.CYAN}{k_disp}{C.R}")
+    # Preview UA (potong kalau panjang)
+    ua_disp = ua if len(ua) <= 50 else ua[:47] + "..."
+
+    print(f"{C.GRAY}Account  :{C.R} {C.CYAN}{u}{C.R}")
+    print(f"{C.GRAY}API Key  :{C.R} {C.CYAN}{k_disp}{C.R}")
+    print(f"{C.GRAY}User-Agent:{C.R} {C.CYAN}{ua_disp}{C.R}")
     print()
     print(f"{C.BOLD}{C.GREEN}MENU:{C.R}")
     print(f"  {C.YELLOW}[1]{C.R} Start")
     print(f"  {C.YELLOW}[2]{C.R} Set API Key")
     print(f"  {C.YELLOW}[3]{C.R} Set Email")
     print(f"  {C.YELLOW}[4]{C.R} Set Password")
+    print(f"  {C.YELLOW}[5]{C.R} Set User-Agent")
     print(f"  {C.YELLOW}[0]{C.R} Exit")
     print()
-    try:
-        choice = input(f"{C.CYAN}Pilih → {C.R}").strip()
-    except (EOFError, KeyboardInterrupt):
+    choice = safe_input(f"{C.CYAN}Pilih → {C.R}")
+    if not choice:
         return "0"
     return choice
 
-def menu_config_field(label, key, secret=False):
+
+def menu_config_field(label, key):
     banner()
     section(f"Set {label}")
     cfg = load_config() or dict(DEFAULT_CONFIG)
     cur = cfg.get(key, "")
     if cur:
-        if secret:
-            print(f"{C.GRAY}Current: (saved){C.R}")
+        if key == "p":
+            preview = "*" * len(cur)
         else:
-            print(f"{C.GRAY}Current: {C.CYAN}{cur}{C.R}")
+            preview = cur
+        print(f"{C.GRAY}Current: {C.CYAN}{preview}{C.R}")
+    print()
 
-    try:
-        if secret:
-            import getpass
-            val = getpass.getpass(f"  {C.CYAN}{label}{C.R} (empty=skip): ").strip()
-        else:
-            val = input(f"  {C.CYAN}{label}{C.R} (empty=skip): ").strip()
-    except (EOFError, KeyboardInterrupt):
-        return
+    if key == "ua":
+        print(f"{C.GRAY}Kosongin buat pakai default:{C.R}")
+        print(f"{C.DIM}{DEFAULT_UA}{C.R}")
+        print()
 
-    if val:
+    val = safe_input(f"  {C.CYAN}{label}{C.R} (empty=skip): ")
+
+    # Khusus UA: kalau user ketik "-" → reset ke default (kosongin)
+    if key == "ua" and val == "-":
+        cfg[key] = ""
+        save_config(cfg)
+        print(f"\n{C.GREEN}✔ User-Agent reset ke default.{C.R}")
+    elif val:
         cfg[key] = val
         save_config(cfg)
-        print(f"\n{C.GREEN}✔ Saved.{C.R}")
+        print(f"\n{C.GREEN}✔ {label} saved.{C.R}")
     else:
         print(f"\n{C.YELLOW}Skip.{C.R}")
-    time.sleep(1)
+    time.sleep(1.2)
+
 
 def menu_loop():
     while True:
@@ -209,6 +280,7 @@ def menu_loop():
                 "password": cfg["p"],
                 "waryono_apikey": cfg["k"],
                 "hcaptcha_sitekey": cfg.get("s", DEFAULT_CONFIG["s"]),
+                "user_agent": get_user_agent(cfg),
                 "debug_challenge": cfg.get("d", True),
             }
         elif choice == "2":
@@ -216,19 +288,21 @@ def menu_loop():
         elif choice == "3":
             menu_config_field("Email", "u")
         elif choice == "4":
-            menu_config_field("Password", "p", secret=True)
+            menu_config_field("Password", "p")
+        elif choice == "5":
+            menu_config_field("User-Agent", "ua")
         elif choice == "0":
             return None
         else:
             time.sleep(1)
 
+
 # ==================== SESSION ====================
-def make_session():
+def make_session(user_agent=None):
+    ua = user_agent or DEFAULT_UA
     s = requests.Session()
     s.headers.update({
-        "User-Agent": ("Mozilla/5.0 (Linux; Android 10; K) "
-                       "AppleWebKit/537.36 (KHTML, like Gecko) "
-                       "Chrome/127.0.0.0 Mobile Safari/537.36"),
+        "User-Agent": ua,
         "Accept": "application/json, text/plain, */*",
         "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
         "sec-ch-ua": '"Chromium";v="127", "Not)A;Brand";v="99", "Microsoft Edge Simulate";v="127", "Lemur";v="127"',
@@ -238,6 +312,7 @@ def make_session():
         "Referer": f"{BASE}/",
     })
     return s
+
 
 def refresh_csrf(session):
     try:
@@ -256,10 +331,88 @@ def refresh_csrf(session):
         pass
     return None
 
+
 def csrf_headers(token=None):
     if not token:
         token = STATE["csrf_token"]
     return {"x-csrf-token": token} if token else {}
+
+
+# ==================== BLOCK / RATE LIMIT ====================
+def parse_block_info(resp, context=""):
+    if resp is None:
+        return (False, 0, "")
+
+    if resp.status_code == 429:
+        wait = _extract_wait_from_response(resp, default=RATE_LIMIT_DEFAULT)
+        return (True, wait, "HTTP 429 (too many requests)")
+
+    if resp.status_code == 503:
+        wait = _extract_wait_from_response(resp, default=60)
+        return (True, wait, "HTTP 503 (service unavailable)")
+
+    try:
+        rj = resp.json()
+    except Exception:
+        rj = None
+
+    if isinstance(rj, dict):
+        blocked = bool(rj.get("blocked"))
+        err_msg = str(rj.get("error", "")).lower()
+        if "too many" in err_msg or "try again later" in err_msg or "rate" in err_msg:
+            blocked = True
+        if blocked:
+            wait = _extract_wait_from_json(rj, default=RATE_LIMIT_DEFAULT)
+            return (True, wait, rj.get("error", "rate limited"))
+
+    return (False, 0, "")
+
+
+def _extract_wait_from_response(resp, default=RATE_LIMIT_DEFAULT):
+    ra = resp.headers.get("Retry-After") or resp.headers.get("retry-after")
+    if ra:
+        try:
+            return min(int(float(ra)), RATE_LIMIT_MAX)
+        except (TypeError, ValueError):
+            pass
+    try:
+        rj = resp.json()
+        if isinstance(rj, dict):
+            return _extract_wait_from_json(rj, default=default)
+    except Exception:
+        pass
+    return default
+
+
+def _extract_wait_from_json(rj, default=RATE_LIMIT_DEFAULT):
+    if "retryAfterSeconds" in rj:
+        try:
+            return min(int(rj["retryAfterSeconds"]), RATE_LIMIT_MAX)
+        except (TypeError, ValueError):
+            pass
+    if "blockedUntil" in rj:
+        try:
+            ts_str = str(rj["blockedUntil"]).replace("Z", "+00:00")
+            dt = datetime.fromisoformat(ts_str)
+            now = datetime.now(timezone.utc)
+            wait = max(0, int((dt - now).total_seconds()))
+            if wait > 0:
+                return min(wait, RATE_LIMIT_MAX)
+        except Exception:
+            pass
+    return default
+
+
+def set_rate_limit(wait_seconds, reason=""):
+    until = time.time() + wait_seconds
+    if until > STATE.get("rate_limit_until", 0):
+        STATE["rate_limit_until"] = until
+
+
+def check_rate_limit():
+    left = STATE.get("rate_limit_until", 0) - time.time()
+    return max(0, int(left))
+
 
 # ==================== CAPTCHA SOLVERS ====================
 def solve_emoji_slider(challenge):
@@ -273,8 +426,9 @@ def solve_emoji_slider(challenge):
     jitter = max(1, tolerance // 3)
     answer = target + random.randint(-jitter, jitter)
     answer = max(0, min(100, answer))
-    log(f"slider: {active_emoji} → {answer}", "slider")
+    log(f"slider: {active_emoji} pos~{target} → {answer}", "slider")
     return [str(answer)]
+
 
 def solve_count(challenge):
     grid = challenge.get("grid") or []
@@ -283,30 +437,22 @@ def solve_count(challenge):
         raise Exception("count: invalid")
     indices = [i for i, e in enumerate(grid) if e == winner]
     if not indices:
-        raise Exception("count: no match")
-    log(f"count: {winner} idx={indices}", "slider")
-    return indices
+        raise Exception("count: winner tidak ada di grid")
+    log(f"count: {winner} freq={len(indices)} idx={indices}", "slider")
+    return [winner]
+
 
 def solve_sequence(challenge):
     target = challenge.get("target") or []
     grid = challenge.get("grid") or []
     if not target or not grid:
         raise Exception("sequence: invalid")
-    pos_map = {}
-    for i, e in enumerate(grid):
-        pos_map.setdefault(e, []).append(i)
-    answer = []
-    used = set()
     for t in target:
-        for idx in pos_map.get(t, []):
-            if idx not in used:
-                answer.append(idx)
-                used.add(idx)
-                break
-        else:
-            raise Exception(f"sequence: '{t}' not found")
-    log(f"sequence: {answer}", "slider")
-    return answer
+        if t not in grid:
+            raise Exception(f"sequence: '{t}' tidak ada di grid")
+    log(f"sequence: {target}", "slider")
+    return list(target)
+
 
 def solve_tap_target(challenge):
     target = challenge.get("target")
@@ -316,6 +462,7 @@ def solve_tap_target(challenge):
     answer = [target] * taps
     log(f"tap-target: {target} x{taps}", "slider")
     return answer
+
 
 def solve_connect_pairs(challenge):
     emojis = challenge.get("emojis") or []
@@ -334,6 +481,7 @@ def solve_connect_pairs(challenge):
     log(f"connect-pairs: {answer}", "slider")
     return answer
 
+
 def solve_drag_order(challenge):
     items = challenge.get("items") or challenge.get("targets") or []
     order = challenge.get("correctOrder") or challenge.get("order") or challenge.get("sequence")
@@ -345,6 +493,7 @@ def solve_drag_order(challenge):
         if answer:
             return answer
     raise Exception("drag-order: invalid")
+
 
 def solve_challenge(challenge):
     ctype = (challenge.get("type") or "").lower().strip()
@@ -362,9 +511,22 @@ def solve_challenge(challenge):
         raise Exception(f"Unknown: {ctype}")
     return fn(challenge)
 
+
 # ==================== LOGIN ====================
+class RateLimited(Exception):
+    def __init__(self, wait_seconds, reason=""):
+        super().__init__(f"Rate limited: {wait_seconds}s ({reason})")
+        self.wait_seconds = wait_seconds
+        self.reason = reason
+
+
 def do_login(session, cfg):
     log("Login flow started", "auth")
+
+    rl = check_rate_limit()
+    if rl > 0:
+        raise RateLimited(rl, "global rate limit active")
+
     token = refresh_csrf(session)
     if not token:
         log("CSRF fail", "err")
@@ -374,12 +536,22 @@ def do_login(session, cfg):
     try:
         r = session.post(f"{BASE}/api/captcha/generate",
                          headers=dict(csrf_headers(token)), timeout=30)
-        if not r.ok:
-            log(f"Captcha gen HTTP {r.status_code}", "err")
-            return False
-        cap = r.json()
     except Exception as e:
         log(f"Captcha gen error: {e}", "err")
+        return False
+
+    if not r.ok:
+        blocked, wait, reason = parse_block_info(r, "captcha-gen")
+        if blocked:
+            set_rate_limit(wait, reason)
+            raise RateLimited(wait, reason)
+        log(f"Captcha gen HTTP {r.status_code}", "err")
+        return False
+
+    try:
+        cap = r.json()
+    except Exception:
+        log("Captcha response non-JSON", "err")
         return False
 
     cap_token = cap.get("token")
@@ -395,24 +567,42 @@ def do_login(session, cfg):
         answer = solve_challenge(challenge)
     except Exception as e:
         log(f"Solve error: {e}", "err")
-        log(f"dump: {json.dumps(challenge)[:400]}", "dbg")
+        log(f"dump: {json.dumps(challenge, ensure_ascii=False)[:400]}", "dbg")
         return False
 
-    log(f"Answer: {json.dumps(answer)[:150]}", "dbg")
+    log(f"Answer: {json.dumps(answer, ensure_ascii=False)[:200]}", "dbg")
 
     try:
         r = session.post(f"{BASE}/api/captcha/verify",
                          json={"token": cap_token, "answer": answer, "type": challenge.get("type")},
                          headers={**csrf_headers(token), "Content-Type": "application/json"},
                          timeout=30)
-        if not r.ok:
-            log(f"Verify HTTP {r.status_code}", "err")
-            log(f"body: {r.text[:200]}", "dbg")
-            return False
-        vres = r.json()
     except Exception as e:
         log(f"Verify error: {e}", "err")
         return False
+
+    if not r.ok:
+        blocked, wait, reason = parse_block_info(r, "captcha-verify")
+        if blocked:
+            set_rate_limit(wait, reason)
+            raise RateLimited(wait, reason)
+        try:
+            body = r.json()
+            log(f"Verify fail: {body}", "err")
+        except Exception:
+            log(f"Verify HTTP {r.status_code}: {r.text[:150]}", "err")
+        return False
+
+    try:
+        vres = r.json()
+    except Exception:
+        log("Verify non-JSON", "err")
+        return False
+
+    blocked, wait, reason = parse_block_info(r, "captcha-verify-body")
+    if blocked:
+        set_rate_limit(wait, reason)
+        raise RateLimited(wait, reason)
 
     verified_token = vres.get("verifiedToken")
     if not verified_token:
@@ -426,13 +616,28 @@ def do_login(session, cfg):
                                "captchaToken": verified_token, "rememberMe": True},
                          headers={**csrf_headers(token), "Content-Type": "application/json"},
                          timeout=30)
-        if not r.ok:
-            log(f"Login HTTP {r.status_code}", "err")
-            return False
-        result = r.json()
     except Exception as e:
         log(f"Login error: {e}", "err")
         return False
+
+    if not r.ok:
+        blocked, wait, reason = parse_block_info(r, "login")
+        if blocked:
+            set_rate_limit(wait, reason)
+            raise RateLimited(wait, reason)
+        log(f"Login HTTP {r.status_code}", "err")
+        return False
+
+    try:
+        result = r.json()
+    except Exception:
+        log("Login non-JSON", "err")
+        return False
+
+    blocked, wait, reason = parse_block_info(r, "login-body")
+    if blocked:
+        set_rate_limit(wait, reason)
+        raise RateLimited(wait, reason)
 
     if not result.get("success"):
         log(f"Login failed: {result}", "err")
@@ -444,10 +649,12 @@ def do_login(session, cfg):
     STATE["balance"] = user.get("balance")
     STATE["total_earned"] = user.get("totalEarned")
     STATE["logged_in"] = True
+    STATE["rate_limit_until"] = 0
 
     log(f"Login ✓ {STATE['username']}", "ok")
     log(f"Balance: {STATE['balance']}", "bal")
     return True
+
 
 def verify_session(session):
     try:
@@ -468,6 +675,42 @@ def verify_session(session):
         pass
     STATE["logged_in"] = False
     return False
+
+
+def login_with_retry(session, cfg, max_attempts=MAX_LOGIN_ATTEMPTS):
+    attempt = 0
+    while attempt < max_attempts:
+        attempt += 1
+        try:
+            if do_login(session, cfg):
+                return True
+            if attempt < max_attempts:
+                backoff = BACKOFF_BASE * attempt
+                log(f"Retry dalam {backoff}s...", "wait")
+                time.sleep(backoff)
+        except RateLimited as e:
+            wait = e.wait_seconds
+            log(f"🚫 Rate limit: tunggu {fmt_duration(wait)} ({e.reason})", "limit")
+            countdown_sleep(wait + 3, "Rate limit")
+            log("Rate limit selesai, coba login lagi...", "info")
+            try:
+                if do_login(session, cfg):
+                    return True
+            except RateLimited as e2:
+                log(f"Masih rate limited ({e2.wait_seconds}s lagi)", "limit")
+                return None
+            except Exception as e2:
+                log(f"Login err: {e2}", "err")
+                return False
+            return False
+        except Exception as e:
+            log(f"Login err ({attempt}/{max_attempts}): {e}", "err")
+            if attempt < max_attempts:
+                backoff = BACKOFF_BASE * attempt
+                log(f"Retry dalam {backoff}s...", "wait")
+                time.sleep(backoff)
+    return False
+
 
 # ==================== HCAPTCHA ====================
 def solve_hcaptcha(cfg, sitekey):
@@ -515,12 +758,14 @@ def solve_hcaptcha(cfg, sitekey):
     clear_line()
     raise Exception("timeout")
 
+
 # ==================== FAUCET ====================
 def get_faucet_status(session):
     r = session.get(f"{BASE}/api/faucet/status", headers=csrf_headers(), timeout=30)
     if not r.ok:
         raise Exception(f"HTTP {r.status_code}")
     return r.json()
+
 
 def do_faucet_claim(session, cfg):
     log("Faucet claim...", "coin")
@@ -560,6 +805,7 @@ def do_faucet_claim(session, cfg):
     log(f"Claim ✓ #{roll} +{reward} | bal: {new_balance}", "coin")
     return data
 
+
 # ==================== DASHBOARD ====================
 def dashboard_line():
     now = time.time()
@@ -574,6 +820,7 @@ def dashboard_line():
             f"📊{STATE['total_claims']} "
             f"💵{C.YELLOW}{STATE['total_reward']}{C.R} "
             f"⏱{C.CYAN}{runtime}{C.R}")
+
 
 def wait_with_dashboard(target_ts):
     print()
@@ -594,24 +841,26 @@ def wait_with_dashboard(target_ts):
         sys.stdout.write("\r\033[K")
         sys.stdout.flush()
 
+
 # ==================== FARMING ====================
 def start_farming(cfg):
     banner()
     log("Bot started", "ok")
-    session = make_session()
+
+    ua = cfg.get("user_agent") or DEFAULT_UA
+    if ua != DEFAULT_UA:
+        log(f"UA: {ua[:60]}{'...' if len(ua) > 60 else ''}", "info")
+
+    session = make_session(user_agent=ua)
 
     section("Login")
-    ok = False
-    for attempt in range(8):
-        try:
-            if do_login(session, cfg):
-                ok = True
-                break
-        except Exception as e:
-            log(f"Login err ({attempt+1}/8): {e}", "err")
-            time.sleep(2)
-    if not ok:
-        log("Login failed, back to menu", "err")
+    res = login_with_retry(session, cfg)
+    if res is None:
+        log("Masih rate limited. Balik ke menu.", "err")
+        time.sleep(3)
+        return
+    if not res:
+        log("Login failed, balik ke menu", "err")
         time.sleep(2)
         return
 
@@ -636,8 +885,13 @@ def start_farming(cfg):
         try:
             if not verify_session(session):
                 log("Session expired, re-login...", "warn")
-                if not do_login(session, cfg):
-                    log("Re-login failed, back to menu", "err")
+                res = login_with_retry(session, cfg)
+                if res is None:
+                    log("Masih rate limited. Balik ke menu.", "err")
+                    time.sleep(3)
+                    return
+                if not res:
+                    log("Re-login failed, balik ke menu", "err")
                     time.sleep(2)
                     return
 
@@ -676,6 +930,7 @@ def start_farming(cfg):
             log(f"Loop error: {e} (retry 10s)", "err")
             time.sleep(10)
 
+
 # ==================== MAIN ====================
 def main():
     while True:
@@ -690,6 +945,7 @@ def main():
             print()
             print(f"{C.YELLOW}Back to menu...{C.R}")
             time.sleep(1)
+
 
 if __name__ == "__main__":
     sys.tracebacklimit = 0
