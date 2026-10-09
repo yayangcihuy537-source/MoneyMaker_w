@@ -119,7 +119,7 @@
           "runner": "php"
         },
         "17": {
-          "label": "CryptoCrops 🟡",
+          "label": "CryptoCrops 🟢",
           "file": "CryptoCrops.py",
           "runner": "python3"
         },
