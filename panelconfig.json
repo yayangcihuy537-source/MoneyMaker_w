@@ -109,9 +109,9 @@
           "runner": "php"
         },
         "15": {
-          "label": "Gamefaucet 🟢",
-          "file": "Gamefaucet.php",
-          "runner": "php"
+          "label": "BullyDAO 🟢",
+          "file": "Dao.py",
+          "runner": "python"
         },
         "16": {
           "label": "PayubVideo 🟡",
