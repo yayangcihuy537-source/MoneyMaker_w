@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-CryptoCrops Auto Farm - FINAL v4
-==================================
-- Live countdown 1 baris pakai ANSI \033[K (anti numpuk)
-- Faucet RATE_LIMITED → cooldown lokal, lanjut cycle lain
-- Crop ready cuma yg punya crop_id valid
-- Solver Altcha lokal (no external API)
-- Minimal request mode (countdown lokal)
-- Auto-pause tiap 5 jam → 30 menit
+CryptoCrops Auto Farm - v5
+===========================
+Fix:
+  - Cookie parsing robust (jadi cookie jar bener)
+  - AUTHENTICATION_REQUIRED → bot STOP, bukan cooldown
+  - Local state = source of truth setelah plant/harvest
+  - Bootstrap gagal → JANGAN overwrite local state
 """
 
 import json
@@ -22,6 +21,7 @@ import random
 import threading
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import unquote
 
 try:
     import requests
@@ -75,6 +75,14 @@ STATE = {
     "last_sync": 0.0,
     "faucet_fail_until_ms": 0,
 }
+
+AUTH_ERROR_KEYWORDS = [
+    "AUTHENTICATION_REQUIRED",
+    "UNAUTHORIZED",
+    "INVALID_SESSION",
+    "SESSION_EXPIRED",
+    "AUTH_REQUIRED",
+]
 
 # ==================== COLORS ====================
 class C:
@@ -150,6 +158,11 @@ def clear_spinner():
     sys.stdout.write("\r\033[K")
     sys.stdout.flush()
 
+def is_auth_error(err_str):
+    """Cek apakah error message indikasi auth gagal."""
+    s = str(err_str).upper()
+    return any(k in s for k in AUTH_ERROR_KEYWORDS)
+
 # ==================== CONFIG ====================
 def load_config():
     if not CONFIG_PATH.exists():
@@ -167,6 +180,27 @@ def save_config(cfg):
     except Exception as e:
         print(f"{C.RED}!! Gagal simpan config: {e}{C.R}")
 
+def normalize_cookie(raw):
+    """
+    Bersihkan cookie string:
+      - Trim spasi/newline
+      - Buang kontrol karakter & zero-width
+      - Ganti separator koma → titik-koma
+      - Rapihin spasi setelah ;
+    """
+    if not raw:
+        return ""
+    # Buang \r\n, \t, zero-width
+    raw = raw.strip().replace("\r", "").replace("\n", "").replace("\t", " ")
+    raw = raw.replace("\u200b", "").replace("\u200c", "").replace("\u200d", "").replace("\ufeff", "")
+    # Kalau pakai koma sebagai separator
+    if ";" not in raw and "," in raw:
+        raw = raw.replace(",", ";")
+    # Rapihin spasi setelah ;
+    import re
+    raw = re.sub(r"\s*;\s*", "; ", raw)
+    return raw.strip().rstrip(";")
+
 def ensure_config():
     cfg = load_config()
     if cfg and isinstance(cfg, dict):
@@ -179,6 +213,12 @@ def ensure_config():
             if old in cfg:
                 cfg.pop(old, None)
                 changed = True
+        # Normalize cookie setiap load
+        if cfg.get("cookie"):
+            normalized = normalize_cookie(cfg["cookie"])
+            if normalized != cfg["cookie"]:
+                cfg["cookie"] = normalized
+                changed = True
         if changed:
             save_config(cfg)
         return cfg
@@ -188,7 +228,7 @@ def ensure_config():
     print(f"{C.YELLOW}File cconfig.json belum ada. Isi data di bawah:{C.R}\n")
     cookie = input(f"  {C.CYAN}Cookie browser{C.R} : ").strip()
     cfg = dict(DEFAULT_CONFIG)
-    cfg["cookie"] = cookie
+    cfg["cookie"] = normalize_cookie(cookie)
     save_config(cfg)
     print(f"\n{C.GREEN}✔ cconfig.json tersimpan di {CONFIG_PATH}{C.R}\n")
     time.sleep(1)
@@ -272,6 +312,11 @@ def extract_altcha_block(payload):
 
 # ==================== STATE UPDATER ====================
 def update_state_from_bootstrap(bootstrap):
+    """
+    Sync STATE dari bootstrap.
+    PENTING: crop yg belum punya crop_id di server akan di-SKIP countdown,
+    tapi tetap dihitung di total crops (based on plot_index).
+    """
     farm = bootstrap.get("farm") or {}
     profile = farm.get("profile") or {}
 
@@ -330,8 +375,17 @@ class FarmClient:
             "Content-Type": "application/json",
             "Origin": BASE,
             "Referer": f"{BASE}/faucet/",
-            "Cookie": cfg["cookie"],
         })
+        # ── FIX #1: Set cookies properly via cookie jar (bukan header) ──
+        cookie_raw = normalize_cookie(cfg.get("cookie", ""))
+        for part in cookie_raw.split(";"):
+            part = part.strip()
+            if "=" in part:
+                k, v = part.split("=", 1)
+                k = k.strip()
+                v = unquote(v.strip())  # decode URL-encoded values
+                if k and v:
+                    self.session.cookies.set(k, v, domain="cryptocrops.net")
 
     def api(self, method, path, json_data=None, referer=None):
         headers = {}
@@ -340,13 +394,17 @@ class FarmClient:
         r = self.session.request(
             method, BASE + path, json=json_data, headers=headers or None, timeout=45
         )
+
+        # Parse JSON first, then check status
         try:
             data = r.json()
         except Exception:
-            raise Exception(f"HTTP {r.status_code} | {r.text[:300]}")
+            raise Exception(f"HTTP {r.status_code} | non-JSON: {r.text[:200]}")
+
         if r.status_code >= 400:
             err = data.get("error") or data.get("message") or str(data)
             raise Exception(err)
+
         return data
 
     def bootstrap(self, update_state=True):
@@ -402,6 +460,8 @@ class FarmClient:
             chal = self.api("POST", "/api/farm-checkpoint/challenge",
                             {"attempt_id": attempt_id}, referer=f"{BASE}/farm/")
         except Exception as e:
+            if is_auth_error(e):
+                raise
             log(f"Checkpoint challenge error: {e}", "warn")
             return False
 
@@ -466,10 +526,17 @@ class FarmClient:
                 log(f"Harvest {crop['seed_id']} → {pts} pts{perfect}", "farm")
                 count += 1
                 STATS["harvested"] += 1
+                # Hapus dari local state
                 STATE["crops"] = [c for c in STATE["crops"] if c.get("crop_id") != crop_id]
+                # Update coins kalau server kasih
+                if "coins" in res:
+                    try:
+                        STATE["farm_coins"] = int(res["coins"])
+                    except (TypeError, ValueError):
+                        pass
                 time.sleep(random.uniform(0.5, 1.5))
             except Exception as e:
-                if "FARM_CHECKPOINT_REQUIRED" in str(e):
+                if is_auth_error(e) or "FARM_CHECKPOINT_REQUIRED" in str(e):
                     raise
                 log(f"Gagal harvest {crop_id}: {e} (skip)", "warn")
         return count
@@ -520,7 +587,7 @@ class FarmClient:
 
             seed_id = chosen["seed_id"]
             try:
-                self.api("POST", "/api/farm/plant", {
+                resp = self.api("POST", "/api/farm/plant", {
                     "idempotency_key": str(uuid.uuid4()),
                     "seed_id": seed_id,
                     "plot_index": plot,
@@ -531,6 +598,7 @@ class FarmClient:
                 pts = int(info.get("base_points", 0))
                 log(f"Plant {name} [{rarity}] {pts} pts → plot {plot}", "farm")
 
+                # Update local state
                 STATE["seeds"][seed_id] = STATE["seeds"].get(seed_id, 0) - 1
                 grow_sec = self.seed_grow_seconds(seed_id)
                 STATE["crops"].append({
@@ -545,7 +613,7 @@ class FarmClient:
                 STATS["planted"] += 1
                 time.sleep(random.uniform(0.5, 1.5))
             except Exception as e:
-                if "FARM_CHECKPOINT_REQUIRED" in str(e):
+                if is_auth_error(e) or "FARM_CHECKPOINT_REQUIRED" in str(e):
                     raise
                 log(f"Gagal plant plot {plot}: {e} (skip)", "warn")
                 break
@@ -569,6 +637,9 @@ class FarmClient:
                                          referer=f"{BASE}/faucet/")
         except Exception as e:
             err_str = str(e)
+            if is_auth_error(err_str):
+                # ── FIX #2: Auth error → STOP, jangan cooldown ──
+                raise Exception(f"AUTH_EXPIRED: {err_str}")
             log(f"Faucet challenge error: {err_str}", "warn")
             STATE["faucet_available"] = False
             STATE["faucet_next_at_ms"] = int((time.time() + FAUCET_FAIL_COOLDOWN) * 1000)
@@ -620,7 +691,10 @@ class FarmClient:
                                "captcha_token": token},
                               referer=f"{BASE}/faucet/")
         except Exception as e:
-            log(f"Faucet claim error: {e}", "warn")
+            err_str = str(e)
+            if is_auth_error(err_str):
+                raise Exception(f"AUTH_EXPIRED: {err_str}")
+            log(f"Faucet claim error: {err_str}", "warn")
             STATE["faucet_available"] = False
             STATE["faucet_next_at_ms"] = int((time.time() + 60) * 1000)
             STATE["faucet_fail_until_ms"] = int((time.time() + 60) * 1000)
@@ -690,6 +764,8 @@ class FarmClient:
                     pass
                 time.sleep(random.uniform(0.5, 1.5))
             except Exception as e:
+                if is_auth_error(e):
+                    raise
                 log(f"Gagal claim {title}: {e} (skip)", "warn")
         return count
 
@@ -708,13 +784,13 @@ def next_event_time():
             candidates.append(now)
 
     for c in STATE["crops"]:
-        if not c.get("crop_id"):
-            continue
         r = c.get("ready_at_ms", 0)
         if r > 0:
             ts = r / 1000.0
             if ts > now:
                 candidates.append(ts)
+            else:
+                candidates.append(now)
 
     if not candidates:
         return now + IDLE_POLL
@@ -722,10 +798,8 @@ def next_event_time():
 
 
 def dashboard_line():
-    """Compact line — dijamin ≤ 70 char, ga wrap."""
     now = time.time()
 
-    # Faucet
     if STATE["faucet_fail_until_ms"] > time.time() * 1000:
         faucet = f"{C.RED}LMT{C.R}"
     elif STATE["faucet_next_at_ms"] > 0 and STATE["faucet_next_at_ms"] / 1000.0 > now:
@@ -733,11 +807,9 @@ def dashboard_line():
     else:
         faucet = f"{C.GREEN}OK{C.R}"
 
-    # Crop ready
+    # Crop ready terdekat (dari semua crop, termasuk yg crop_id=None)
     crop_ready_ts = None
     for c in STATE["crops"]:
-        if not c.get("crop_id"):
-            continue
         r = c.get("ready_at_ms", 0) / 1000.0
         if r > 0:
             if crop_ready_ts is None or r < crop_ready_ts:
@@ -765,26 +837,19 @@ def dashboard_line():
 
 
 def wait_with_dashboard(target_ts, label="wait"):
-    """
-    Live countdown, 1 baris, pakai ANSI \033[K biar ga numpuk.
-    Update cuma 1x per detik.
-    """
     print()
     last_sec = -1
-
     try:
         while True:
             left = target_ts - time.time()
             if left <= 0:
                 break
-
             cur_sec = int(left)
             if cur_sec != last_sec:
                 line = f"{dashboard_line()} {C.GRAY}💤{fmt_duration(left)}{C.R}"
                 sys.stdout.write(f"\r\033[K{line}")
                 sys.stdout.flush()
                 last_sec = cur_sec
-
             time.sleep(min(left, 0.2))
     finally:
         sys.stdout.write("\r\033[K")
@@ -869,6 +934,10 @@ def main():
             f"{len(STATE['crops'])} crops, "
             f"faucet {'READY' if STATE['faucet_available'] else 'CD'}", "sync")
     except Exception as e:
+        if is_auth_error(e):
+            log(f"❌ Cookie expired / invalid saat bootstrap!", "err")
+            log(f"Update cookie di: {CONFIG_PATH}", "err")
+            return
         log(f"Bootstrap error: {e}", "err")
         return
 
@@ -878,9 +947,8 @@ def main():
             now = time.time()
             now_ms = int(now * 1000)
 
-            # Cek aksi
             crops_ready = [c for c in STATE["crops"]
-                           if c.get("crop_id") and c["ready_at_ms"] and now_ms >= c["ready_at_ms"]]
+                           if c["ready_at_ms"] and now_ms >= c["ready_at_ms"]]
             faucet_ready = (
                 STATE["faucet_available"]
                 and STATE["faucet_next_at_ms"] <= now_ms
@@ -915,68 +983,98 @@ def main():
 
             harvested = planted = claimed_m = 0
             did_anything = False
+            auth_error = False
 
             # Checkpoint
             if STATE["checkpoint_required"]:
                 try:
                     client.bootstrap(update_state=True)
-                except Exception:
-                    pass
-                try:
-                    client.handle_checkpoint(client._last_bootstrap or {})
                 except Exception as e:
-                    log(f"Checkpoint error: {e}", "warn")
-                    STATS["errors"] += 1
+                    if is_auth_error(e):
+                        auth_error = True
+                if not auth_error:
+                    try:
+                        client.handle_checkpoint(client._last_bootstrap or {})
+                    except Exception as e:
+                        if is_auth_error(e):
+                            auth_error = True
+                        else:
+                            log(f"Checkpoint error: {e}", "warn")
+                            STATS["errors"] += 1
 
             # Harvest
-            if cfg.get("enable_harvest", True) and crops_ready:
+            if not auth_error and cfg.get("enable_harvest", True) and crops_ready:
                 try:
                     harvested = client.harvest()
                     did_anything = did_anything or bool(harvested)
                 except Exception as e:
-                    if "FARM_CHECKPOINT_REQUIRED" in str(e):
+                    if is_auth_error(e):
+                        auth_error = True
+                    elif "FARM_CHECKPOINT_REQUIRED" in str(e):
                         try:
                             client.bootstrap(update_state=True)
                             if client.handle_checkpoint(client._last_bootstrap or {}):
                                 harvested = client.harvest()
                                 did_anything = did_anything or bool(harvested)
                         except Exception as e2:
-                            log(f"Harvest retry fail: {e2}", "warn")
+                            if is_auth_error(e2):
+                                auth_error = True
+                            else:
+                                log(f"Harvest retry fail: {e2}", "warn")
                     else:
                         log(f"Harvest error: {e}", "warn")
                         STATS["errors"] += 1
 
             # Plant
-            if cfg.get("enable_plant", True):
+            if not auth_error and cfg.get("enable_plant", True):
                 try:
                     planted = client.plant()
                     did_anything = did_anything or bool(planted)
                 except Exception as e:
-                    log(f"Plant error: {e}", "warn")
-                    STATS["errors"] += 1
+                    if is_auth_error(e):
+                        auth_error = True
+                    else:
+                        log(f"Plant error: {e}", "warn")
+                        STATS["errors"] += 1
 
-            # Faucet (skipped kalau kena limit → lanjut terus)
-            if cfg.get("enable_faucet", True) and faucet_ready:
+            # Faucet
+            if not auth_error and cfg.get("enable_faucet", True) and faucet_ready:
                 try:
                     if client.faucet():
                         did_anything = True
                 except Exception as e:
-                    log(f"Faucet error: {e}", "err")
-                    STATS["errors"] += 1
+                    if is_auth_error(e):
+                        auth_error = True
+                    else:
+                        log(f"Faucet error: {e}", "err")
+                        STATS["errors"] += 1
 
             # Mission
-            if cfg.get("enable_mission", True) and mission_ready:
+            if not auth_error and cfg.get("enable_mission", True) and mission_ready:
                 try:
                     claimed_m = client.claim_missions()
                     did_anything = did_anything or bool(claimed_m)
                 except Exception as e:
-                    log(f"Mission error: {e}", "warn")
-                    STATS["errors"] += 1
+                    if is_auth_error(e):
+                        auth_error = True
+                    else:
+                        log(f"Mission error: {e}", "warn")
+                        STATS["errors"] += 1
+
+            # ── AUTH ERROR HANDLING ──
+            if auth_error:
+                print()
+                log("❌ SESSION EXPIRED / INVALID!", "err")
+                log(f"Update cookie di: {CONFIG_PATH}", "err")
+                log("Cara: buka cryptocrops.net di browser, F12 → Application → Cookies", "info")
+                log("Copy value 'cc_session_v1=...' ke cconfig.json", "info")
+                show_summary("AUTH EXPIRED — MANUAL STOP")
+                return
 
             print()
             log(f"Selesai → H:{harvested} P:{planted} M:{claimed_m}", "ok")
 
-            # Re-sync kalau ada aksi
+            # Re-sync — tapi HANYA kalau bukan auth error
             if did_anything:
                 try:
                     log("Re-sync state...", "sync")
