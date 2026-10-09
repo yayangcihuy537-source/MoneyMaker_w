@@ -2,7 +2,7 @@
 
 error_reporting(0);
 date_default_timezone_set('Asia/Jakarta');
-$configFile = "config.json";
+$configFile = "lightminerconfig.json";
 
 if (!is_dir('session')) {
     mkdir('session', 0777, true);
@@ -18,8 +18,9 @@ const putih  = "\033[0;37m";
 const reset  = "\033[0m";
 
 const api_url   = "https://lightningminer.com";
-const SITEKEY   = "0x4AAAAAAEI2cArGyJPBwUGx";
+const SITEKEY   = "764c22e4-3102-4218-8130-1c848c282506";
 const SOLVER_IN = "https://api.waryono.my.id/in.php";
+const SOLVER_RES= "https://api.waryono.my.id/res.php";
 
 $cookieFile = "session/lightningminer_cookies.txt";
 
@@ -75,7 +76,7 @@ function getConfig($configFile) {
     $password = $data['password'] ?? '';
 
     if (empty($apikey)) {
-        echo putih . "API Key Skibidixxx : " . kuning;
+        echo putih . "API Key Waryono    : " . kuning;
         $apikey = trim(fgets(STDIN));
     }
     if (empty($email)) {
@@ -110,7 +111,8 @@ function request($url, $method = 'GET', $payload = null, $headers = []) {
         CURLOPT_CONNECTTIMEOUT => 30,
         CURLOPT_TIMEOUT        => 60,
         CURLOPT_COOKIEFILE     => $cookieFile,
-        CURLOPT_COOKIEJAR      => $cookieFile
+        CURLOPT_COOKIEJAR      => $cookieFile,
+        CURLOPT_ENCODING       => ''
     ];
     if (strtoupper($method) === 'POST') {
         $final[CURLOPT_POST] = true;
@@ -134,7 +136,8 @@ function curl_solver($url, $method = 'GET', $data = [], $headers = []) {
         CURLOPT_SSL_VERIFYPEER => false,
         CURLOPT_SSL_VERIFYHOST => false,
         CURLOPT_CONNECTTIMEOUT => 30,
-        CURLOPT_TIMEOUT        => 60
+        CURLOPT_TIMEOUT        => 60,
+        CURLOPT_ENCODING       => ''
     ];
     if ($headers) $options[CURLOPT_HTTPHEADER] = $final_headers;
     if (strtoupper($method) === 'POST') {
@@ -149,10 +152,10 @@ function curl_solver($url, $method = 'GET', $data = [], $headers = []) {
 
 function auth_headers() {
     return [
-        'sec-ch-ua: "Chromium";v="137", "Not/A)Brand";v="24"',
+        'sec-ch-ua: "Chromium";v="127", "Not)A;Brand";v="99", "Microsoft Edge Simulate";v="127", "Lemur";v="127"',
         'sec-ch-ua-platform: "Android"',
         'sec-ch-ua-mobile: ?1',
-        'user-agent: Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36',
+        'user-agent: Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36',
         'content-type: application/json',
         'accept: */*',
         'origin: https://lightningminer.com',
@@ -164,16 +167,14 @@ function auth_headers() {
     ];
 }
 
-// ========== SOLVER WARYONO (TURNSTILE) - SILENT ==========
-function solve_turnstile($apikey, $sitekey, $action = "faucet-claim") {
+// ========== SOLVER WARYONO (HCAPTCHA) ==========
+function solve_hcaptcha($apikey, $sitekey) {
     $headers = ["Content-Type: application/json"];
     $body = json_encode([
         "apikey"  => $apikey,
-        "methods" => "turnstile",
-        "domain"  => "https://lightningminer.com/faucet",
+        "methods" => "hcaptcha",
+        "domain"  => "https://lightningminer.com",
         "sitekey" => $sitekey,
-        "action"  => $action,
-        "cdata"   => "",
         "json"    => 1
     ]);
     $request = curl_solver(SOLVER_IN, "POST", $body, $headers);
@@ -184,9 +185,9 @@ function solve_turnstile($apikey, $sitekey, $action = "faucet-claim") {
     $taskId = $task['request'];
 
     reload:
-    timer(5, "  turnstile (Waryono)... ");
+    timer(5, "  hcaptcha (waryono)... ");
 
-    $url = "https://api.waryono.my.id/res.php?apikey=" . urlencode($apikey) . "&action=get&id=" . urlencode($taskId) . "&json=1";
+    $url = SOLVER_RES . "?apikey=" . urlencode($apikey) . "&action=get&id=" . urlencode($taskId) . "&json=1";
     $result = curl_solver($url);
 
     $res = json_decode($result, true);
@@ -222,10 +223,9 @@ function get_faucet_cooldown($login_data) {
     return $wait;
 }
 
-// ========== RUN FAUCET (RETRY SAMPAI SUKSES - SILENT ERROR) ==========
+// ========== RUN FAUCET ==========
 function run_faucet($apikey, $email, $password) {
     while (true) {
-        // 1. Cek cooldown dulu sebelum mulai
         $fresh = do_login($email, $password);
         if (!$fresh) {
             sleep(5);
@@ -234,11 +234,9 @@ function run_faucet($apikey, $email, $password) {
 
         $waitFaucet = get_faucet_cooldown($fresh);
         if ($waitFaucet > 0) {
-            // Masih cooldown, balikin wait time ke main loop
             return $waitFaucet;
         }
 
-        // 2. Ambil challenge
         $ch = request(api_url . "/api/faucet/challenge", "GET", null, auth_headers());
         $ch_json = json_decode($ch['body'], true);
 
@@ -253,15 +251,13 @@ function run_faucet($apikey, $email, $password) {
 
         if ($minWait > 0) timer($minWait, "  tunggu readyAt...");
 
-        // 3. Solve Turnstile (retry sampai dapet)
         $captchaToken = null;
         while ($captchaToken === null) {
-            $captchaToken = solve_turnstile($apikey, SITEKEY, "faucet-claim");
+            $captchaToken = solve_hcaptcha($apikey, SITEKEY);
             if ($captchaToken) break;
             sleep(3);
         }
 
-        // 4. Build interaction (realistis)
         $elapsed = ($issuedAt > 0) ? (time() * 1000 - $issuedAt + $minWait * 1000) : ($minWait * 1000 + 2000);
         if ($elapsed < 1000) $elapsed = 15876;
         $interaction = [
@@ -277,7 +273,6 @@ function run_faucet($apikey, $email, $password) {
             "visible"         => true
         ];
 
-        // 5. Claim
         $claim = request(api_url . "/api/faucet", "POST", [
             "captchaToken" => $captchaToken,
             "claimToken"   => $claimToken,
@@ -298,7 +293,6 @@ function run_faucet($apikey, $email, $password) {
             return $cd > 0 ? $cd : 300;
         }
 
-        // Gagal claim, cek lagi cooldown-nya (mungkin baru kena cooldown)
         $fresh = do_login($email, $password);
         if ($fresh) {
             $waitFaucet = get_faucet_cooldown($fresh);
@@ -312,7 +306,7 @@ function run_faucet($apikey, $email, $password) {
 // ============ MAIN ============
 clear();
 echo putih . "===============================================\n";
-echo kuning . "     LIGHTNINGMINER.COM BOT - SINGLE AKUN      \n";
+echo kuning . "     LIGHTNINGMINER.COM BOT - HCAPTCHA         \n";
 echo putih . "===============================================\n";
 
 $config = getConfig($configFile);
@@ -322,12 +316,11 @@ $password = $config['password'];
 
 clear();
 echo putih . "===============================================\n";
-echo kuning . "     LIGHTNINGMINER.COM BOT - SINGLE AKUN      \n";
+echo kuning . "     LIGHTNINGMINER.COM BOT - HCAPTCHA         \n";
 echo putih . "===============================================\n";
 echo putih . "Email : " . cyan . maskEmail($email) . "\n";
 echo putih . "-----------------------------------------------\n";
 
-// Login
 $login = do_login($email, $password);
 
 if (!$login) {
@@ -343,7 +336,6 @@ echo putih . "Mining Power : " . biru . number_format($user['miningPower']) . " 
 echo putih . "Currency     : " . kuning . $user['selectedCurrency'] . "\n";
 echo putih . "-----------------------------------------------\n";
 
-// Main loop
 while (true) {
     $cooldown = run_faucet($apikey, $email, $password);
 
