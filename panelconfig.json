@@ -99,51 +99,46 @@
           "runner": "php"
         },
         "13": {
-          "label": "TheMagicDollar 🟢",
-          "file": "THEMAGICDOLLAR.php",
-          "runner": "php"
-        },
-        "14": {
           "label": "FireFaucet 🟢",
           "file": "FireFaucet.php",
           "runner": "php"
         },
-        "15": {
+        "14": {
           "label": "Earnbitmoon 🟢",
           "file": "Earnbitmoon.php",
           "runner": "php"
         },
-        "16": {
+        "15": {
           "label": "Gamefaucet 🟢",
           "file": "Gamefaucet.php",
           "runner": "php"
         },
-        "17": {
+        "16": {
           "label": "PayubVideo 🟡",
           "file": "Payub.php",
           "runner": "php"
         },
-        "18": {
-          "label": "CryptoCrops 🟢",
+        "17": {
+          "label": "CryptoCrops 🔴",
           "file": "CryptoCrops.py",
           "runner": "python3"
         },
-        "19": {
+        "18": {
           "label": "BuxFaucet 🟢",
           "file": "buxfaucet.php",
           "runner": "php"
         },
-        "20": {
+        "19": {
           "label": "Coinadster 🟢",
           "file": "coinadster.php",
           "runner": "php"
         },
-        "21": {
+        "20": {
           "label": "TRXMiner 🟢",
           "file": "trxminer.py",
           "runner": "python3"
         },
-        "22": {
+        "21": {
           "label": "Bigbtc.win 🟢",
           "file": "bigbtcwin.js",
           "runner": "node"
