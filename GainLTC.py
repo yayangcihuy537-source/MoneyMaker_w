@@ -1,15 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-GainLTC.com Auto Bot - v4
-=========================
-Bypass 5 captcha types TANPA Pillow:
-  - emoji-slider
-  - count
-  - sequence
-  - tap-target
-  - connect-pairs
-Plus faucet hCaptcha via Waryono.
+GainLTC.com Auto Bot v5
+========================
+- Bypass 6 captcha types TANPA Pillow
+- Menu interaktif (start / config / exit)
+- Auto faucet hCaptcha via Waryono
 """
 
 import json
@@ -89,7 +85,7 @@ def banner():
     print(f"""{C.CYAN}{C.BOLD}
    ╔══════════════════════════════════════════════════════════════╗
    ║           💰  G A I N L T C . C O M  💰                      ║
-   ║    AUTO LOGIN · FAUCET · 5 Captcha Types (no Pillow)         ║
+   ║    AUTO LOGIN · FAUCET · 6 Captcha Types (no Pillow)         ║
    ╚══════════════════════════════════════════════════════════════╝
 {C.MAGENTA}                       By MoneyMaker_w{C.R}
 {C.CYAN}          Telegram: https://t.me/+RInZ35ML2GhjM2I1{C.R}
@@ -165,22 +161,106 @@ def ensure_config():
         if changed:
             save_config(cfg)
         return cfg
+    return dict(DEFAULT_CONFIG)
 
+
+# ==================== MENU ====================
+def menu():
+    """Menu utama. Return: pilihan."""
     banner()
-    section("Setup Config")
-    print(f"{C.YELLOW}File config belum ada. Isi data di bawah:{C.R}\n")
-    email = input(f"  {C.CYAN}Email{C.R}            : ").strip()
-    password = input(f"  {C.CYAN}Password{C.R}         : ").strip()
-    apikey = input(f"  {C.CYAN}Waryono API Key{C.R}  : ").strip()
+    cfg = load_config() or {}
 
-    cfg = dict(DEFAULT_CONFIG)
-    cfg["email"] = email
-    cfg["password"] = password
-    cfg["waryono_apikey"] = apikey
-    save_config(cfg)
-    print(f"\n{C.GREEN}✔ Saved: {CONFIG_PATH}{C.R}\n")
-    time.sleep(1)
-    return cfg
+    # Tampilkan status config
+    email = cfg.get("email", "") or "(kosong)"
+    password = cfg.get("password", "")
+    apikey = cfg.get("waryono_apikey", "")
+
+    pass_display = "✓ tersimpan" if password else "(kosong)"
+    apikey_display = f"{apikey[:12]}..." if apikey else "(kosong)"
+    email_display = email
+
+    print(f"{C.GRAY}Config saat ini:{C.R}")
+    print(f"  {C.GRAY}Email   :{C.R} {C.CYAN}{email_display}{C.R}")
+    print(f"  {C.GRAY}Password:{C.R} {C.CYAN}{pass_display}{C.R}")
+    print(f"  {C.GRAY}API Key :{C.R} {C.CYAN}{apikey_display}{C.R}")
+    print()
+    print(f"{C.BOLD}{C.GREEN}MENU:{C.R}")
+    print(f"  {C.YELLOW}[1]{C.R} Start Farming")
+    print(f"  {C.YELLOW}[2]{C.R} Config Email")
+    print(f"  {C.YELLOW}[3]{C.R} Config Password")
+    print(f"  {C.YELLOW}[4]{C.R} Config Apikey")
+    print(f"  {C.YELLOW}[0]{C.R} Exit")
+    print()
+    try:
+        choice = input(f"{C.CYAN}Pilih → {C.R}").strip()
+    except (EOFError, KeyboardInterrupt):
+        return "0"
+    return choice
+
+
+def menu_config_field(field_name, key, secret=False):
+    """Config satu field."""
+    banner()
+    section(f"Config {field_name}")
+    cfg = load_config() or dict(DEFAULT_CONFIG)
+
+    current = cfg.get(key, "")
+    if current:
+        if secret:
+            print(f"{C.GRAY}Current: {C.CYAN}(tersimpan){C.R}")
+        else:
+            print(f"{C.GRAY}Current: {C.CYAN}{current}{C.R}")
+
+    try:
+        if secret:
+            import getpass
+            val = getpass.getpass(f"  {C.CYAN}{field_name} baru{C.R} (kosong=skip): ").strip()
+        else:
+            val = input(f"  {C.CYAN}{field_name} baru{C.R} (kosong=skip): ").strip()
+    except (EOFError, KeyboardInterrupt):
+        return
+
+    if val:
+        cfg[key] = val
+        save_config(cfg)
+        print(f"\n{C.GREEN}✔ {field_name} tersimpan.{C.R}")
+    else:
+        print(f"\n{C.YELLOW}Skip — tidak ada perubahan.{C.R}")
+    time.sleep(1.2)
+
+
+def menu_loop():
+    """Loop menu sampai user pilih start atau exit."""
+    while True:
+        choice = menu()
+        if choice == "1":
+            # Cek config lengkap
+            cfg = load_config() or {}
+            missing = []
+            if not cfg.get("email"):
+                missing.append("Email")
+            if not cfg.get("password"):
+                missing.append("Password")
+            if not cfg.get("waryono_apikey"):
+                missing.append("API Key")
+            if missing:
+                banner()
+                print(f"{C.RED}Config belum lengkap:{C.R} {', '.join(missing)}")
+                print(f"{C.YELLOW}Silakan isi dulu lewat menu 2/3/4.{C.R}")
+                time.sleep(2)
+                continue
+            return cfg
+        elif choice == "2":
+            menu_config_field("Email", "email", secret=False)
+        elif choice == "3":
+            menu_config_field("Password", "password", secret=True)
+        elif choice == "4":
+            menu_config_field("API Key", "waryono_apikey", secret=False)
+        elif choice == "0":
+            return None
+        else:
+            print(f"{C.RED}Pilihan tidak valid.{C.R}")
+            time.sleep(1)
 
 
 # ==================== SESSION ====================
@@ -226,13 +306,8 @@ def csrf_headers(token=None):
 
 
 # ==================== CAPTCHA SOLVERS ====================
-# Semua solver return: list[str] atau list[list[str]] — sesuai format server.
-
 def solve_emoji_slider(challenge):
-    """
-    Format: {ghosts: [{emoji, position}], activeGhostIndex, tolerance}
-    Return: [str(position_target + jitter)]
-    """
+    """{ghosts:[{emoji,position}], activeGhostIndex, tolerance}"""
     ghosts = challenge.get("ghosts") or []
     active_idx = int(challenge.get("activeGhostIndex", 0))
     tolerance = int(challenge.get("tolerance", 12))
@@ -252,8 +327,8 @@ def solve_emoji_slider(challenge):
 
 def solve_count(challenge):
     """
-    Format: {grid: [emoji...], winner: emoji, mode: "least"|"most"}
-    Return: [indices of winner in grid]
+    {grid:[emoji...], winner:emoji, mode:"least"|"most"}
+    Server expect INTEGER indices, bukan string.
     """
     grid = challenge.get("grid") or []
     winner = challenge.get("winner")
@@ -261,54 +336,47 @@ def solve_count(challenge):
     if not grid or not winner:
         raise Exception("count: missing grid/winner")
 
-    indices = [str(i) for i, e in enumerate(grid) if e == winner]
+    indices = [i for i, e in enumerate(grid) if e == winner]
 
     if not indices:
         raise Exception("count: winner tidak ada di grid")
 
     counts = Counter(grid)
-    log(f"count: winner={winner} freq={counts[winner]} at {indices}", "slider")
+    log(f"count: winner={winner} freq={counts[winner]} idx={indices} → int list", "slider")
+
+    # FIX: kirim integer, bukan string
     return indices
 
 
 def solve_sequence(challenge):
-    """
-    Format: {target: [emoji...], grid: [emoji...]}
-    Tap target emojis in the order they appear in grid.
-    Return: [grid indices in that order]
-    """
+    """{target:[emoji...], grid:[emoji...]} → tap dalam urutan target"""
     target = challenge.get("target") or []
     grid = challenge.get("grid") or []
 
     if not target or not grid:
         raise Exception("sequence: missing target/grid")
 
-    # Build position map: emoji -> list of indices
     pos_map = {}
     for i, e in enumerate(grid):
         pos_map.setdefault(e, []).append(i)
 
-    # For each emoji in target, take first available position
     answer = []
     used = set()
     for t in target:
         for idx in pos_map.get(t, []):
             if idx not in used:
-                answer.append(str(idx))
+                answer.append(idx)   # int
                 used.add(idx)
                 break
         else:
-            raise Exception(f"sequence: target emoji '{t}' tidak ditemukan di grid")
+            raise Exception(f"sequence: '{t}' tidak ada di grid")
 
     log(f"sequence: {answer}", "slider")
     return answer
 
 
 def solve_tap_target(challenge):
-    """
-    Format: {target: emoji, decoys: [...], tapsRequired: N}
-    Return: [target emoji] * tapsRequired
-    """
+    """{target:emoji, decoys:[...], tapsRequired:N}"""
     target = challenge.get("target")
     taps = int(challenge.get("tapsRequired", 1))
 
@@ -322,9 +390,8 @@ def solve_tap_target(challenge):
 
 def solve_connect_pairs(challenge):
     """
-    Format: {emojis: [...], leftOrder: [...], rightOrder: [...]}
-    Each emoji appears in left and right. Connect position in left to position in right.
-    Return: [[left_idx, right_idx], ...] as list of [str, str]
+    {emojis:[...], leftOrder:[...], rightOrder:[...]}
+    FIX: server expect array of STRING "L-R", bukan array of arrays.
     """
     emojis = challenge.get("emojis") or []
     left = challenge.get("leftOrder") or []
@@ -338,18 +405,17 @@ def solve_connect_pairs(challenge):
         try:
             l_idx = left.index(e)
             r_idx = right.index(e)
-            answer.append([str(l_idx), str(r_idx)])
+            # FIX: string "0-2" format, bukan [0, 2]
+            answer.append(f"{l_idx}-{r_idx}")
         except ValueError:
-            raise Exception(f"connect-pairs: emoji '{e}' tidak ada di left/right")
+            raise Exception(f"connect-pairs: '{e}' tidak ada di left/right")
 
     log(f"connect-pairs: {answer}", "slider")
     return answer
 
 
 def solve_drag_order(challenge):
-    """
-    Format kemungkinan: {items: [...], correctOrder: [...]} atau {items: [{id, order}]}
-    """
+    """{items:[...], correctOrder:[...]} atau {items:[{id, order}]}"""
     items = challenge.get("items") or challenge.get("targets") or []
     order = challenge.get("correctOrder") or challenge.get("order") or challenge.get("sequence")
 
@@ -368,7 +434,6 @@ def solve_drag_order(challenge):
 
 
 def solve_challenge(challenge):
-    """Dispatch ke solver sesuai tipe."""
     ctype = (challenge.get("type") or "").lower().strip()
     log(f"Challenge type: {ctype}", "captcha")
 
@@ -384,7 +449,6 @@ def solve_challenge(challenge):
     fn = solvers.get(ctype)
     if not fn:
         raise Exception(f"Unknown challenge type: {ctype}")
-
     return fn(challenge)
 
 
@@ -392,19 +456,17 @@ def solve_challenge(challenge):
 def do_login(session, cfg):
     log("Login flow started", "auth")
 
-    # 1. CSRF
     token = refresh_csrf(session)
     if not token:
         log("Gagal ambil CSRF token", "err")
         return False
     log(f"CSRF OK ({token[:20]}...)", "auth")
 
-    # 2. Generate captcha
+    # Generate captcha
     try:
-        hdrs = dict(csrf_headers(token))
         r = session.post(
             f"{BASE}/api/captcha/generate",
-            headers=hdrs,
+            headers=dict(csrf_headers(token)),
             timeout=30,
         )
         if not r.ok:
@@ -426,7 +488,7 @@ def do_login(session, cfg):
     if cfg.get("debug_challenge", False):
         log(f"Challenge keys: {list(challenge.keys())}", "dbg")
 
-    # 3. Solve
+    # Solve
     try:
         answer = solve_challenge(challenge)
     except Exception as e:
@@ -438,7 +500,10 @@ def do_login(session, cfg):
         log("Solve result kosong", "err")
         return False
 
-    # 4. Verify
+    # DEBUG: print answer yg dikirim
+    log(f"Answer: {json.dumps(answer)[:200]}", "dbg")
+
+    # Verify
     try:
         r = session.post(
             f"{BASE}/api/captcha/verify",
@@ -465,7 +530,7 @@ def do_login(session, cfg):
         return False
     log("Captcha verified ✓", "captcha")
 
-    # 5. Login
+    # Login
     try:
         r = session.post(
             f"{BASE}/api/auth/login",
@@ -683,20 +748,15 @@ def wait_with_dashboard(target_ts, label="next claim"):
         sys.stdout.flush()
 
 
-# ==================== MAIN ====================
-def main():
-    cfg = ensure_config()
-    if not cfg.get("email") or not cfg.get("password") or not cfg.get("waryono_apikey"):
-        banner()
-        log("Config incomplete", "err")
-        return
-
+# ==================== FARMING ====================
+def start_farming(cfg):
+    """Loop farming utama."""
     banner()
     log("Bot started", "ok")
 
     session = make_session()
 
-    # ── Login ──
+    # Login
     section("Auto Login")
     ok = False
     for attempt in range(8):
@@ -708,10 +768,11 @@ def main():
             log(f"Login err ({attempt+1}/8): {e}", "err")
             time.sleep(2)
     if not ok:
-        log("Login gagal total, exit", "err")
+        log("Login gagal total, kembali ke menu...", "err")
+        time.sleep(2)
         return
 
-    # ── Initial Sync ──
+    # Initial sync
     section("Initial Sync")
     try:
         status = get_faucet_status(session)
@@ -727,7 +788,7 @@ def main():
     except Exception as e:
         log(f"Initial sync error: {e}", "warn")
 
-    # ── Main Loop ──
+    # Main loop
     cycle = 0
     while True:
         cycle += 1
@@ -735,7 +796,8 @@ def main():
             if not verify_session(session):
                 log("Session expired, re-login...", "warn")
                 if not do_login(session, cfg):
-                    log("Re-login gagal, exit", "err")
+                    log("Re-login gagal, kembali ke menu...", "err")
+                    time.sleep(2)
                     return
 
             now = time.time()
@@ -769,11 +831,30 @@ def main():
 
         except KeyboardInterrupt:
             print()
-            log("Stopped by user.", "warn")
-            break
+            log("Stopped — kembali ke menu.", "warn")
+            time.sleep(1)
+            return
         except Exception as e:
             log(f"Loop error: {e} (retry 10s)", "err")
             time.sleep(10)
+
+
+# ==================== MAIN ====================
+def main():
+    while True:
+        cfg = menu_loop()
+        if cfg is None:
+            # User pilih exit
+            clear()
+            print(f"{C.YELLOW}Bye!{C.R}")
+            return
+        # User pilih start
+        try:
+            start_farming(cfg)
+        except KeyboardInterrupt:
+            print()
+            print(f"{C.YELLOW}Kembali ke menu...{C.R}")
+            time.sleep(1)
 
 
 if __name__ == "__main__":
