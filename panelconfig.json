@@ -140,8 +140,8 @@
         },
         "21": {
           "label": "Bigbtc.win 🟢",
-          "file": "bigbtcwin.js",
-          "runner": "node"
+          "file": "bigbtcwin.py",
+          "runner": "python3"
         }
       }
     },
