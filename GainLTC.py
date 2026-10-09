@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-GainLTC.com Auto Bot v5
-========================
+GainLTC.com Auto Bot v5.1
+=========================
+- Config disimpan di folder yg sama dengan script
 - Bypass 6 captcha types TANPA Pillow
-- Menu interaktif (start / config / exit)
+- Menu interaktif
 - Auto faucet hCaptcha via Waryono
 """
 
@@ -27,7 +28,7 @@ except ImportError:
     sys.exit(1)
 
 # ==================== CONSTANTS ====================
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR    = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "gainltc_config.json"
 
 BASE       = "https://gainltc.com"
@@ -146,6 +147,7 @@ def load_config():
 
 
 def save_config(cfg):
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2, ensure_ascii=False)
 
@@ -166,21 +168,23 @@ def ensure_config():
 
 # ==================== MENU ====================
 def menu():
-    """Menu utama. Return: pilihan."""
     banner()
+
+    print(f"{C.GRAY}Script :{C.R} {C.DIM}{Path(__file__).resolve()}{C.R}")
+    print(f"{C.GRAY}Config :{C.R} {C.DIM}{CONFIG_PATH}{C.R}")
+    print()
+
     cfg = load_config() or {}
 
-    # Tampilkan status config
-    email = cfg.get("email", "") or "(kosong)"
+    email    = cfg.get("email", "") or "(kosong)"
     password = cfg.get("password", "")
-    apikey = cfg.get("waryono_apikey", "")
+    apikey   = cfg.get("waryono_apikey", "")
 
-    pass_display = "✓ tersimpan" if password else "(kosong)"
+    pass_display   = "✓ tersimpan" if password else "(kosong)"
     apikey_display = f"{apikey[:12]}..." if apikey else "(kosong)"
-    email_display = email
 
     print(f"{C.GRAY}Config saat ini:{C.R}")
-    print(f"  {C.GRAY}Email   :{C.R} {C.CYAN}{email_display}{C.R}")
+    print(f"  {C.GRAY}Email   :{C.R} {C.CYAN}{email}{C.R}")
     print(f"  {C.GRAY}Password:{C.R} {C.CYAN}{pass_display}{C.R}")
     print(f"  {C.GRAY}API Key :{C.R} {C.CYAN}{apikey_display}{C.R}")
     print()
@@ -199,11 +203,11 @@ def menu():
 
 
 def menu_config_field(field_name, key, secret=False):
-    """Config satu field."""
     banner()
     section(f"Config {field_name}")
-    cfg = load_config() or dict(DEFAULT_CONFIG)
+    print(f"{C.GRAY}File: {C.DIM}{CONFIG_PATH}{C.R}\n")
 
+    cfg = load_config() or dict(DEFAULT_CONFIG)
     current = cfg.get(key, "")
     if current:
         if secret:
@@ -223,26 +227,21 @@ def menu_config_field(field_name, key, secret=False):
     if val:
         cfg[key] = val
         save_config(cfg)
-        print(f"\n{C.GREEN}✔ {field_name} tersimpan.{C.R}")
+        print(f"\n{C.GREEN}✔ {field_name} tersimpan di {CONFIG_PATH}{C.R}")
     else:
         print(f"\n{C.YELLOW}Skip — tidak ada perubahan.{C.R}")
-    time.sleep(1.2)
+    time.sleep(1.5)
 
 
 def menu_loop():
-    """Loop menu sampai user pilih start atau exit."""
     while True:
         choice = menu()
         if choice == "1":
-            # Cek config lengkap
             cfg = load_config() or {}
             missing = []
-            if not cfg.get("email"):
-                missing.append("Email")
-            if not cfg.get("password"):
-                missing.append("Password")
-            if not cfg.get("waryono_apikey"):
-                missing.append("API Key")
+            if not cfg.get("email"):           missing.append("Email")
+            if not cfg.get("password"):        missing.append("Password")
+            if not cfg.get("waryono_apikey"):  missing.append("API Key")
             if missing:
                 banner()
                 print(f"{C.RED}Config belum lengkap:{C.R} {', '.join(missing)}")
@@ -307,7 +306,6 @@ def csrf_headers(token=None):
 
 # ==================== CAPTCHA SOLVERS ====================
 def solve_emoji_slider(challenge):
-    """{ghosts:[{emoji,position}], activeGhostIndex, tolerance}"""
     ghosts = challenge.get("ghosts") or []
     active_idx = int(challenge.get("activeGhostIndex", 0))
     tolerance = int(challenge.get("tolerance", 12))
@@ -326,10 +324,6 @@ def solve_emoji_slider(challenge):
 
 
 def solve_count(challenge):
-    """
-    {grid:[emoji...], winner:emoji, mode:"least"|"most"}
-    Server expect INTEGER indices, bukan string.
-    """
     grid = challenge.get("grid") or []
     winner = challenge.get("winner")
 
@@ -342,14 +336,11 @@ def solve_count(challenge):
         raise Exception("count: winner tidak ada di grid")
 
     counts = Counter(grid)
-    log(f"count: winner={winner} freq={counts[winner]} idx={indices} → int list", "slider")
-
-    # FIX: kirim integer, bukan string
+    log(f"count: winner={winner} freq={counts[winner]} idx={indices}", "slider")
     return indices
 
 
 def solve_sequence(challenge):
-    """{target:[emoji...], grid:[emoji...]} → tap dalam urutan target"""
     target = challenge.get("target") or []
     grid = challenge.get("grid") or []
 
@@ -365,7 +356,7 @@ def solve_sequence(challenge):
     for t in target:
         for idx in pos_map.get(t, []):
             if idx not in used:
-                answer.append(idx)   # int
+                answer.append(idx)
                 used.add(idx)
                 break
         else:
@@ -376,7 +367,6 @@ def solve_sequence(challenge):
 
 
 def solve_tap_target(challenge):
-    """{target:emoji, decoys:[...], tapsRequired:N}"""
     target = challenge.get("target")
     taps = int(challenge.get("tapsRequired", 1))
 
@@ -389,10 +379,6 @@ def solve_tap_target(challenge):
 
 
 def solve_connect_pairs(challenge):
-    """
-    {emojis:[...], leftOrder:[...], rightOrder:[...]}
-    FIX: server expect array of STRING "L-R", bukan array of arrays.
-    """
     emojis = challenge.get("emojis") or []
     left = challenge.get("leftOrder") or []
     right = challenge.get("rightOrder") or []
@@ -405,7 +391,6 @@ def solve_connect_pairs(challenge):
         try:
             l_idx = left.index(e)
             r_idx = right.index(e)
-            # FIX: string "0-2" format, bukan [0, 2]
             answer.append(f"{l_idx}-{r_idx}")
         except ValueError:
             raise Exception(f"connect-pairs: '{e}' tidak ada di left/right")
@@ -415,7 +400,6 @@ def solve_connect_pairs(challenge):
 
 
 def solve_drag_order(challenge):
-    """{items:[...], correctOrder:[...]} atau {items:[{id, order}]}"""
     items = challenge.get("items") or challenge.get("targets") or []
     order = challenge.get("correctOrder") or challenge.get("order") or challenge.get("sequence")
 
@@ -462,7 +446,6 @@ def do_login(session, cfg):
         return False
     log(f"CSRF OK ({token[:20]}...)", "auth")
 
-    # Generate captcha
     try:
         r = session.post(
             f"{BASE}/api/captcha/generate",
@@ -488,7 +471,6 @@ def do_login(session, cfg):
     if cfg.get("debug_challenge", False):
         log(f"Challenge keys: {list(challenge.keys())}", "dbg")
 
-    # Solve
     try:
         answer = solve_challenge(challenge)
     except Exception as e:
@@ -500,10 +482,8 @@ def do_login(session, cfg):
         log("Solve result kosong", "err")
         return False
 
-    # DEBUG: print answer yg dikirim
     log(f"Answer: {json.dumps(answer)[:200]}", "dbg")
 
-    # Verify
     try:
         r = session.post(
             f"{BASE}/api/captcha/verify",
@@ -530,7 +510,6 @@ def do_login(session, cfg):
         return False
     log("Captcha verified ✓", "captcha")
 
-    # Login
     try:
         r = session.post(
             f"{BASE}/api/auth/login",
@@ -750,13 +729,12 @@ def wait_with_dashboard(target_ts, label="next claim"):
 
 # ==================== FARMING ====================
 def start_farming(cfg):
-    """Loop farming utama."""
     banner()
     log("Bot started", "ok")
+    log(f"Config: {CONFIG_PATH}", "info")
 
     session = make_session()
 
-    # Login
     section("Auto Login")
     ok = False
     for attempt in range(8):
@@ -772,7 +750,6 @@ def start_farming(cfg):
         time.sleep(2)
         return
 
-    # Initial sync
     section("Initial Sync")
     try:
         status = get_faucet_status(session)
@@ -788,7 +765,6 @@ def start_farming(cfg):
     except Exception as e:
         log(f"Initial sync error: {e}", "warn")
 
-    # Main loop
     cycle = 0
     while True:
         cycle += 1
@@ -844,11 +820,9 @@ def main():
     while True:
         cfg = menu_loop()
         if cfg is None:
-            # User pilih exit
             clear()
             print(f"{C.YELLOW}Bye!{C.R}")
             return
-        # User pilih start
         try:
             start_farming(cfg)
         except KeyboardInterrupt:
