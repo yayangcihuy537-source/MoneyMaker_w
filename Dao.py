@@ -3,7 +3,7 @@
 """
 Bullydao.org - Auto Login + Faucet + Jackpot
 Solver: Waryono Turnstile API
-v6 - silent sleep, no spinner spam
+v8 - menu interactif, silent sleep, no loop_delay config
 """
 
 import json
@@ -18,7 +18,7 @@ from datetime import datetime
 from pathlib import Path
 
 # ==================== PATH / CONFIG ====================
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR    = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "bconfig.json"
 
 BASE       = "https://bullydao.org"
@@ -29,7 +29,6 @@ SITEKEY    = "0x4AAAAAAExQ_oRN72W6jvby"
 DEFAULT_CONFIG = {
     "waryono_apikey": "",
     "email": "",
-    "loop_delay": 30,
     "enable_auto_login": True,
     "enable_faucet": True,
     "enable_jackpot": True,
@@ -45,6 +44,8 @@ DEFAULT_CONFIG = {
     "jackpot_cooldown_default": 600,
     "session_check_every": 10,
 }
+
+LOOP_DELAY = 30  # fixed
 
 # ==================== COLORS ====================
 class C:
@@ -106,7 +107,7 @@ def banner():
     print(f"""{C.CYAN}{C.BOLD}
    ╔══════════════════════════════════════════════════════════════╗
    ║           🌊  B U L L Y D A O . O R G  🌊                    ║
-   ║      AUTO LOGIN  ·  FAUCET  ·  LUCKY JACKPOT  (v6)           ║
+   ║      AUTO LOGIN  ·  FAUCET  ·  LUCKY JACKPOT  (v8)           ║
    ║      Solver: Waryono Turnstile API                           ║
    ╚══════════════════════════════════════════════════════════════╝
 {C.MAGENTA}                       By MoneyMaker_w{C.R}
@@ -196,7 +197,6 @@ def load_config():
         return data
     except json.JSONDecodeError as e:
         print(f"{C.RED}!! bconfig.json corrupt: {e}{C.R}")
-        print(f"{C.YELLOW}Fix manual atau rename ke bconfig.json.bak buat bikin baru.{C.R}")
         return False
     except Exception as e:
         print(f"{C.RED}!! bconfig.json read error: {e}{C.R}")
@@ -204,6 +204,7 @@ def load_config():
 
 
 def save_config(cfg):
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     if CONFIG_PATH.exists():
         try:
             bak = CONFIG_PATH.with_suffix(".json.bak")
@@ -216,38 +217,106 @@ def save_config(cfg):
 
 def ensure_config():
     cfg = load_config()
-
     if cfg is False:
-        sys.exit(1)
-
+        return dict(DEFAULT_CONFIG)
     if isinstance(cfg, dict):
         changed = False
         for k, v in DEFAULT_CONFIG.items():
             if k not in cfg:
                 cfg[k] = v
                 changed = True
+        # Hapus field legacy
+        for old in ("loop_delay",):
+            if old in cfg:
+                cfg.pop(old, None)
+                changed = True
         if changed:
             save_config(cfg)
         return cfg
+    return dict(DEFAULT_CONFIG)
 
+
+# ==================== MENU ====================
+def menu():
     banner()
-    section("Setup Config Pertama Kali")
-    print(f"{C.YELLOW}File bconfig.json belum ada. Isi data di bawah:{C.R}\n")
 
-    apikey = input(f"  {C.CYAN}Waryono API Key{C.R}    : ").strip()
-    email  = input(f"  {C.CYAN}Email (FaucetPay){C.R} : ").strip()
-    delay  = input(f"  {C.CYAN}Loop delay (s){C.R}     (enter=30): ").strip()
+    print(f"{C.GRAY}Script :{C.R} {C.DIM}{Path(__file__).resolve()}{C.R}")
+    print(f"{C.GRAY}Config :{C.R} {C.DIM}{CONFIG_PATH}{C.R}")
+    print()
 
-    cfg = dict(DEFAULT_CONFIG)
-    cfg["waryono_apikey"] = apikey
-    cfg["email"] = email
-    if delay.isdigit():
-        cfg["loop_delay"] = int(delay)
+    cfg = load_config() or {}
 
-    save_config(cfg)
-    print(f"\n{C.GREEN}✔ Saved: {CONFIG_PATH}{C.R}\n")
-    time.sleep(1.0)
-    return cfg
+    apikey = cfg.get("waryono_apikey", "")
+    email  = cfg.get("email", "") or "(kosong)"
+    apikey_display = f"{apikey[:12]}..." if apikey else "(kosong)"
+
+    print(f"{C.GRAY}Config saat ini:{C.R}")
+    print(f"  {C.GRAY}Email   :{C.R} {C.CYAN}{email}{C.R}")
+    print(f"  {C.GRAY}API Key :{C.R} {C.CYAN}{apikey_display}{C.R}")
+    print()
+    print(f"{C.BOLD}{C.GREEN}MENU:{C.R}")
+    print(f"  {C.YELLOW}[1]{C.R} Start Bot")
+    print(f"  {C.YELLOW}[2]{C.R} Config Waryono API Key")
+    print(f"  {C.YELLOW}[3]{C.R} Config Email")
+    print(f"  {C.YELLOW}[0]{C.R} Exit")
+    print()
+    try:
+        choice = input(f"{C.CYAN}Pilih → {C.R}").strip()
+    except (EOFError, KeyboardInterrupt):
+        return "0"
+    return choice
+
+
+def menu_config_field(field_name, key):
+    banner()
+    section(f"Config {field_name}")
+    print(f"{C.GRAY}File: {C.DIM}{CONFIG_PATH}{C.R}\n")
+
+    cfg = load_config() or dict(DEFAULT_CONFIG)
+    current = cfg.get(key, "")
+    if current:
+        print(f"{C.GRAY}Current: {C.CYAN}{current}{C.R}")
+
+    try:
+        val = input(f"  {C.CYAN}{field_name} baru{C.R} (kosong=skip): ").strip()
+    except (EOFError, KeyboardInterrupt):
+        return
+
+    if val:
+        cfg[key] = val
+        save_config(cfg)
+        print(f"\n{C.GREEN}✔ {field_name} tersimpan di {CONFIG_PATH}{C.R}")
+    else:
+        print(f"\n{C.YELLOW}Skip — tidak ada perubahan.{C.R}")
+    time.sleep(1.5)
+
+
+def menu_loop():
+    while True:
+        choice = menu()
+        if choice == "1":
+            cfg = load_config() or {}
+            missing = []
+            if not cfg.get("waryono_apikey"):
+                missing.append("Waryono API Key")
+            if not cfg.get("email"):
+                missing.append("Email")
+            if missing:
+                banner()
+                print(f"{C.RED}Config belum lengkap:{C.R} {', '.join(missing)}")
+                print(f"{C.YELLOW}Silakan isi dulu lewat menu 2/3.{C.R}")
+                time.sleep(2)
+                continue
+            return cfg
+        elif choice == "2":
+            menu_config_field("Waryono API Key", "waryono_apikey")
+        elif choice == "3":
+            menu_config_field("Email", "email")
+        elif choice == "0":
+            return None
+        else:
+            print(f"{C.RED}Pilihan tidak valid.{C.R}")
+            time.sleep(1)
 
 
 # ==================== DELAY ====================
@@ -788,7 +857,7 @@ def do_jackpot(session, cfg):
         return max(cd, 30)
 
 
-# ==================== WAIT LOGIC (v6) ====================
+# ==================== WAIT LOGIC ====================
 def event_state(cfg):
     now = time.time()
     fr = cfg.get("enable_faucet", True) and STATE["faucet_next_at"] <= now
@@ -796,7 +865,7 @@ def event_state(cfg):
     return {"faucet_ready": fr, "jackpot_ready": jr, "any_ready": fr or jr}
 
 
-def compute_next_wake(cfg, loop_delay):
+def compute_next_wake(cfg):
     now = time.time()
 
     if cfg.get("enable_faucet", True) and STATE["faucet_next_at"] <= now:
@@ -813,21 +882,17 @@ def compute_next_wake(cfg, loop_delay):
     if candidates:
         return min(candidates) + 1
 
-    return now + loop_delay
+    return now + LOOP_DELAY
 
 
 def wait_until(target_ts):
-    """
-    v6: print sekali, terus tidur silent sampai target_ts.
-    Tanpa spinner spam.
-    """
+    """Print sekali, terus tidur silent sampai target_ts."""
     now = time.time()
     delta = int(target_ts - now)
 
     if delta <= 0:
         return
 
-    # Tentukan label
     if abs(target_ts - STATE["faucet_next_at"]) <= 2:
         target_label = "faucet ready"
     elif abs(target_ts - STATE["jackpot_next_at"]) <= 2:
@@ -835,7 +900,6 @@ def wait_until(target_ts):
     else:
         target_label = "idle poll"
 
-    # Print sekali
     print()
     status_bar(current_cfg)
     print(f"{C.GRAY}[{now_str()}]{C.R} {C.GRAY}💤{C.R}  Tidur {fmt_duration(delta)} → {C.CYAN}{target_label}{C.R}  "
@@ -843,12 +907,10 @@ def wait_until(target_ts):
           f"jackpot {fmt_duration(max(0, STATE['jackpot_next_at'] - now))})")
     print()
 
-    # Tidur silent — chunk biar tetap responsif Ctrl+C
     while True:
         left = target_ts - time.time()
         if left <= 0:
             break
-        # sleep dalam potongan besar, tapi tetap cek interrupt
         chunk = min(left, 5.0)
         time.sleep(chunk)
 
@@ -871,31 +933,23 @@ def print_summary():
     print()
 
 
-# ==================== MAIN ====================
-def main():
+# ==================== BOT MAIN ====================
+def run_bot(cfg):
     global current_cfg
-
-    cfg = ensure_config()
     current_cfg = cfg
-
-    if not cfg.get("waryono_apikey") or not cfg.get("email"):
-        banner()
-        log("waryono_apikey / email kosong", "err")
-        return
 
     banner()
     log("Bot start", "ok")
     log(f"Email: {cfg['email']}", "info")
 
     session = make_session()
-    loop_delay = int(cfg.get("loop_delay", 30))
     session_check_every = int(cfg.get("session_check_every", 10))
     hd_min = float(cfg.get("human_delay_min", 20))
     hd_max = float(cfg.get("human_delay_max", 60))
 
     STATE["started_at"] = time.time()
 
-    # ── Auto Login ──
+    # Auto login
     if cfg.get("enable_auto_login", True):
         ok = False
         for attempt in range(3):
@@ -907,16 +961,18 @@ def main():
                 log(f"Login err ({attempt+1}/3): {e}", "err")
                 time.sleep(5)
         if not ok:
-            log("Login gagal 3x, exit", "err")
+            log("Login gagal 3x, kembali ke menu", "err")
+            time.sleep(2)
             return
     else:
         log("Auto login disabled, verify session...", "warn")
         if not verify_session(session, cfg):
-            log("Session tidak valid & auto login off. Exit.", "err")
+            log("Session tidak valid. Kembali ke menu.", "err")
+            time.sleep(2)
             return
         log("Session valid ✓", "ok")
 
-    # ── Initial Sync ──
+    # Initial sync
     section("Initial Sync")
     if cfg.get("enable_balance_check", True):
         check_balance(session, cfg)
@@ -932,10 +988,9 @@ def main():
         try:
             ev = event_state(cfg)
 
-            # ── Kalau ga ada event ready, langsung sleep silent ──
             if not ev["any_ready"]:
                 idle_count += 1
-                wake_at = compute_next_wake(cfg, loop_delay)
+                wake_at = compute_next_wake(cfg)
 
                 if idle_count == 1 or idle_count % 5 == 0:
                     section(f"Idle #{idle_count} — nunggu event")
@@ -943,14 +998,13 @@ def main():
                 wait_until(wake_at)
                 continue
 
-            # ── Ada event ready → jalanin cycle ──
             idle_count = 0
             cycle += 1
             print()
             section(f"Cycle #{cycle}")
             status_bar(cfg)
 
-            # ── Session check berkala ──
+            # Session check berkala
             if session_check_every > 0 and cycle % session_check_every == 0:
                 if not verify_session(session, cfg):
                     log("Session expired, re-login...", "warn")
@@ -963,16 +1017,15 @@ def main():
                             time.sleep(60)
                             continue
                     else:
-                        log("Auto login off, exit", "err")
+                        log("Auto login off, kembali ke menu", "err")
                         return
 
-            # ── Skip klaim kalau session invalid ──
             if not STATE["logged_in"]:
                 log("Skip klaim (session invalid)", "warn")
                 time.sleep(30)
                 continue
 
-            # ── Faucet ──
+            # Faucet
             if ev["faucet_ready"]:
                 try:
                     do_faucet(session, cfg)
@@ -980,7 +1033,7 @@ def main():
                     log(f"Faucet err: {e}", "err")
                     STATE["faucet_next_at"] = time.time() + 60
 
-            # ── Jackpot ──
+            # Jackpot
             ev = event_state(cfg)
             if ev["jackpot_ready"]:
                 try:
@@ -989,12 +1042,12 @@ def main():
                     log(f"Jackpot err: {e}", "err")
                     STATE["jackpot_next_at"] = time.time() + 60
 
-            # ── Balance refresh ──
+            # Balance refresh
             if cfg.get("enable_balance_check", True):
                 check_balance(session, cfg)
 
-            # ── Human delay (capped) ──
-            wake_at = compute_next_wake(cfg, loop_delay)
+            # Human delay (capped)
+            wake_at = compute_next_wake(cfg)
             spare = wake_at - time.time()
 
             if spare > 5:
@@ -1003,24 +1056,40 @@ def main():
                 if capped_max >= 2.0 and capped_min <= capped_max:
                     human_delay(capped_min, capped_max, "post-event pause")
 
-            # ── RE-CHECK: event baru ready? ──
+            # Re-check
             ev_after = event_state(cfg)
             if ev_after["any_ready"]:
                 log("Event baru ready, lanjut cycle berikutnya", "info")
                 continue
 
-            # ── Sleep silent ──
-            wake_at = compute_next_wake(cfg, loop_delay)
+            wake_at = compute_next_wake(cfg)
             wait_until(wake_at)
 
         except KeyboardInterrupt:
             print()
-            log("Dihentikan user. Bye!", "warn")
+            log("Dihentikan user.", "warn")
             print_summary()
-            break
+            time.sleep(1)
+            return
         except Exception as e:
             log(f"Loop error: {e}", "err")
             time.sleep(15)
+
+
+# ==================== MAIN ====================
+def main():
+    while True:
+        cfg = menu_loop()
+        if cfg is None:
+            clear()
+            print(f"{C.YELLOW}Bye!{C.R}")
+            return
+        try:
+            run_bot(cfg)
+        except KeyboardInterrupt:
+            print()
+            print(f"{C.YELLOW}Kembali ke menu...{C.R}")
+            time.sleep(1)
 
 
 if __name__ == "__main__":
