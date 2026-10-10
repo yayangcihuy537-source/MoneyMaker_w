@@ -154,8 +154,8 @@
           "runner": "python3"
         },
         "24": {
-          "label": "Coming Soon 🔵",
-          "file": "ComingSoon3.php",
+          "label": "FaucetPepe 🟢",
+          "file": "FaucetPepe.php",
           "runner": "php"
         },
         "25": {
