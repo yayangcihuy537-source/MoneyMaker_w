@@ -29,8 +29,8 @@
           "runner": "python3"
         },
         "6": {
-          "label": "CentPay X freeflarcrypto 🔴",
-          "file": "CentPay.py",
+          "label": "FreeFlareCrypto 🟢",
+          "file": "FreeFlareCrypto.py",
           "runner": "python3"
         }
       }
