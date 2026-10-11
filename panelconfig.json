@@ -229,8 +229,8 @@
           "runner": "python3"
         },
         "12": {
-          "label": "MineSlpy 🔴",
-          "file": "fruit.py",
+          "label": "GramAD 🟢",
+          "file": "GramAD.py",
           "runner": "python3"
         },
         "13": {
