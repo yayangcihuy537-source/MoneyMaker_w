@@ -2,12 +2,13 @@
 # -*- coding: utf-8 -*-
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   GRAMAD AUTO WATCH — SOUU ENGINE Edition v1.1               ║
+║   GRAMAD AUTO WATCH — SOUU ENGINE Edition v1.2               ║
 ║   HOST : gram.surf                                           ║
 ║   FEAT : auto watch adsgram / monetag / onclicka / task      ║
 ║   FEAT : auto claim daily bonus                              ║
 ║   FEAT : live dashboard + cooldown handler                   ║
 ║   FEAT : auto-loop sampe limit / habis                       ║
+║   NEW  : auto re-auth kalau init_data expired                ║
 ╚══════════════════════════════════════════════════════════════╝
 """
 
@@ -20,7 +21,7 @@ from urllib3.util.retry import Retry
 from colorama import init, Fore, Style
 init(autoreset=True)
 
-VERSION = "1.1"
+VERSION = "1.2"
 HOST = "https://gram.surf"
 API = f"{HOST}/ajax.php"
 CONFIG_FILE = "config_gramad.json"
@@ -41,6 +42,7 @@ AD_WATCH_MAX = 30
 HUMAN_PAUSE_MIN = 2
 HUMAN_PAUSE_MAX = 4
 DEFAULT_COOLDOWN = 60
+MAX_REAUTH = 3
 
 # Prioritas: reward gede dulu
 AD_TYPES = ["adsgram_task", "onclicka", "adsgram", "monetag"]
@@ -87,6 +89,7 @@ class UI:
         "watching_reward": "-",
         "watching_progress": 0.0,
         "watching_total": 0,
+        "reauth_count": 0,
     }
     logs = deque(maxlen=300)
 
@@ -222,7 +225,8 @@ class UI:
         srew = s.get("session_reward", 0)
         buf += UI.row("├─ " + UI.pad("Reward", 12) + ": " + UI.fg(46, f"+{int(srew)} coins")) + "\n"
         buf += UI.row("├─ " + UI.pad("Last", 12) + ": " + UI.fg(226, str(s["last_reward"]))) + "\n"
-        buf += UI.row("└─ " + UI.pad("Net retry", 12) + ": " + UI.fg(208, str(s.get("net_retry", 0)))) + "\n"
+        buf += UI.row("├─ " + UI.pad("Net retry", 12) + ": " + UI.fg(208, str(s.get("net_retry", 0)))) + "\n"
+        buf += UI.row("└─ " + UI.pad("Re-auth", 12) + ": " + UI.fg(213, str(s.get("reauth_count", 0)))) + "\n"
         buf += UI.mid() + "\n"
 
         # STATUS
@@ -230,7 +234,7 @@ class UI:
         if int(s["cooldown"]) > 0: phase += f" · {int(s['cooldown'])}s"
         state_color = {"RUNNING": 46, "WAITING": 208, "ERROR": 196,
                        "INIT": 240, "DONE": 46, "PAUSE": 213, "RETRY": 208,
-                       "WATCHING": 213, "COOLDOWN": 208}.get(s["state"], 226)
+                       "WATCHING": 213, "COOLDOWN": 208, "REAUTH": 196}.get(s["state"], 226)
         buf += UI.row(UI.bold("STATUS")) + "\n"
         buf += UI.row("├─ " + UI.pad("State", 12) + ": " + UI.fg(state_color, str(s["state"]))) + "\n"
         buf += UI.row("└─ " + UI.pad("Phase", 12) + ": " + UI.trunc(UI.fg(208, phase), 29)) + "\n"
@@ -332,12 +336,93 @@ class UI:
         print(line("├─ " + UI.pad("Ads", 11) + f": {len(AD_TYPES)} types"))
         print(line("├─ " + UI.pad("Watch", 11) + f": {AD_WATCH_MIN}-{AD_WATCH_MAX}s"))
         print(line("├─ " + UI.pad("Retry", 11) + f": {HTTP_MAX_RETRY}x backoff"))
+        print(line("├─ " + UI.pad("Re-auth", 11) + f": auto up to {MAX_REAUTH}x"))
         print(line("└─ " + UI.pad("Version", 11) + ": v" + VERSION))
         print(UI.fg(51, "╠" + "═" * W_ + "╣"))
         print(line(UI.bold("AUTHOR")))
         print(line("└─ " + UI.pad("By", 11) + ": " + UI.fg(213, "@SouuXso")))
         print(UI.fg(51, "╚" + "═" * W_ + "╝"))
         print()
+
+
+# ═══════════════════════════════════════════════════════════════
+#  RE-AUTH PROMPT
+# ═══════════════════════════════════════════════════════════════
+def prompt_new_init_data():
+    """Prompt user paste init_data baru. Return string atau None kalau kosong/batal."""
+    was_running = UI.state["running"]
+    UI.state["running"] = False
+    sys.stdout.write(CLEAR)
+    sys.stdout.flush()
+
+    print()
+    print(UI.c("═" * 62, "br_yellow"))
+    print(UI.c("  ⚠  INIT DATA EXPIRED / INVALID", "br_yellow"))
+    print(UI.c("═" * 62, "br_yellow"))
+    print(UI.c("  Ambil init_data baru dari Telegram Desktop:", "white"))
+    print(UI.c("  → Ctrl+Shift+I → Console → ketik:", "gray"))
+    print(UI.c("     copy(Telegram.WebApp.initData)", "br_cyan"))
+    print(UI.c("  atau dari DevTools → Network → cari request ke gram.surf,", "gray"))
+    print(UI.c("     copy header 'x-tg-auth'", "gray"))
+    print()
+    print(UI.c("  Kosongkan + Enter buat batal & keluar.", "gray"))
+    print()
+    print(UI.c("  init_data : ", "white"), end="")
+
+    try:
+        new_init = input().strip()
+    except EOFError:
+        new_init = ""
+
+    if not new_init:
+        UI.state["running"] = was_running
+        return None
+
+    # Validasi minimal
+    required = ['query_id', 'user', 'auth_date']
+    missing = [k for k in required if f"{k}=" not in new_init]
+    if missing:
+        print(UI.c(f"\n  ✖ init_data gak lengkap. Missing: {', '.join(missing)}", "br_red"))
+        print(UI.c("  Tekan Enter buat tetep lanjut, atau Ctrl+C buat batal...", "gray"), end="")
+        try: input()
+        except EOFError: pass
+
+    # Cek umur
+    try:
+        kv = dict(p.split("=", 1) for p in new_init.split("&") if "=" in p)
+        ad = int(kv.get("auth_date", "0"))
+        age = int(time.time()) - ad
+        if age > 300:
+            print(UI.c(f"\n  ⚠ init_data udah umur {age//60} menit — mungkin tetep expired.", "yellow"))
+            print(UI.c("  Lanjut? (y/N): ", "white"), end="")
+            try:
+                ans = input().strip().lower()
+            except EOFError:
+                ans = "n"
+            if ans not in ("y", "ya", "yes"):
+                UI.state["running"] = was_running
+                return None
+    except Exception:
+        pass
+
+    UI.state["running"] = was_running
+    return new_init
+
+
+def save_init_data(new_init):
+    """Update config file dengan init_data baru."""
+    try:
+        cfg = {}
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE) as f:
+                cfg = json.load(f)
+        cfg["init_data"] = new_init
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(cfg, f, indent=2)
+        return True
+    except Exception as e:
+        print(UI.c(f"  ✖ gagal simpen config: {e}", "br_red"))
+        return False
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -468,6 +553,40 @@ class GramAdBot:
             return cfg
         with open(CONFIG_FILE) as f:
             return json.load(f)
+
+    # ── RE-AUTH ──
+    def reauth(self):
+        """
+        Minta init_data baru, update header, reset state. Return True kalau sukses.
+        """
+        UI.warn("AUTH", "init_data expired — minta paste baru")
+        try:
+            new_init = prompt_new_init_data()
+        except KeyboardInterrupt:
+            raise
+
+        if not new_init:
+            UI.err("AUTH", "user gak kasih init_data baru — stop")
+            return False
+
+        # Update header & session
+        self.init_data = new_init
+        try: self.session.close()
+        except Exception: pass
+        self.session = make_session()
+
+        # Reset state
+        self.user = {}
+        self.balance = 0
+
+        # Simpen ke config
+        if save_init_data(new_init):
+            UI.ok("AUTH", "init_data baru disimpan")
+        else:
+            UI.warn("AUTH", "gagal simpen, tetep lanjut pakai yang baru")
+
+        UI.set(reauth_count=int(UI.state.get("reauth_count", 0)) + 1)
+        return True
 
     # ── USER ──
     def fetch_user(self):
@@ -705,34 +824,48 @@ class GramAdBot:
     # ── MAIN LOOP ──
     def run(self):
         UI.set(state="INIT", session_reward=0, session_ads=0,
-               last_reward="-", net_retry=0, daily_status="checking...")
+               last_reward="-", net_retry=0, daily_status="checking...",
+               reauth_count=0)
         UI.start_panel()
 
-        # 1. User
-        try:
-            if not self.fetch_user():
-                UI.err("FATAL", "gagal fetch user")
+        # ── 1. User dengan re-auth loop ──
+        reauth_tries = 0
+        while True:
+            try:
+                if self.fetch_user():
+                    break
+                UI.err("FATAL", "gagal fetch user — bukan auth error")
                 UI.stop_panel(); return
-        except AuthError:
-            UI.err("FATAL", "auth error — refresh init_data")
-            UI.stop_panel(); return
+            except AuthError:
+                reauth_tries += 1
+                if reauth_tries > MAX_REAUTH:
+                    UI.err("FATAL", f"re-auth gagal {MAX_REAUTH}x — keluar")
+                    UI.stop_panel(); return
+                if not self.reauth():
+                    UI.err("FATAL", "user gak mau kasih init_data baru")
+                    UI.stop_panel(); return
 
         self.start_balance = self.balance
 
-        # 2. Load ad summary
-        try:
-            self.refresh_ad_summary()
-        except AuthError:
-            UI.err("FATAL", "auth error di refresh")
-            UI.stop_panel(); return
+        # ── 2. Load ad summary ──
+        while True:
+            try:
+                self.refresh_ad_summary()
+                break
+            except AuthError:
+                if not self.reauth():
+                    UI.err("FATAL", "reauth gagal di refresh")
+                    UI.stop_panel(); return
 
-        # 3. Daily bonus sekali di awal
+        # ── 3. Daily bonus ──
         try:
             self.handle_daily_bonus()
         except AuthError:
-            pass
+            if not self.reauth():
+                UI.err("FATAL", "reauth gagal di daily bonus")
+                UI.stop_panel(); return
 
-        # 4. Main loop
+        # ── 4. Main loop ──
         cycle = 0
         stop_reason = "finished"
         empty_cycles = 0
@@ -747,12 +880,15 @@ class GramAdBot:
             UI.set(cycle=cycle, state="RUNNING", phase="-")
             UI.info("CYCLE", f"#{cycle}")
 
+            # Refresh ads
             try:
                 ads = self.refresh_ad_summary()
             except AuthError:
-                UI.err("FATAL", "auth expired")
-                stop_reason = "auth_expired"
-                break
+                UI.warn("CYCLE", "init_data expired mid-run")
+                if not self.reauth():
+                    stop_reason = "reauth_failed"
+                    break
+                continue
 
             ready = [a for a in ads if a["status"] == "ready"]
             has_cd = any(a["status"] == "cooldown" for a in ads)
@@ -788,7 +924,11 @@ class GramAdBot:
                 try:
                     result = self.watch_ad(ad["id"])
                 except AuthError:
-                    stop_reason = "auth_expired"
+                    UI.warn("WATCH", "init_data expired mid-watch")
+                    if not self.reauth():
+                        stop_reason = "reauth_failed"
+                        break
+                    # break for loop, restart cycle
                     break
 
                 if result == "FAIL":
@@ -801,7 +941,7 @@ class GramAdBot:
                 try:
                     self.refresh_ad_summary()
                 except AuthError:
-                    stop_reason = "auth_expired"
+                    UI.warn("REFRESH", "auth expired — bakal re-auth next cycle")
                     break
 
                 pause = random.randint(HUMAN_PAUSE_MIN, HUMAN_PAUSE_MAX)
@@ -809,10 +949,7 @@ class GramAdBot:
                 UI.warn("PAUSE", f"{pause}s")
                 UI.countdown(pause, "human pause")
 
-                if stop_reason == "auth_expired":
-                    break
-
-            if stop_reason == "auth_expired":
+            if stop_reason == "reauth_failed":
                 break
 
             if claimed_this_cycle == 0:
@@ -833,6 +970,7 @@ class GramAdBot:
         print(UI.c(f"  Balance     : {self.balance} coins ({self.balance_gram} GRAM)", "br_yellow"))
         print(UI.c(f"  Session     : +{int(UI.state['session_reward'])} coins ({UI.state['session_ads']} ads)", "br_green"))
         print(UI.c(f"  Net retries : {UI.state['net_retry']}", "yellow"))
+        print(UI.c(f"  Re-auth     : {UI.state.get('reauth_count', 0)}x", "yellow"))
         print(UI.c("═" * 64, "br_cyan"))
         print()
 
