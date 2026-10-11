@@ -128,7 +128,7 @@ function pollingTimer($seconds, $prefix = "MENYELESAIKAN CAPTCHA") {
     $wait_time = (int)$seconds;
     $elapsed = 0;
     $frames = ['🌑', '🌒', '🌓', '🌔', '🌕', '🌖', '🌗', '🌘'];
-    $clocks = ['🕛', '🕐', '🕑', '🕒', '🕔', '🕕', '🕖', '🕗', '🕘', '🕚'];
+    $clocks = ['🕛', '🕐', '🕑', '🕒', '肆', '🕔', '🕕', '🕖', '🕗', '🕘', '⑩', '🕚'];
     $frame_count = count($frames);
     $clock_count = count($clocks);
     $current_frame = 0;
@@ -201,14 +201,15 @@ function banner($earned = "0", $total_coins = "0", $coin_type = "COINS") {
     echo $bold . $ungu . "  Script by AHD1905 Supported by ScriptyXSouu\n" . $reset;
     echo $cyan . "  ┌────────────────────────────────────────┐\n";
     echo $cyan . "  │ ⏰ Waktu      : " . $kuning . str_pad($time_text, 26, ' ', STR_PAD_RIGHT) . $cyan . " │\n";
-    echo $cyan . "  │ 💵 AllJrLwr   : " . $hijau . str_pad($bal_alljrlwr, 26, ' ', STR_PAD_RIGHT) . $cyan . " │\n";
-    echo $cyan . "  │ 💶 Waryono    : " . $hijau . str_pad($bal_waryono, 26, ' ', STR_PAD_RIGHT) . $cyan . " │\n";
+    echo $cyan . "  │ 🔑 AllJrLwr   : " . $hijau . str_pad($bal_alljrlwr, 26, ' ', STR_PAD_RIGHT) . $cyan . " │\n";
+    echo $cyan . "  │ 🔑 Waryono    : " . $hijau . str_pad($bal_waryono, 26, ' ', STR_PAD_RIGHT) . $cyan . " │\n";
     echo $cyan . "  │ 💰 Total Claim: " . $hijau . $bold . str_pad($earned_text, 26, ' ', STR_PAD_RIGHT) . $cyan . " │\n";
     echo $cyan . "  │ " . $style["color"] . $style["symbol"] . $cyan . " Total Coin  : " . $style["color"] . $bold . str_pad($coins_text, 26, ' ', STR_PAD_RIGHT) . $cyan . " │\n";
     echo $cyan . "  └────────────────────────────────────────┘\n" . $reset;
     echo $putih . "  ------------------------------------------\n";
 }
 
+// jaga jaga ganti captcha
 function solveHcaptchaWaryono($waryonoKey, $sitekey) {
     global $apiWary, $host, $hijau, $merah, $putih;
     $body = json_encode([
@@ -220,7 +221,7 @@ function solveHcaptchaWaryono($waryonoKey, $sitekey) {
     ]);
 
     $headers = ["Content-Type: application/json", "Accept: application/json"];
-    echo $putih . "[📤] Menyelesaikan Captcha 🪧\n";
+    echo $putih . "[📤] Menyelesaikan HCaptcha (Waryono) 🪧\n";
     $request = skibidixxx($apiWary . "/in.php", "POST", $body, $headers);
     
     $json = json_decode($request, true);
@@ -246,13 +247,14 @@ function solveHcaptchaWaryono($waryonoKey, $sitekey) {
         $msg = $pollData['request'] ?? '';
 
         if ($status == 1 || $status === "1") {
-            echo $hijau . "[📥] Captcha Solved 🤝\n";
+            echo $hijau . "[📥] HCaptcha Solved 🤝\n";
             return $msg;
         }
     }
     echo $merah . "[📥] Captcha Unsolved ⚠️\n";
     return "";
 }
+
 
 function solveAdslabAlljrlwr($alljrlwrKey, $sitekey) {
     global $apiAllj, $host, $hijau, $merah, $putih;
@@ -266,7 +268,7 @@ function solveAdslabAlljrlwr($alljrlwrKey, $sitekey) {
         'json'    => 1
     ];
 
-    echo $putih . "[📤] Menyelesaikan Captcha 🪧\n";
+    echo $putih . "[📤] Menyelesaikan Adslab (AllJrLwr) 🪧\n";
     $request = skibidixxx($apiAllj . '/in.php', 'POST', http_build_query($postData), [
         'Content-Type: application/x-www-form-urlencoded'
     ]);
@@ -293,7 +295,7 @@ function solveAdslabAlljrlwr($alljrlwrKey, $sitekey) {
         $status = $pollData['status'] ?? '';
 
         if ($status === 'OK') {
-            echo $hijau . "[📥] Captcha Solved 🤝\n";
+            echo $hijau . "[📥] Adslab Solved 🤝\n";
             return $pollData['result'] ?? '';
         } elseif ($status === 'CAPCHA_NOT_READY') {
             continue;
@@ -305,6 +307,7 @@ function solveAdslabAlljrlwr($alljrlwrKey, $sitekey) {
     echo $merah . "[📥] Captcha Unsolved ⚠️\n";
     return "";
 }
+
 
 function solveAdslabWaryono($waryonoKey, $sitekey) {
     global $apiWary, $host, $hijau, $merah, $putih;
@@ -318,7 +321,7 @@ function solveAdslabWaryono($waryonoKey, $sitekey) {
     ]);
 
     $headers = ["Content-Type: application/json", "Accept: application/json"];
-    echo $putih . "[📤] Menyelesaikan Captcha 🪧\n";
+    echo $putih . "[📤] Menyelesaikan Adslab (Mbah Waryono) 🪧\n";
     $request = skibidixxx($apiWary . "/in.php", "POST", $body, $headers);
     
     $json = json_decode($request, true);
@@ -344,7 +347,7 @@ function solveAdslabWaryono($waryonoKey, $sitekey) {
         $msg = $pollData['request'] ?? '';
 
         if ($status == 1 || $status === "1") {
-            echo $hijau . "[📥] Captcha Solved 🤝\n";
+            echo $hijau . "[📥] Adslab Solved 🤝\n";
             return $msg;
         }
     }
@@ -352,19 +355,19 @@ function solveAdslabWaryono($waryonoKey, $sitekey) {
     return "";
 }
 
+
 $botMode = 1; 
 while (true) {
     clear();
     echo $cyan . "  ==========================================\n";
     echo $cyan . "             " . $bold . $putih . "PANEL KONFIGURASI BOT" . $cyan . "\n";
     echo $cyan . "  ==========================================\n" . $reset;
-    echo $merah . $bold . "  [!] Gunakan 2 apikey sekaligus kalo tidak mending tidur!!!\n      Alljrlwr Hcaptcha stroke dan Waryono Adslab Stroke!!!!\n" . $reset;
     echo $cyan . "  ------------------------------------------\n" . $reset;
-    echo $putih . "  [1] Run 2 apikey\n";
-    echo $putih . "  [2] Run full waryono\n";
+    echo $putih . "  [1] Run AllJrLwr\n";
+    echo $putih . "  [2] Run Mbah Waryono\n";
     echo $putih . "  [3] Apikey Alljrlwr\n";
     echo $putih . "  [4] Apikey Waryono\n";
-    echo $putih . "  [5] Akun FaucetPay\n";
+    echo $putih . "  [5] Set Cookie Manual\n";
     echo $putih . "  [6] Hapus Config\n";
     echo $putih . "  [0] Exit\n";
     echo $cyan . "  ------------------------------------------\n" . $reset;
@@ -390,12 +393,16 @@ while (true) {
         echo $hijau . "  [+] API Key Waryono berhasil disimpan!\n" . $reset;
         sleep(1.5);
     } elseif ($opt === "5") {
-        echo $putih . "  Masukkan Email FaucetPay baru: " . $kuning;
-        $e = trim(fgets(STDIN));
-        $conf = file_exists($configFile) ? json_decode(file_get_contents($configFile), true) : [];
-        $conf['email'] = $e;
-        file_put_contents($configFile, json_encode($conf, JSON_PRETTY_PRINT));
-        echo $hijau . "  [+] Akun FaucetPay berhasil diperbarui!\n" . $reset;
+        echo $putih . "  Masukkan Cookie (format Netscape atau cookie string): " . $kuning;
+        $c = trim(fgets(STDIN));
+        if (strpos($c, "# Netscape") === false && strpos($c, "faucetpepe.xyz") === false) {
+            $cookieContent = "# Netscape HTTP Cookie File\n";
+            $cookieContent .= ".faucetpepe.xyz\tTRUE\t/\tTRUE\t2147483647\tcookie_session\t" . $c . "\n";
+            file_put_contents("cookie_pepe.txt", $cookieContent);
+        } else {
+            file_put_contents("cookie_pepe.txt", $c);
+        }
+        echo $hijau . "  [+] Cookie berhasil diperbarui!\n" . $reset;
         sleep(1.5);
     } elseif ($opt === "6") {
         @unlink($configFile);
@@ -425,77 +432,36 @@ function getApiKey($file, $promptName) {
 $apikeyWaryono  = getApiKey($waryonoFile, "Waryono");
 $apikeyAlljrlwr = ($botMode == 1) ? getApiKey($alljrlwrFile, "AllJrLwr") : "";
 
-function doLogin($apikeyWaryono, $HCAPTCHA_SITEKey, $configFile) {
-    global $putih, $kuning, $merah, $hijau;
-    $ua = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Mobile Safari/537.36";
-    
-    $email = "";
+function inputCookieOrPrompt($configFile) {
+    global $putih, $kuning, $hijau;
     $earned = 0;
     $total_coins = 0;
     if (file_exists($configFile)) {
         $existingConfig = json_decode(file_get_contents($configFile), true);
-        if (!empty($existingConfig['email'])) {
-            $email = $existingConfig['email'];
-        }
         $earned = $existingConfig['earned'] ?? 0;
         $total_coins = $existingConfig['total_coins'] ?? 0;
     }
 
-    if (empty($email)) {
-        echo $putih . "Masukkan Email FaucetPay Anda: " . $kuning;
-        $email = trim(fgets(STDIN));
+    if (!file_exists("cookie_pepe.txt") || filesize("cookie_pepe.txt") == 0) {
+        echo $putih . "Masukkan Cookie FaucetPepe Anda: " . $kuning;
+        $cookieInput = trim(fgets(STDIN));
+        
+        $cookieContent = "# Netscape HTTP Cookie File\n";
+        $cookieContent .= ".faucetpepe.xyz\tTRUE\t/\tTRUE\t2147483647\tsession\t" . $cookieInput . "\n";
+        file_put_contents("cookie_pepe.txt", $cookieContent);
     }
     
-    skibidixxx("https://faucetpepe.xyz/", "GET", [], [
-        "user-agent: " . $ua,
-        "accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-    ]);
-
-    echo $putih . "[🔒] Proses Login!\n";
-    $hcap_token = "";
-    while (empty($hcap_token)) {
-        $hcap_token = solveHcaptchaWaryono($apikeyWaryono, $HCAPTCHA_SITEKey);
-        if (empty($hcap_token)) {
-            echo $merah . "[🔏] Login Gagal!!! ❌️\n" . $reset;
-            sleep(3);
-        }
-    }
-    
-    $login_data = http_build_query([
-        "email" => $email,
-        "captcha" => "hcaptcha",
-        "h-captcha-response" => $hcap_token,
-        "g-recaptcha-response" => $hcap_token,
-        "uf" => md5($email),
-        "utt" => "Asia/Jakarta",
-        "ls" => "en-US,en;q=0.9"
-    ]);
-    
-    list($login_res, , $l_code) = skibidixxx("https://faucetpepe.xyz/auth/login", "POST", $login_data, [
-        "Content-Type: application/x-www-form-urlencoded",
-        "Origin: https://faucetpepe.xyz",
-        "Referer: https://faucetpepe.xyz/",
-        "User-Agent: " . $ua
-    ]);
-
-    if (strpos($login_res, "does not exist") !== false || strpos($login_res, "invalid email") !== false || strpos($login_res, "not registered") !== false) {
-        echo $merah . "[📧] Akun Tidak Valid ⛔️\n" . $reset;
-        exit;
-    }
-    
-    echo $hijau . "[🔓] Login Berhasil! ✅️\n" . $reset;
-    $configData = ["email" => $email, "earned" => $earned, "total_coins" => $total_coins];
+    $configData = ["earned" => $earned, "total_coins" => $total_coins];
     file_put_contents($configFile, json_encode($configData, JSON_PRETTY_PRINT));
-    sleep(2);
 }
 
-if (!file_exists($configFile) || !file_exists("cookie_pepe.txt")) {
-    doLogin($apikeyWaryono, $HCAPTCHA_SITEKEY, $configFile);
+if (!file_exists("cookie_pepe.txt")) {
+    inputCookieOrPrompt($configFile);
 }
 
 $ua = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Mobile Safari/537.36";
 clear();
-$configData = json_decode(file_get_contents($configFile), true);
+$configData = file_exists($configFile) ? json_decode(file_get_contents($configFile), true) : [];
 $totalEarned = $configData['earned'] ?? 0;
 $totalCoins = $configData['total_coins'] ?? 0;
 banner($totalEarned, $totalCoins, "COINS");
@@ -506,15 +472,15 @@ $dash_page = skibidixxx("https://faucetpepe.xyz/dashboard", "GET", [], [
 ]);
 
 if (strpos($dash_page, 'Enter Your FaucetPay Email') !== false || strpos($dash_page, 'action="https://faucetpepe.xyz/auth/login"') !== false) {
-    if (file_exists("cookie_pepe.txt")) unlink("cookie_pepe.txt");
-    doLogin($apikeyWaryono, $HCAPTCHA_SITEKEY, $configFile);
+    echo $merah . "[❌] Cookie Kedaluwarsa atau Tidak Valid! Silakan masukkan cookie baru.\n" . $reset;
+    @unlink("cookie_pepe.txt");
+    inputCookieOrPrompt($configFile);
     $dash_page = skibidixxx("https://faucetpepe.xyz/dashboard", "GET", [], ["user-agent: " . $ua]);
 }
 
 preg_match_all('/href="[^"]*\/faucet\/([a-zA-Z0-9]+)"/i', $dash_page, $matches);
 $foundCoins = array_unique($matches[1]);
 
-$configData = json_decode(file_get_contents($configFile), true);
 $selectedCoin = $configData['coin'] ?? '';
 
 if (empty($selectedCoin) || !in_array(strtolower($selectedCoin), array_map('strtolower', $foundCoins))) {
@@ -581,8 +547,9 @@ $headers = [
 $faucet_page = skibidixxx($targetUrl, "GET", [], $headers);
 
 if (strpos($faucet_page, 'Enter Your FaucetPay Email') !== false || strpos($faucet_page, 'action="https://faucetpepe.xyz/auth/login"') !== false) {
+    echo $merah . "[❌] Cookie Kedaluwarsa! Masukkan cookie baru.\n" . $reset;
     if (file_exists("cookie_pepe.txt")) unlink("cookie_pepe.txt");
-    doLogin($apikeyWaryono, $HCAPTCHA_SITEKEY, $configFile);
+    inputCookieOrPrompt($configFile);
     goto loop_start;
 }
 
@@ -607,14 +574,29 @@ if (empty($token)) {
     goto loop_start;
 }
 
-if ($botMode == 1) {
-    $captcha_token = solveAdslabAlljrlwr($apikeyAlljrlwr, $ADSLAB_SITEKEY);
+
+$captcha_type = "adslab"; // default
+$captcha_response_key = "alcaptcha-response";
+
+if (strpos($faucet_page, 'h-captcha') !== false || strpos($faucet_page, $HCAPTCHA_SITEKEY) !== false || strpos($faucet_page, 'hcaptcha') !== false) {
+    $captcha_type = "hcaptcha";
+    $captcha_response_key = "h-captcha-response";
+}
+
+
+if ($captcha_type === "hcaptcha") {
+    $captcha_token = solveHcaptchaWaryono($apikeyWaryono, $HCAPTCHA_SITEKEY);
 } else {
-    $captcha_token = solveAdslabWaryono($apikeyWaryono, $ADSLAB_SITEKEY);
+    
+    if ($botMode == 1) {
+        $captcha_token = solveAdslabAlljrlwr($apikeyAlljrlwr, $ADSLAB_SITEKEY);
+    } else {
+        $captcha_token = solveAdslabWaryono($apikeyWaryono, $ADSLAB_SITEKEY);
+    }
 }
 
 if (empty($captcha_token)) {
-    echo $merah . "[❌️] Claim Gagal🥊\n" . $reset;
+    echo $merah . "[❌️] Claim Gagal (Captcha Unsolved)🥊\n" . $reset;
     sleep(5);
     goto loop_start;
 }
@@ -622,9 +604,8 @@ if (empty($captcha_token)) {
 $post_data = http_build_query([
     "token" => $token,
     "currency" => $selectedCoin,
-    "captcha" => "alcaptcha",
-    "alcaptcha-response" => $captcha_token,
-    "uf" => md5($configData['email']),
+    "captcha" => $captcha_type,
+    $captcha_response_key => $captcha_token,
     "utt" => "Asia/Jakarta",
     "ls" => "en-US,en;q=0.9"
 ]);
