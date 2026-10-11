@@ -2,11 +2,12 @@
 # -*- coding: utf-8 -*-
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   NOTBUX AUTO WATCH — SOUU ENGINE Edition v4.1               ║
+║   NOTBUX AUTO WATCH — SOUU ENGINE Edition v4.2               ║
 ║   FIX : banner numpuk (clear scrollback)                     ║
 ║   FIX : merge ads dari /earn/data + /tasks/available         ║
 ║   FEAT : live dashboard watch ads                            ║
 ║   FEAT : auto-loop sampe semua iklan habis                   ║
+║   NEW : auto re-auth kalau init_data expired                 ║
 ╚══════════════════════════════════════════════════════════════╝
 """
 
@@ -18,7 +19,7 @@ from urllib3.util.retry import Retry
 from colorama import init, Fore, Style
 init(autoreset=True)
 
-VERSION = "4.1"
+VERSION = "4.2"
 HOST = "https://notbux.click"
 API = f"{HOST}/api"
 CONFIG_FILE = "config_notbux.json"
@@ -39,8 +40,8 @@ AD_WATCH_MAX = 35
 HUMAN_PAUSE_MIN = 2
 HUMAN_PAUSE_MAX = 5
 MAX_EMPTY_CYCLES = 3
+MAX_REAUTH = 3
 
-# Clear screen: hapus display + scrollback biar banner gak numpuk
 CLEAR = "\033[2J\033[3J\033[H"
 
 
@@ -75,6 +76,7 @@ class UI:
         "watching_reward": "-",
         "watching_progress": 0.0,
         "watching_total": 0,
+        "reauth_count": 0,
     }
     logs = deque(maxlen=300)
 
@@ -208,7 +210,8 @@ class UI:
         srew = s.get("session_reward", 0)
         buf += UI.row("├─ " + UI.pad("Reward", 11) + ": " + UI.fg(46, f"+{int(srew)} coins")) + "\n"
         buf += UI.row("├─ " + UI.pad("Last", 11) + ": " + UI.fg(226, str(s["last_reward"]))) + "\n"
-        buf += UI.row("└─ " + UI.pad("Net retry", 11) + ": " + UI.fg(208, str(s.get("net_retry", 0)))) + "\n"
+        buf += UI.row("├─ " + UI.pad("Net retry", 11) + ": " + UI.fg(208, str(s.get("net_retry", 0)))) + "\n"
+        buf += UI.row("└─ " + UI.pad("Re-auth", 11) + ": " + UI.fg(213, str(s.get("reauth_count", 0)))) + "\n"
         buf += UI.mid() + "\n"
 
         # STATUS
@@ -216,7 +219,7 @@ class UI:
         if int(s["cooldown"]) > 0: phase += f" · {int(s['cooldown'])}s"
         state_color = {"RUNNING": 46, "WAITING": 208, "ERROR": 196,
                        "INIT": 240, "DONE": 46, "PAUSE": 213, "RETRY": 208,
-                       "WATCHING": 213, "COOLDOWN": 208}.get(s["state"], 226)
+                       "WATCHING": 213, "COOLDOWN": 208, "REAUTH": 196}.get(s["state"], 226)
         buf += UI.row(UI.bold("STATUS")) + "\n"
         buf += UI.row("├─ " + UI.pad("State", 11) + ": " + UI.fg(state_color, str(s["state"]))) + "\n"
         buf += UI.row("└─ " + UI.pad("Phase", 11) + ": " + UI.trunc(UI.fg(208, phase), 30)) + "\n"
@@ -320,12 +323,93 @@ class UI:
         print(line("├─ " + UI.pad("Host", 11) + ": " + HOST))
         print(line("├─ " + UI.pad("Watch", 11) + f": {AD_WATCH_MIN}-{AD_WATCH_MAX}s"))
         print(line("├─ " + UI.pad("Retry", 11) + f": {HTTP_MAX_RETRY}x backoff"))
+        print(line("├─ " + UI.pad("Re-auth", 11) + f": auto up to {MAX_REAUTH}x"))
         print(line("└─ " + UI.pad("Version", 11) + ": v" + VERSION))
         print(UI.fg(51, "╠" + "═" * W_ + "╣"))
         print(line(UI.bold("AUTHOR")))
         print(line("└─ " + UI.pad("By", 11) + ": " + UI.fg(213, "@SouuXso")))
         print(UI.fg(51, "╚" + "═" * W_ + "╝"))
         print()
+
+
+# ═══════════════════════════════════════════════════════════════
+#  RE-AUTH PROMPT
+# ═══════════════════════════════════════════════════════════════
+def prompt_new_init_data():
+    """Prompt user paste init_data baru. Return string atau None kalau kosong/batal."""
+    was_running = UI.state["running"]
+    UI.state["running"] = False
+    sys.stdout.write(CLEAR)
+    sys.stdout.flush()
+
+    print()
+    print(UI.c("═" * 62, "br_yellow"))
+    print(UI.c("  ⚠  INIT DATA EXPIRED / INVALID", "br_yellow"))
+    print(UI.c("═" * 62, "br_yellow"))
+    print(UI.c("  Ambil init_data baru dari Telegram Desktop:", "white"))
+    print(UI.c("  → Ctrl+Shift+I → Console → ketik:", "gray"))
+    print(UI.c("     copy(Telegram.WebApp.initData)", "br_cyan"))
+    print(UI.c("  atau dari DevTools → Network → cari request ke notbux.click,", "gray"))
+    print(UI.c("     copy header 'authorization'", "gray"))
+    print()
+    print(UI.c("  Kosongkan + Enter buat batal & keluar.", "gray"))
+    print()
+    print(UI.c("  init_data : ", "white"), end="")
+
+    try:
+        new_init = input().strip()
+    except EOFError:
+        new_init = ""
+
+    if not new_init:
+        UI.state["running"] = was_running
+        return None
+
+    # Validasi minimal
+    required = ['query_id', 'user', 'auth_date']
+    missing = [k for k in required if f"{k}=" not in new_init]
+    if missing:
+        print(UI.c(f"\n  ✖ init_data gak lengkap. Missing: {', '.join(missing)}", "br_red"))
+        print(UI.c("  Tekan Enter buat tetep lanjut, atau Ctrl+C buat batal...", "gray"), end="")
+        try: input()
+        except EOFError: pass
+
+    # Cek umur
+    try:
+        kv = dict(p.split("=", 1) for p in new_init.split("&") if "=" in p)
+        ad = int(kv.get("auth_date", "0"))
+        age = int(time.time()) - ad
+        if age > 300:
+            print(UI.c(f"\n  ⚠ init_data udah umur {age//60} menit — mungkin tetep expired.", "yellow"))
+            print(UI.c("  Lanjut? (y/N): ", "white"), end="")
+            try:
+                ans = input().strip().lower()
+            except EOFError:
+                ans = "n"
+            if ans not in ("y", "ya", "yes"):
+                UI.state["running"] = was_running
+                return None
+    except Exception:
+        pass
+
+    UI.state["running"] = was_running
+    return new_init
+
+
+def save_init_data(new_init):
+    """Update config file dengan init_data baru."""
+    try:
+        cfg = {}
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE) as f:
+                cfg = json.load(f)
+        cfg["init_data"] = new_init
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(cfg, f, indent=2)
+        return True
+    except Exception as e:
+        print(UI.c(f"  ✖ gagal simpen config: {e}", "br_red"))
+        return False
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -469,6 +553,43 @@ class NotBuxBot:
         with open(CONFIG_FILE) as f:
             return json.load(f)
 
+    # ── RE-AUTH ──
+    def reauth(self):
+        """
+        Minta init_data baru, update header, reset state. Return True kalau sukses.
+        """
+        UI.warn("AUTH", "init_data expired — minta paste baru")
+        try:
+            new_init = prompt_new_init_data()
+        except KeyboardInterrupt:
+            raise
+
+        if not new_init:
+            UI.err("AUTH", "user gak kasih init_data baru — stop")
+            return False
+
+        # Update header & session
+        self.init_data = new_init
+        try: self.session.close()
+        except Exception: pass
+        self.session = make_session()
+
+        # Reset state
+        self.app_key = ""  # kalo ada di script lain
+        self.user = {}
+        self.ads = []
+        self.balance = 0
+
+        # Simpen ke config
+        if save_init_data(new_init):
+            UI.ok("AUTH", "init_data baru disimpan")
+        else:
+            UI.warn("AUTH", "gagal simpen, tetep lanjut pakai yang baru")
+
+        # Update counter
+        UI.set(reauth_count=int(UI.state.get("reauth_count", 0)) + 1)
+        return True
+
     def fetch_user(self):
         UI.step("USER", "GET /api/user/me")
         code, j, txt = self.api_get("/user/me")
@@ -512,14 +633,12 @@ class NotBuxBot:
         """Gabung dari /earn/data + /tasks/available."""
         merged = {}
 
-        # 1. /earn/data
         code, j, txt = self.api_get("/earn/data")
         if code == 200 and isinstance(j, dict):
             for a in (j.get("ads", []) or []):
                 n = self._normalize_ad(a, "earn")
                 merged[n["id"]] = n
 
-        # 2. /tasks/available
         code, j, txt = self.api_get("/tasks/available")
         if code == 200 and isinstance(j, dict):
             for a in (j.get("ads", []) or []):
@@ -578,10 +697,7 @@ class NotBuxBot:
         UI.watch_timer(duration, name, f"+{reward}")
 
         UI.step("CLAIM", f"POST /tasks/ads/{aid}/claim")
-        try:
-            code, j, txt = self.api_post(f"/tasks/ads/{aid}/claim", None)
-        except InitDataExpired:
-            raise
+        code, j, txt = self.api_post(f"/tasks/ads/{aid}/claim", None)
 
         if code != 200:
             UI.err("CLAIM", f"{name}: HTTP {code}: {txt[:50]}")
@@ -612,24 +728,39 @@ class NotBuxBot:
 
     def run(self):
         UI.set(state="INIT", session_reward=0, session_ads=0,
-               last_reward="-", net_retry=0)
+               last_reward="-", net_retry=0, reauth_count=0)
         UI.start_panel()
 
-        try:
-            if not self.fetch_user():
-                UI.err("FATAL", "gagal fetch user")
+        # ── 1. Initial fetch user, dengan re-auth loop ──
+        reauth_tries = 0
+        while True:
+            try:
+                if self.fetch_user():
+                    break
+                UI.err("FATAL", "gagal fetch user — bukan auth error")
                 UI.stop_panel(); return
-        except InitDataExpired:
-            UI.err("FATAL", "init_data expired — refresh dari Telegram")
-            UI.stop_panel(); return
+            except InitDataExpired:
+                reauth_tries += 1
+                if reauth_tries > MAX_REAUTH:
+                    UI.err("FATAL", f"re-auth gagal {MAX_REAUTH}x — keluar")
+                    UI.stop_panel(); return
+                if not self.reauth():
+                    UI.err("FATAL", "user gak mau kasih init_data baru")
+                    UI.stop_panel(); return
 
         self.start_balance = self.balance
 
-        try:
-            self.fetch_ads()
-        except InitDataExpired:
-            UI.err("FATAL", "auth expired di fetch_ads")
-            UI.stop_panel(); return
+        # ── 2. Initial fetch ads ──
+        while True:
+            try:
+                if self.fetch_ads():
+                    break
+                UI.warn("ADS", "fetch_ads gagal")
+                break
+            except InitDataExpired:
+                if not self.reauth():
+                    UI.err("FATAL", "reauth gagal di fetch_ads")
+                    UI.stop_panel(); return
 
         UI.set(ads_summary=self._ads_summary())
 
@@ -646,13 +777,16 @@ class NotBuxBot:
             UI.set(cycle=cycle, state="RUNNING", phase="-")
             UI.info("CYCLE", f"#{cycle}")
 
+            # ── Refresh ads tiap cycle ──
             try:
                 self.fetch_ads()
                 UI.set(ads_summary=self._ads_summary())
             except InitDataExpired:
-                UI.err("FATAL", "auth expired")
-                stop_reason = "auth_expired"
-                break
+                UI.warn("CYCLE", "init_data expired mid-run")
+                if not self.reauth():
+                    stop_reason = "reauth_failed"
+                    break
+                continue
 
             ready = [a for a in self.ads
                      if a.get("cooldown", 0) == 0
@@ -700,8 +834,11 @@ class NotBuxBot:
                 try:
                     result = self.watch_ad(ad)
                 except InitDataExpired:
-                    stop_reason = "auth_expired"
-                    break
+                    UI.warn("WATCH", "init_data expired mid-watch")
+                    if not self.reauth():
+                        stop_reason = "reauth_failed"
+                        break
+                    break  # keluar for loop, cycle bakal restart
 
                 if result == "FAIL":
                     UI.warn("SKIP", f"{ad.get('name', ad.get('id'))} — fail, skip")
@@ -710,9 +847,13 @@ class NotBuxBot:
                 else:
                     claimed_this_cycle += 1
 
+                # Refresh ads (ignore auth error di sini biar gak ganggu loop)
                 try:
                     self.fetch_ads()
                     UI.set(ads_summary=self._ads_summary())
+                except InitDataExpired:
+                    UI.warn("REFRESH", "auth expired — bakal re-auth next cycle")
+                    break
                 except Exception:
                     pass
 
@@ -721,10 +862,7 @@ class NotBuxBot:
                 UI.warn("PAUSE", f"{pause}s")
                 UI.countdown(pause, "human pause")
 
-                if stop_reason == "auth_expired":
-                    break
-
-            if stop_reason == "auth_expired":
+            if stop_reason == "reauth_failed":
                 break
 
             if claimed_this_cycle == 0:
@@ -744,6 +882,7 @@ class NotBuxBot:
         print(UI.c(f"  Balance     : {self.balance} coins", "br_yellow"))
         print(UI.c(f"  Session     : +{int(UI.state['session_reward'])} coins ({UI.state['session_ads']} ads)", "br_green"))
         print(UI.c(f"  Net retries : {UI.state['net_retry']}", "yellow"))
+        print(UI.c(f"  Re-auth     : {UI.state.get('reauth_count', 0)}x", "yellow"))
         print(UI.c("═" * 64, "br_cyan"))
         print()
 
