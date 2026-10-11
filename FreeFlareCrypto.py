@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 ╔═══════════════════════════════════════════════════════════════════╗
-║           ⚡ SOUU ENGINE — DUAL AUTO CLAIM ⚡                     ║
-║   CentPay + FreeFlareCrypto • NO CACHE • MANUAL PASTE COOKIE    ║
+║           ⚡ SOUU ENGINE — FREEFLARE AUTO CLAIM ⚡                ║
+║        FreeFlareCrypto • NO CACHE • MANUAL PASTE COOKIE         ║
 ╚═══════════════════════════════════════════════════════════════════╝
 """
 
@@ -90,22 +90,6 @@ def status_color(s):
 # ═══════════════════════════════════════════════════════════════════════════
 #  MODE PICKER
 # ═══════════════════════════════════════════════════════════════════════════
-def mode_picker():
-    out = []
-    out.append(box_top())
-    out.append(box_line(gradient("SOUU ENGINE — DUAL AUTO CLAIM")))
-    out.append(box_line(f"{DIM}─────── PILIH TARGET ───────{RESET}"))
-    out.append(box_div())
-    out.append(box_line(f"{MAGENTA}{BOLD}PILIH WEBSITE{RESET}"))
-    out.append(box_line(f"  {CYAN}1.{RESET} {WHITE}CentPay       {RESET}{GREEN}(USDT){RESET}"))
-    out.append(box_line(f"  {CYAN}2.{RESET} {WHITE}FreeFlareCrypto {RESET}{GREEN}(DGB){RESET}"))
-    out.append(box_line(f"  {CYAN}0.{RESET} {ORANGE}Keluar{RESET}"))
-    out.append(box_bot())
-    clear()
-    print(''.join(out), end='')
-    print(f"\n  {CYAN}PILIH > {RESET}", end='')
-    return input().strip()
-
 def claim_mode_picker(title, extra_lines=None):
     out = []
     out.append(box_top())
@@ -131,222 +115,6 @@ def claim_mode_picker(title, extra_lines=None):
     if p == "3":   return 50,     '50x claim'
     if p == "4":   return 999999, 'Unlimited'
     return 10, '10x claim'
-
-# ═══════════════════════════════════════════════════════════════════════════
-#  ══════════════════════════ CENTPAY MODULE ════════════════════════════════
-# ═══════════════════════════════════════════════════════════════════════════
-CENTPAY_URL = "https://centpay.online/claim"
-CENTPAY_REF = "https://centpay.online/"
-
-cp_state = {
-    'mode': 'IDLE', 'status': 'INIT', 'success': 0, 'failed': 0,
-    'empty_fund': 0, 'max_claim': 0, 'total_usdt': 0.0, 'last_usdt': '0.00000',
-    'cookie': '', 'logs': [], 'start_time': time.time(),
-    'empty_cooldown_until': 0,  # timestamp sampai kapan skip
-}
-CP_MAX_LOGS = 6
-CP_EMPTY_SKIP_WAIT = 30  # detik tunggu kalau empty fund
-
-def cp_push(msg, tag='i'):
-    icons = {'i': f'{CYAN}●{RESET}', 'ok': f'{GREEN}✔{RESET}', 'er': f'{RED}✖{RESET}',
-             'wr': f'{ORANGE}◈{RESET}', 'in': f'{MAGENTA}⬢{RESET}', 'g': f'{YELLOW}◆{RESET}',
-             'pk': f'{PINK}◉{RESET}'}
-    ts = datetime.now().strftime('%H:%M:%S')
-    line = f"{GRAY}[{ts}]{RESET} {icons.get(tag, '●')} {msg}"
-    cp_state['logs'].append(line)
-    if len(cp_state['logs']) > CP_MAX_LOGS:
-        cp_state['logs'].pop(0)
-
-def cp_banner():
-    elapsed = time.time() - cp_state['start_time']
-    out = []
-    out.append(box_top())
-    out.append(box_line(gradient("CENTPAY AUTO CLAIM")))
-    out.append(box_line(f"{DIM}─────── SOUU ENGINE ───────{RESET}"))
-    out.append(box_div())
-
-    out.append(box_line(f"{MAGENTA}{BOLD}SESSION{RESET}"))
-    out.append(box_line(f"\033[38;5;51m├─ Mode       : {RESET}{YELLOW}{cp_state['mode']}{RESET}"))
-    out.append(box_line(f"\033[38;5;51m├─ Status     : {RESET}{status_color(cp_state['status'])}{cp_state['status']}{RESET}"))
-    out.append(box_line(f"\033[38;5;51m└─ Progress   : {RESET}{YELLOW}{cp_state['success']} / {cp_state['max_claim']}{RESET}"))
-    out.append(box_div())
-
-    out.append(box_line(f"{MAGENTA}{BOLD}INCOME{RESET}"))
-    out.append(box_line(f"\033[38;5;51m├─ Total      : {RESET}{GREEN}+{cp_state['total_usdt']:.5f} USDT{RESET}"))
-    out.append(box_line(f"\033[38;5;51m└─ Last       : {RESET}{GREEN}+{cp_state['last_usdt']} USDT{RESET}"))
-    out.append(box_div())
-
-    out.append(box_line(f"{MAGENTA}{BOLD}SYSTEM{RESET}"))
-    out.append(box_line(f"\033[38;5;51m├─ Success    : {RESET}{GREEN}{cp_state['success']}{RESET}"))
-    out.append(box_line(f"\033[38;5;51m├─ Failed     : {RESET}{RED}{cp_state['failed']}{RESET}"))
-    out.append(box_line(f"\033[38;5;51m├─ Empty Fund : {RESET}{PINK}{cp_state['empty_fund']}{RESET}"))
-    out.append(box_line(f"\033[38;5;51m└─ Runtime    : {RESET}{YELLOW}{fmt_uptime(elapsed)}{RESET}"))
-    out.append(box_div())
-
-    for i in range(CP_MAX_LOGS):
-        if i < len(cp_state['logs']):
-            out.append(box_line(cp_state['logs'][i]))
-        else:
-            out.append(f"\033[38;5;51m║{' ' * 62}║{RESET}\n")
-
-    out.append(box_bot())
-    out.append(f"\n   {gradient('CENTPAY RUNNING', 46, 226)} {WHITE}• {datetime.now().strftime('%H:%M:%S')}{RESET}\n")
-    out.append(f"   {DIM}By Power {RESET}{MAGENTA}@SouuXso{RESET}{DIM} • {RESET}{GREEN}CentPay Edition{RESET}\n\n")
-    clear()
-    print(''.join(out), end='')
-
-def cp_get_usdt(text):
-    try:
-        m = re.search(r'([0-9]+\.[0-9]+)\s*USDT', text, re.I)
-        if m: return m.group(1)
-        m = re.search(r'"reward":\s*"?([0-9.]+)', text)
-        if m: return m.group(1)
-    except Exception:
-        pass
-    return "0.00000"
-
-def cp_run():
-    # Cookie
-    out = []
-    out.append(box_top())
-    out.append(box_line(gradient("CENTPAY AUTO CLAIM")))
-    out.append(box_line(f"{DIM}─────── SOUU ENGINE ───────{RESET}"))
-    out.append(box_div())
-    out.append(box_line(f"{MAGENTA}{BOLD}SESSION{RESET}"))
-    out.append(box_line(f"\033[38;5;51m├─ Website    : {RESET}{YELLOW}https://centpay.online{RESET}"))
-    out.append(box_line(f"\033[38;5;51m└─ Mode       : {RESET}{YELLOW}NO SAVE (manual paste){RESET}"))
-    out.append(box_bot())
-    clear()
-    print(''.join(out), end='')
-
-    print(f"\n   {gradient('PASTE COOKIE BARU', 46, 226)}\n")
-    print(f"  {CYAN}┌─[ {YELLOW}faas_session{CYAN} ]{RESET}")
-    print(f"  {CYAN}└──> {RESET}", end='')
-    raw = input().strip()
-    cookie = get_cookie(raw)
-    if not cookie:
-        print(f"{RED}  ✖ Cookie kosong, kembali ke menu.{RESET}")
-        time.sleep(1.5)
-        return
-
-    cp_state['cookie'] = cookie
-    cp_state['start_time'] = time.time()
-    cp_state['success'] = 0
-    cp_state['failed'] = 0
-    cp_state['empty_fund'] = 0
-    cp_state['total_usdt'] = 0.0
-    cp_state['last_usdt'] = '0.00000'
-    cp_state['logs'] = []
-    cp_state['empty_cooldown_until'] = 0
-
-    cookie_preview = cookie[:16] + '...' + cookie[-8:] if len(cookie) > 24 else cookie
-
-    max_claim, mode = claim_mode_picker(
-        "CENTPAY AUTO CLAIM",
-        [f"{MAGENTA}{BOLD}SESSION{RESET}",
-         f"\033[38;5;51m├─ Website : {RESET}{YELLOW}centpay.online{RESET}",
-         f"\033[38;5;51m└─ Cookie  : {RESET}{GREEN}{cookie_preview}{RESET}"]
-    )
-    cp_state['max_claim'] = max_claim
-    cp_state['mode'] = mode
-
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36",
-        "Accept": "*/*",
-        "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Referer": CENTPAY_REF,
-        "Origin": "https://centpay.online",
-        "sec-ch-ua": '"Chromium";v="127", "Not)A;Brand";v="99", "Microsoft Edge Simulate";v="127", "Lemur";v="127"',
-        "sec-ch-ua-mobile": "?1",
-        "sec-ch-ua-platform": '"Android"',
-        "sec-fetch-site": "same-origin",
-        "sec-fetch-mode": "cors",
-        "sec-fetch-dest": "empty",
-        "content-type": "application/x-www-form-urlencoded",
-        "priority": "u=1, i",
-    }
-    cookies = {"faas_session": cookie}
-
-    cp_push(f"mode: {mode} | max: {max_claim}", 'g')
-    cp_state['status'] = 'STARTING'
-    cp_banner()
-
-    while cp_state['success'] < max_claim:
-        try:
-            r = requests.post(CENTPAY_URL, headers=headers, cookies=cookies, timeout=20)
-            txt = r.text
-            txt_low = txt.lower()
-            sc = r.status_code
-
-            # ── HANDLE 503 / INSUFFICIENT FUNDS (skip) ──
-            if sc == 503 or "insufficient fund" in txt_low or "does not have sufficient" in txt_low:
-                cp_state['empty_fund'] += 1
-                cp_state['status'] = 'EMPTY FUND (SKIP)'
-                cp_state['empty_cooldown_until'] = time.time() + CP_EMPTY_SKIP_WAIT
-                cp_push(f"faucet kosong #{cp_state['empty_fund']} → skip {CP_EMPTY_SKIP_WAIT}s", 'pk')
-                cp_banner()
-                for i in range(CP_EMPTY_SKIP_WAIT, 0, -1):
-                    cp_state['status'] = f'SKIP EMPTY {i}s'
-                    print(f"\r   {PINK}◉ faucet kosong — skip {i}s{RESET}    ", end='')
-                    time.sleep(1)
-                print()
-                continue
-
-            # ── SUCCESS ──
-            if sc == 200 and ("success" in txt_low or "claimed" in txt_low or "reward" in txt_low or "has been" in txt_low):
-                cp_state['success'] += 1
-                usdt = cp_get_usdt(txt)
-                try:
-                    cp_state['total_usdt'] += float(usdt)
-                except Exception:
-                    pass
-                cp_state['last_usdt'] = usdt
-                cp_state['status'] = f'BERHASIL #{cp_state["success"]}'
-                cp_push(f"+{usdt} USDT | success: {cp_state['success']}/{max_claim}", 'ok')
-                cp_banner()
-
-                if cp_state['success'] >= max_claim:
-                    break
-
-                for i in range(60, 0, -1):
-                    cp_state['status'] = f'COOLDOWN {i}s'
-                    print(f"\r   {ORANGE}◈ cooldown {i}s → next {cp_state['success']+1}/{max_claim}{RESET}    ", end='')
-                    time.sleep(1)
-                print()
-                continue
-
-            # ── COOKIE MATI ──
-            if "login" in txt_low and sc in (401, 403):
-                cp_state['status'] = 'COOKIE SALAH/MATI'
-                cp_push("cookie mati — paste ulang", 'er')
-                cp_banner()
-                break
-
-            # ── FAILED GENERIC ──
-            cp_state['failed'] += 1
-            cp_state['status'] = f'VAILED #{cp_state["failed"]}'
-            cp_push(f"HTTP {sc} | {txt[:50]}", 'er')
-            cp_banner()
-            for i in range(5, 0, -1):
-                cp_state['status'] = f'RETRY {i}s'
-                print(f"\r   {YELLOW}◈ retry in {i}s{RESET}    ", end='')
-                time.sleep(1)
-            print()
-
-        except KeyboardInterrupt:
-            raise
-        except Exception as e:
-            cp_state['failed'] += 1
-            cp_state['status'] = 'ERROR'
-            cp_push(f"error: {str(e)[:50]}", 'er')
-            cp_banner()
-            time.sleep(2)
-
-    cp_state['status'] = 'FINISH'
-    cp_push(f"selesai | sukses={cp_state['success']} failed={cp_state['failed']} total={cp_state['total_usdt']:.5f} USDT", 'g')
-    cp_banner()
-    print(f"\n   {gradient('SELESAI', 46, 226)} {WHITE}• sukses {cp_state['success']} | failed {cp_state['failed']} | empty {cp_state['empty_fund']} | total +{cp_state['total_usdt']:.5f} USDT{RESET}\n")
-    input(f"  {CYAN}Enter untuk kembali ke menu...{RESET}")
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  ══════════════════════ FREEFLARE CRYPTO MODULE ══════════════════════════
@@ -665,29 +433,22 @@ def ff_run():
     ff_push(f"selesai | sukses={ff_state['success']} failed={ff_state['failed']} total={ff_state['total_reward']:.5f} {ff_state['currency']}", 'g')
     ff_banner()
     print(f"\n   {gradient('SELESAI', 46, 226)} {WHITE}• sukses {ff_state['success']} | failed {ff_state['failed']} | total +{ff_state['total_reward']:.5f} {ff_state['currency']}{RESET}\n")
-    input(f"  {CYAN}Enter untuk kembali ke menu...{RESET}")
+    input(f"  {CYAN}Enter untuk kembali...{RESET}")
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  MAIN MENU
+#  MAIN
 # ═══════════════════════════════════════════════════════════════════════════
 def main():
+    clear()
     while True:
         try:
-            pilihan = mode_picker()
-            if pilihan == "1":
-                cp_run()
-            elif pilihan == "2":
-                ff_run()
-            elif pilihan == "0":
-                clear()
-                print(f"\n{GREEN}  Terima kasih. Sampai jumpa, bro.{RESET}\n")
-                break
-            else:
-                print(f"{RED}  ✖ Pilihan tidak valid.{RESET}")
-                time.sleep(1)
+            ff_run()
         except KeyboardInterrupt:
             print(f"\n{YELLOW}[!] Dihentikan.{RESET}")
             break
+        except Exception as e:
+            print(f"\n{RED}[!] Error: {e}{RESET}")
+            time.sleep(1.5)
 
 if __name__ == "__main__":
     main()
