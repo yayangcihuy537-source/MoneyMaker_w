@@ -274,9 +274,9 @@
           "runner": "python3"
         },
         "22": {
-          "label": "Coming Soon 🔵",
-          "file": "ComingSoon.php",
-          "runner": "php"
+          "label": "Btc Faucet 🟢",
+          "file": "btcFaucet.py",
+          "runner": "python3"
         }
       }
     },
