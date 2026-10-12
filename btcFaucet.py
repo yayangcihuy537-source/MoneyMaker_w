@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 """
 ╔══════════════════════════════════════════════════════════════╗
-║  BTC FAUCET AUTO FARM — NEON Edition v4                      ║
+║  BTC FAUCET AUTO FARM — NEON Edition v5                      ║
 ║  Host: btc.zrbtdoma.com | Adexium + GigaPub + Auto Captcha   ║
-║  Skip-on-error: kalau 1 ad fail, lanjut ad berikutnya        ║
+║  Blacklist provider yang fail 2x, sisa lanjut                ║
 ╚══════════════════════════════════════════════════════════════╝
 """
 
@@ -46,10 +46,12 @@ INIT_DATA = ""
 BASE_URL = DEFAULT_HOST
 REAUTH_PROMPTED = False
 
-# Provider yang di-skip sementara karena error (cooldown skip)
-SKIP_UNTIL = {}  # {provider: timestamp_sampe_kapan_skip}
-SKIP_DURATION = 90  # detik skip kalau provider error fatal
-MAX_PROVIDER_FAILS = 3  # kalau fail 3x berturut, skip lebih lama
+# ── Provider blacklist ──
+# Setelah fail MAX_FAILS kali dalam 1 sesi farm, provider di-blacklist.
+# Gak bakal dicoba lagi sampe farm restart.
+FAIL_COUNT = {}       # {provider: jumlah_fail_sesi_ini}
+BLACKLISTED = set()   # provider yang udah di-blacklist
+MAX_FAILS = 2         # batas fail sebelum blacklist
 
 
 # ═══════════════════ UTILS ═══════════════════
@@ -104,19 +106,28 @@ def get_init_user_id(init_data):
         return None
 
 
-def is_skipped(prov):
-    """Cek apakah provider lagi di-skip."""
-    until = SKIP_UNTIL.get(prov, 0)
-    return time.time() < until
+def reset_fail_tracker():
+    global FAIL_COUNT, BLACKLISTED
+    FAIL_COUNT = {}
+    BLACKLISTED = set()
 
 
-def mark_skip(prov, dur=SKIP_DURATION):
-    """Skip provider selama dur detik."""
-    SKIP_UNTIL[prov] = time.time() + dur
+def mark_fail(prov):
+    """Naikin fail count, blacklist kalau udah >= MAX_FAILS."""
+    if prov in BLACKLISTED:
+        return False
+    FAIL_COUNT[prov] = FAIL_COUNT.get(prov, 0) + 1
+    if FAIL_COUNT[prov] >= MAX_FAILS:
+        BLACKLISTED.add(prov)
+        return True  # baru di-blacklist
+    return False
 
 
-def clear_skip(prov):
-    SKIP_UNTIL.pop(prov, None)
+def mark_ok(prov):
+    """Reset fail count kalau ada yang sukses."""
+    if prov in BLACKLISTED:
+        return
+    FAIL_COUNT[prov] = 0
 
 
 # ═══════════════════ CONFIG I/O ═══════════════════
@@ -461,7 +472,6 @@ def detect_and_solve_captcha():
 
 # ═══════════════════ TASK HANDLERS ═══════════════════
 def handle_gigapub(sid, st):
-    """GigaPub butuh SDK sequence dari ad.gigapub.tech sebelum confirm."""
     tg = giga_user()
     giga_call({'method': 'init', 'args': {'user': tg}, 'version': 'v85', 'seconds': 9.9})
 
@@ -513,13 +523,11 @@ def handle_gigapub(sid, st):
 
 
 def handle_adexium(sid, st):
-    """Adexium gak butuh bypass, cuma delay kecil."""
     time.sleep(2)
     return True, None
 
 
 def confirm_with_retry(sid, prov, max_retry=3):
-    """Confirm dengan retry kalau ad_required / pending_postback."""
     cf = None
     for i in range(max_retry):
         cf = api("/api/tasks/ads/confirm", {"session_uid": sid})
@@ -549,7 +557,9 @@ def do_farm():
     notified_limit = {}
     captcha_retries = 0
     state_retry = 0
-    prov_fails = {}  # {provider: jumlah_fail_berturut}
+
+    # Reset fail tracker tiap kali farm baru dimulai
+    reset_fail_tracker()
 
     while True:
         tasks = get_state()
@@ -585,18 +595,15 @@ def do_farm():
         busy = 0
         tried_any = False
         claimed = False
-        skipped_this_round = 0
+        all_providers_dead = True  # track kalau semua provider udah blacklist/limit
 
         for t in tasks:
             prov = t.get('provider', '')
             if prov not in ('adexium', 'gigapubs'):
                 continue
 
-            # ── Skip kalau provider lagi error ──
-            if is_skipped(prov):
-                sisa = int(SKIP_UNTIL[prov] - time.time())
-                print(f"{WHITE}[{CYAN}{prov}{WHITE}] {GRAY}skip {sisa}s (error sblmnya){RESET}")
-                skipped_this_round += 1
+            # ── BLACKLIST check ──
+            if prov in BLACKLISTED:
                 continue
 
             rem = int(t.get('remaining_today', 0))
@@ -607,14 +614,15 @@ def do_farm():
                 if not notified_limit.get(prov):
                     print(f"{WHITE}[{CYAN}{prov}{WHITE}] {YELLOW}limit habis, skip{RESET}")
                     notified_limit[prov] = True
-                skipped_this_round += 1
                 continue
 
             if cdl > 0:
                 busy = max(busy, cdl)
+                all_providers_dead = False  # masih ada harapan, cuma cooldown
                 continue
 
             tried_any = True
+            all_providers_dead = False
 
             # ── 1. Start ──
             st = api("/api/tasks/ads/start", {"provider": prov, "interaction": None},
@@ -633,11 +641,9 @@ def do_farm():
                 if isinstance(st, dict):
                     msg = st.get('detail') or st.get('message') or 'start gagal'
                 print(f"{WHITE}[{CYAN}{prov}{WHITE}] {RED}{msg} — skip lanjut{RESET}")
-                prov_fails[prov] = prov_fails.get(prov, 0) + 1
-                if prov_fails[prov] >= MAX_PROVIDER_FAILS:
-                    print(f"{WHITE}[{CYAN}{prov}{WHITE}] {ORANGE}fail {prov_fails[prov]}x berturut — skip {SKIP_DURATION}s{RESET}")
-                    mark_skip(prov)
-                # Continue ke provider berikutnya
+                new_blacklist = mark_fail(prov)
+                if new_blacklist:
+                    print(f"{WHITE}[{CYAN}{prov}{WHITE}] {ORANGE}{BOLD}✖ BLACKLISTED (fail {MAX_FAILS}x) — stop provider ini{RESET}")
                 continue
 
             # ── 2. Handle per-provider ──
@@ -650,10 +656,9 @@ def do_farm():
 
             if not ok:
                 print(f"{WHITE}[{CYAN}{prov}{WHITE}] {RED}bypass fail: {err} — skip lanjut{RESET}")
-                prov_fails[prov] = prov_fails.get(prov, 0) + 1
-                if prov_fails[prov] >= MAX_PROVIDER_FAILS:
-                    print(f"{WHITE}[{CYAN}{prov}{WHITE}] {ORANGE}fail {prov_fails[prov]}x — skip {SKIP_DURATION}s{RESET}")
-                    mark_skip(prov)
+                new_blacklist = mark_fail(prov)
+                if new_blacklist:
+                    print(f"{WHITE}[{CYAN}{prov}{WHITE}] {ORANGE}{BOLD}✖ BLACKLISTED (fail {MAX_FAILS}x) — stop provider ini{RESET}")
                 continue
 
             # ── 3. Confirm dengan retry ──
@@ -672,39 +677,57 @@ def do_farm():
                       f"{AQUA}{fmt(nb)}{WHITE} sat{RESET}")
                 busy = max(busy, c)
                 claimed = True
-                prov_fails[prov] = 0  # reset counter
-                clear_skip(prov)
+                mark_ok(prov)  # reset counter
                 timer(random.randint(8, 10), "  wait...")
 
             elif status in ('ad_required', 'pending_postback'):
-                # Bukan fatal, cuma belum siap. Skip provider ini, lanjut lain.
+                # Bukan fatal, cuma belum siap. Skip aja, tapi jangan blacklist.
                 print(f"{WHITE}[{MAGENTA}{prov}{WHITE}] {YELLOW}{status} — skip lanjut{RESET}")
-                # Kasih skip singkat biar gak spam
-                mark_skip(prov, dur=30)
 
             else:
                 msg = 'gagal'
                 if isinstance(cf, dict):
                     msg = cf.get('detail') or cf.get('message') or status or 'gagal'
                 print(f"{WHITE}[{MAGENTA}{prov}{WHITE}] {RED}{msg} — skip lanjut{RESET}")
-                prov_fails[prov] = prov_fails.get(prov, 0) + 1
-                if prov_fails[prov] >= MAX_PROVIDER_FAILS:
-                    print(f"{WHITE}[{MAGENTA}{prov}{WHITE}] {ORANGE}fail {prov_fails[prov]}x — skip {SKIP_DURATION}s{RESET}")
-                    mark_skip(prov)
+                new_blacklist = mark_fail(prov)
+                if new_blacklist:
+                    print(f"{WHITE}[{MAGENTA}{prov}{WHITE}] {ORANGE}{BOLD}✖ BLACKLISTED (fail {MAX_FAILS}x) — stop provider ini{RESET}")
 
         # ── End for loop ──
+
+        # Kalau semua provider udah blacklist / limit → STOP
+        active_providers = [p for p in ('adexium', 'gigapubs')
+                            if p not in BLACKLISTED]
+
+        # Cek apakah masih ada provider yang aktif DAN punya sisa
+        has_alive = False
+        for t in tasks:
+            prov = t.get('provider', '')
+            if prov not in ('adexium', 'gigapubs'):
+                continue
+            if prov in BLACKLISTED:
+                continue
+            rem = int(t.get('remaining_today', 0))
+            if rem > 0:
+                has_alive = True
+                break
+
+        if not has_alive:
+            if BLACKLISTED:
+                bl_list = ', '.join(BLACKLISTED)
+                print(f"{WHITE}{ORANGE}semua provider sisa habis / blacklisted [{bl_list}] — bot stop{RESET}")
+            else:
+                print(f"{WHITE}semua limit hari ini, exit...{RESET}")
+            return
 
         if busy > 0:
             timer(busy, "  next...")
             continue
         if not tried_any:
-            if skipped_this_round > 0:
-                # Semua provider di-skip tapi masih ada sisa, tunggu sebentar
-                print(f"{WHITE}semua provider di-skip — tunggu 30s{RESET}")
-                timer(30, "  retry...")
-                continue
-            print(f"{WHITE}semua limit hari ini, exit...{RESET}")
-            return
+            # Semua provider aktif tapi lagi cooldown / sedang gak bisa
+            print(f"{WHITE}semua provider cooldown — tunggu 30s{RESET}")
+            timer(30, "  retry...")
+            continue
         if claimed:
             timer(5, "  wait...")
             continue
@@ -748,12 +771,12 @@ def show_account_info():
             cap = t.get('daily_cap', '?')
             rew = t.get('reward_sats', '?')
             cdl = t.get('cooldown_left', '?')
-            skip_tag = ""
-            if is_skipped(prov):
-                sisa = int(SKIP_UNTIL[prov] - time.time())
-                skip_tag = f" {ORANGE}[SKIP {sisa}s]{RESET}"
+            bl_tag = f" {RED}[BLACKLISTED]{RESET}" if prov in BLACKLISTED else ""
+            fail_tag = ""
+            if prov in FAIL_COUNT and FAIL_COUNT[prov] > 0 and prov not in BLACKLISTED:
+                fail_tag = f" {ORANGE}[fail {FAIL_COUNT[prov]}/{MAX_FAILS}]{RESET}"
             print(f"{MAGENTA}{prov:<10}{WHITE}: {CYAN}{used}/{cap}{WHITE} | "
-                  f"reward {GREEN}{rew}{WHITE} sat | cooldown {YELLOW}{cdl}s{RESET}{skip_tag}")
+                  f"reward {GREEN}{rew}{WHITE} sat | cooldown {YELLOW}{cdl}s{RESET}{bl_tag}{fail_tag}")
     else:
         print(f"{WHITE}tasks      : {RED}gagal fetch state{RESET}")
 
@@ -886,7 +909,6 @@ def main():
         print(f"  {GREEN}[2]{RESET} {CYAN}{BOLD}Cek Akun{RESET}     {DIM}(balance + tasks){RESET}")
         print(f"  {GREEN}[3]{RESET} {CYAN}{BOLD}Refresh initData{RESET}")
         print(f"  {GREEN}[4]{RESET} {CYAN}{BOLD}Re-probe Host{RESET}")
-        print(f"  {GREEN}[5]{RESET} {CYAN}{BOLD}Reset Skip Cache{RESET}")
         print(f"  {RED}[0]{RESET} {RED}{BOLD}Exit{RESET}")
         print()
         print(f"{MAGENTA}❯{RESET} {YELLOW}pilih:{RESET} ", end="")
@@ -923,15 +945,6 @@ def main():
                 print(f"{GREEN}✓ host aktif: {BASE_URL}{RESET}")
             else:
                 print(f"{RED}✖ gak ada host yang hidup{RESET}")
-            print(f"\n{WHITE}enter untuk kembali...{RESET}", end="")
-            try: input()
-            except EOFError: pass
-
-        elif opt == '5':
-            print()
-            cleared = len(SKIP_UNTIL)
-            SKIP_UNTIL.clear()
-            print(f"{GREEN}✓ skip cache direset ({cleared} provider){RESET}")
             print(f"\n{WHITE}enter untuk kembali...{RESET}", end="")
             try: input()
             except EOFError: pass
