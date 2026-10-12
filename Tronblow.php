@@ -1,16 +1,18 @@
 #!/usr/bin/env php
 <?php
 /**
- * ═══════════════════════════════════════════════════════════════
- *  TRONBLOW.site Auto Claim Bot v5.1 (Clean + Auto Cookie)
+ * ===============================================================
+ *  TRONBLOW.site Auto Claim Bot v6.1 (Email Only)
  *  - Pre-flight check (PHP, curl, connectivity)
  *  - Cloudflare detection + auto fresh session
- *  - Auto cookie: save server cookies + optional paste dari browser
  *  - Random User-Agent
  *  - Health check faucet (last payment age)
  *  - STOP otomatis kalau "insufficient funds"
- * ═══════════════════════════════════════════════════════════════
+ * ===============================================================
  */
+
+// Suppress deprecation warnings (curl_close dll di PHP 8.5)
+error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 
 if (PHP_VERSION_ID < 80000) {
     fwrite(STDERR, "ERROR: Butuh PHP 8.0+. Versi sekarang: " . PHP_VERSION . "\n");
@@ -23,9 +25,9 @@ if (!extension_loaded('curl')) {
     exit(1);
 }
 
-// ═══════════════════════════════════════════════════════════════
+// ===============================================================
 //  COLOR
-// ═══════════════════════════════════════════════════════════════
+// ===============================================================
 const RST = "\033[0m";
 const BOLD = "\033[1m";
 const DIM  = "\033[2m";
@@ -47,9 +49,9 @@ function pad_to(string $s, int $w): string {
     return $s . str_repeat(' ', max(0, $w - $len));
 }
 
-// ═══════════════════════════════════════════════════════════════
+// ===============================================================
 //  STATE
-// ═══════════════════════════════════════════════════════════════
+// ===============================================================
 $STATE = [
     'email'         => '-',
     'claims'        => 0,
@@ -63,23 +65,21 @@ $STATE = [
     'last_payment'  => null,
     'daily_count'   => 0,
     'daily_limit'   => 200,
-    'cookie_count'  => 0,
 ];
 
 function state_log(string $msg, string $level = 'INFO'): void {
     global $STATE;
     $ts = date('H:i:s');
     $tag = match(strtoupper($level)) {
-        'OK'     => GRN . "◈ OK    " . RST,
-        'ERR'    => RED . "◈ ERR   " . RST,
-        'WARN'   => YEL . "◈ WARN  " . RST,
-        'CLAIM'  => MAG . "⬢ CLAIM " . RST,
-        'VERIFY' => VIO . "◈ VERIFY" . RST,
-        'HEALTH' => ORG . "◈ HEALTH" . RST,
-        'WAIT'   => YEL . "⬢ WAIT  " . RST,
-        'PRE'    => CYN . "◈ PREFLT" . RST,
-        'COOKIE' => CYN . "◈ COOKIE" . RST,
-        default  => GRY . "◈ INFO  " . RST,
+        'OK'     => GRN . "[OK]    " . RST,
+        'ERR'    => RED . "[ERR]   " . RST,
+        'WARN'   => YEL . "[WARN]  " . RST,
+        'CLAIM'  => MAG . "[CLAIM] " . RST,
+        'VERIFY' => VIO . "[VERIFY]" . RST,
+        'HEALTH' => ORG . "[HEALTH]" . RST,
+        'WAIT'   => YEL . "[WAIT]  " . RST,
+        'PRE'    => CYN . "[PREFLT]" . RST,
+        default  => GRY . "[INFO]  " . RST,
     };
     $STATE['logs'][] = GRY . "[{$ts}] " . RST . $tag . " " . WHT . $msg . RST;
     if (count($STATE['logs']) > 6) array_shift($STATE['logs']);
@@ -92,22 +92,22 @@ function fmt_duration(int $sec): string {
     return sprintf('%02d:%02d:%02d', $h, $m, $s);
 }
 
-// ═══════════════════════════════════════════════════════════════
+// ===============================================================
 //  RENDER BOX
-// ═══════════════════════════════════════════════════════════════
+// ===============================================================
 function render_box(): void {
     global $STATE;
     $W = 62;
     $bdr = CYN;
-    $top = $bdr . "╔" . str_repeat('═', $W) . "╗" . RST;
-    $mid = $bdr . "╠" . str_repeat('═', $W) . "╣" . RST;
-    $bot = $bdr . "╚" . str_repeat('═', $W) . "╝" . RST;
-    $line = fn(string $c) => $bdr . "║" . RST . pad_to(" " . $c, $W) . $bdr . "║" . RST;
+    $top = $bdr . "+" . str_repeat('-', $W) . "+" . RST;
+    $mid = $bdr . "+" . str_repeat('-', $W) . "+" . RST;
+    $bot = $bdr . "+" . str_repeat('-', $W) . "+" . RST;
+    $line = fn(string $c) => $bdr . "|" . RST . pad_to(" " . $c, $W) . $bdr . "|" . RST;
 
     echo "\n";
     echo $top . "\n";
     echo $line(BOLD . WHT . "TRONBLOW AUTO CLAIM" . RST) . "\n";
-    echo $line(DIM . "─────── SOUU ENGINE v5.1 ───────" . RST) . "\n";
+    echo $line(DIM . "------ SOUU ENGINE v6.1 ------" . RST) . "\n";
     echo $mid . "\n";
 
     $hs_label = 'CHECKING'; $hs_color = GRY;
@@ -117,36 +117,32 @@ function render_box(): void {
         case 'dead':    $hs_label = 'DEAD';    $hs_color = RED; break;
     }
     echo $line(VIO . "FAUCET" . RST) . "\n";
-    echo $line("├─ Status     : " . $hs_color . $hs_label . RST) . "\n";
+    echo $line("|- Status     : " . $hs_color . $hs_label . RST) . "\n";
     if ($STATE['last_payment']) {
         $age = (int) floor((time() - $STATE['last_payment']) / 60);
-        echo $line("├─ Last Pay   : " . DIM . $age . " min ago" . RST) . "\n";
+        echo $line("|- Last Pay   : " . DIM . $age . " min ago" . RST) . "\n";
     }
-    echo $line("├─ Daily      : " . CYN . $STATE['daily_count'] . RST . " / " . $STATE['daily_limit']) . "\n";
-    echo $line("└─ Cookies    : " . CYN . $STATE['cookie_count'] . RST . " aktif") . "\n";
-    echo $mid . "\n";
-
-    echo $line(VIO . "ACCOUNT" . RST) . "\n";
-    echo $line("└─ Email      : " . $STATE['email']) . "\n";
+    echo $line("|- Daily      : " . CYN . $STATE['daily_count'] . RST . " / " . $STATE['daily_limit']) . "\n";
+    echo $line("'- Email      : " . $STATE['email']) . "\n";
     echo $mid . "\n";
 
     $runtime = time() - $STATE['runtime_start'];
     echo $line(VIO . "SYSTEM" . RST) . "\n";
-    echo $line("├─ Claims     : " . GRN . $STATE['claims'] . RST) . "\n";
-    echo $line("├─ Rewards    : " . GRN . sprintf('+%.5f TRX', $STATE['rewards']) . RST) . "\n";
-    echo $line("├─ Failures   : " . RED . $STATE['failures'] . RST . " / " . $STATE['max_failures']) . "\n";
-    echo $line("└─ Runtime    : " . CYN . fmt_duration($runtime) . RST . " / " . DIM . fmt_duration($STATE['max_runtime']) . RST) . "\n";
+    echo $line("|- Claims     : " . GRN . $STATE['claims'] . RST) . "\n";
+    echo $line("|- Rewards    : " . GRN . sprintf('+%.5f TRX', $STATE['rewards']) . RST) . "\n";
+    echo $line("|- Failures   : " . RED . $STATE['failures'] . RST . " / " . $STATE['max_failures']) . "\n";
+    echo $line("'- Runtime    : " . CYN . fmt_duration($runtime) . RST . " / " . DIM . fmt_duration($STATE['max_runtime']) . RST) . "\n";
     echo $mid . "\n";
 
     $logs = $STATE['logs'];
     if (empty($logs)) {
-        echo $line(DIM . "─ no activity yet ─" . RST) . "\n";
+        echo $line(DIM . "- no activity yet -" . RST) . "\n";
     } else {
         foreach ($logs as $l) echo $line($l) . "\n";
     }
     echo $bot . "\n";
-    echo "\n   " . GRN . "BOT RUNNING" . RST . " " . DIM . "•" . RST . " " . CYN . date('H:i:s') . RST . "\n";
-    echo "   " . DIM . "By Power @SouuXso • TronBlow v5.1" . RST . "\n\n";
+    echo "\n   " . GRN . "BOT RUNNING" . RST . " " . DIM . "*" . RST . " " . CYN . date('H:i:s') . RST . "\n";
+    echo "   " . DIM . "By Power @SouuXso - TronBlow v6.1" . RST . "\n\n";
 }
 
 function render_box_clear(): void {
@@ -158,11 +154,10 @@ function render_box_clear(): void {
     render_box();
 }
 
-// ═══════════════════════════════════════════════════════════════
+// ===============================================================
 //  CONFIG
-// ═══════════════════════════════════════════════════════════════
+// ===============================================================
 $CONFIG_FILE  = __DIR__ . "/tronblow_config.json";
-$COOKIE_FILE  = __DIR__ . "/cookies_tronblow.txt";
 $COUNTER_FILE = __DIR__ . "/tronblow_counter.json";
 
 const DAILY_LIMIT = 200;
@@ -181,84 +176,9 @@ function random_ua(): string {
     return $UA_POOL[array_rand($UA_POOL)];
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  COOKIE HELPERS
-// ═══════════════════════════════════════════════════════════════
-/**
- * Convert browser cookie string "a=1; b=2; c=3" → Netscape cookie jar format.
- * Return jumlah cookie yang berhasil di-write.
- */
-function write_cookie_jar(string $jar_file, string $cookie_string, string $domain = 'tronblow.site'): int {
-    $cookie_string = trim($cookie_string);
-    if ($cookie_string === '') return 0;
-
-    $lines = ["# Netscape HTTP Cookie File", "# Auto-generated by TronBlow Bot", ""];
-    $count = 0;
-    foreach (explode(';', $cookie_string) as $pair) {
-        $pair = trim($pair);
-        if ($pair === '' || strpos($pair, '=') === false) continue;
-        [$k, $v] = explode('=', $pair, 2);
-        $k = trim($k);
-        $v = trim($v);
-        if ($k === '') continue;
-        // Format: domain \t flag \t path \t secure \t expiry \t name \t value
-        $lines[] = "{$domain}\tTRUE\t/\tFALSE\t0\t{$k}\t{$v}";
-        $count++;
-    }
-    if ($count === 0) return 0;
-    file_put_contents($jar_file, implode("\n", $lines) . "\n");
-    return $count;
-}
-
-/**
- * Baca cookie dari file jar dan hitung jumlahnya (buat display).
- */
-function count_cookies(string $jar_file): int {
-    if (!file_exists($jar_file)) return 0;
-    $content = @file_get_contents($jar_file);
-    if ($content === false) return 0;
-    $count = 0;
-    foreach (explode("\n", $content) as $line) {
-        $line = trim($line);
-        if ($line === '' || $line[0] === '#') continue;
-        if (strpos($line, "\t") !== false) $count++;
-    }
-    return $count;
-}
-
-/**
- * Auto-fetch cookie dengan GET ke homepage — server bakal set session cookie,
- * nanti tersimpan di jar via CURLOPT_COOKIEJAR.
- */
-function auto_fetch_cookies(string $url, string $jar_file): int {
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_MAXREDIRS      => 3,
-        CURLOPT_TIMEOUT        => 20,
-        CURLOPT_CONNECTTIMEOUT => 10,
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_SSL_VERIFYHOST => false,
-        CURLOPT_ENCODING       => '',
-        CURLOPT_USERAGENT      => random_ua(),
-        CURLOPT_COOKIEJAR      => $jar_file,
-        CURLOPT_COOKIEFILE     => $jar_file,
-        CURLOPT_HTTPHEADER     => [
-            'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language: en-GB,en;q=0.9',
-        ],
-    ]);
-    $html = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    if (!$html || $code !== 200) return 0;
-    return count_cookies($jar_file);
-}
-
-// ═══════════════════════════════════════════════════════════════
+// ===============================================================
 //  IO HELPERS
-// ═══════════════════════════════════════════════════════════════
+// ===============================================================
 function read_line(string $prompt = ""): string {
     if ($prompt) echo $prompt;
     $line = fgets(STDIN);
@@ -273,7 +193,6 @@ function load_config(): ?array {
     if (is_array($cfg) && !empty($cfg['email'])) {
         $cfg['base_url'] = $cfg['base_url'] ?? BASE_URL;
         $cfg['delay']    = $cfg['delay']    ?? 65;
-        $cfg['cookie']   = $cfg['cookie']   ?? '';
         return $cfg;
     }
     return null;
@@ -306,12 +225,12 @@ function increment_counter(): array {
     return $c;
 }
 
-// ═══════════════════════════════════════════════════════════════
+// ===============================================================
 //  PRE-FLIGHT
-// ═══════════════════════════════════════════════════════════════
+// ===============================================================
 function preflight(): bool {
-    state_log("PHP " . PHP_VERSION . " — OK", 'PRE');
-    state_log("ext-curl — OK", 'PRE');
+    state_log("PHP " . PHP_VERSION . " - OK", 'PRE');
+    state_log("ext-curl - OK", 'PRE');
 
     $ch = curl_init(BASE_URL);
     curl_setopt_array($ch, [
@@ -325,26 +244,25 @@ function preflight(): bool {
     curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $err  = curl_error($ch);
-    curl_close($ch);
+    // No curl_close() — deprecated PHP 8.5
 
     if ($err) {
         state_log("Koneksi gagal: $err", 'ERR');
         return false;
     }
     if ($code >= 500) {
-        state_log("Server HTTP $code — mungkin down", 'ERR');
+        state_log("Server HTTP $code - mungkin down", 'ERR');
         return false;
     }
     state_log("Koneksi OK (HTTP $code)", 'PRE');
     return true;
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  HTTP
-// ═══════════════════════════════════════════════════════════════
-function fetch_page(string $url, string $cookie_file): array {
-    $ch = curl_init($url);
-    $headers = [
+// ===============================================================
+//  HTTP (tanpa cookie jar - stateless request)
+// ===============================================================
+function base_headers(): array {
+    return [
         'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language: en-GB,en;q=0.9',
         'Cache-Control: no-cache',
@@ -357,6 +275,10 @@ function fetch_page(string $url, string $cookie_file): array {
         'Sec-Fetch-Site: none',
         'Upgrade-Insecure-Requests: 1',
     ];
+}
+
+function fetch_page(string $url): array {
+    $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_FOLLOWLOCATION => true,
@@ -367,14 +289,12 @@ function fetch_page(string $url, string $cookie_file): array {
         CURLOPT_SSL_VERIFYHOST => false,
         CURLOPT_ENCODING       => '',
         CURLOPT_USERAGENT      => random_ua(),
-        CURLOPT_HTTPHEADER     => $headers,
-        CURLOPT_COOKIEJAR      => $cookie_file,
-        CURLOPT_COOKIEFILE     => $cookie_file,
+        CURLOPT_HTTPHEADER     => base_headers(),
     ]);
     $html = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $err  = curl_error($ch);
-    curl_close($ch);
+    // No curl_close()
 
     if ($err || $code !== 200 || empty($html)) {
         return ['html' => false, 'http_code' => $code, 'err' => $err];
@@ -382,7 +302,7 @@ function fetch_page(string $url, string $cookie_file): array {
     return ['html' => $html, 'http_code' => $code, 'err' => ''];
 }
 
-function submit_claim(string $url, string $cookie_file, string $email, string $csrf, int $answer): array {
+function submit_claim(string $url, string $email, string $csrf, int $answer): array {
     $post = http_build_query([
         'action'      => 'claim',
         'csrf_token'  => $csrf,
@@ -391,22 +311,15 @@ function submit_claim(string $url, string $cookie_file, string $email, string $c
         'math_answer' => $answer,
     ]);
 
+    $headers = base_headers();
+    $headers[] = 'Content-Type: application/x-www-form-urlencoded';
+    $headers[] = 'Origin: ' . $url;
+    $headers[] = 'Referer: ' . $url . '/';
+    $headers = array_map(function($h) {
+        return str_replace('Sec-Fetch-Site: none', 'Sec-Fetch-Site: same-origin', $h);
+    }, $headers);
+
     $ch = curl_init($url);
-    $headers = [
-        'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language: en-GB,en;q=0.9',
-        'Content-Type: application/x-www-form-urlencoded',
-        'Origin: ' . $url,
-        'Referer: ' . $url . '/',
-        'Sec-Ch-Ua: "Chromium";v="127", "Not)A;Brand";v="99"',
-        'Sec-Ch-Ua-Mobile: ?1',
-        'Sec-Ch-Ua-Platform: "Android"',
-        'Sec-Fetch-Dest: document',
-        'Sec-Fetch-Mode: navigate',
-        'Sec-Fetch-Site: same-origin',
-        'Sec-Fetch-User: ?1',
-        'Upgrade-Insecure-Requests: 1',
-    ];
     curl_setopt_array($ch, [
         CURLOPT_POST           => true,
         CURLOPT_POSTFIELDS     => $post,
@@ -420,19 +333,17 @@ function submit_claim(string $url, string $cookie_file, string $email, string $c
         CURLOPT_ENCODING       => '',
         CURLOPT_USERAGENT      => random_ua(),
         CURLOPT_HTTPHEADER     => $headers,
-        CURLOPT_COOKIEJAR      => $cookie_file,
-        CURLOPT_COOKIEFILE     => $cookie_file,
     ]);
     $body = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $err  = curl_error($ch);
-    curl_close($ch);
+    // No curl_close()
     return ['code' => $code, 'body' => (string) $body, 'err' => $err];
 }
 
-// ═══════════════════════════════════════════════════════════════
+// ===============================================================
 //  PARSER
-// ═══════════════════════════════════════════════════════════════
+// ===============================================================
 function extract_csrf_token(string $html): ?string {
     $patterns = [
         '/<input\s+type="hidden"\s+name="csrf_token"\s+value="([^"]+)"/i',
@@ -453,9 +364,9 @@ function extract_math_question(string $html): ?array {
         $text = strip_tags($html);
     }
     $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-    $text = str_replace(['−','–','—','‐','‑','‒','&minus;'], '-', $text);
-    $text = str_replace(['×','&times;'], '*', $text);
-    $text = str_replace(['÷','&divide;'], '/', $text);
+    $text = str_replace(['-', '-', '-', '-', '-', '-', '&minus;'], '-', $text);
+    $text = str_replace(['x', '&times;'], '*', $text);
+    $text = str_replace(['/', '&divide;'], '/', $text);
 
     $patterns = [
         '/what\s+is\s+(\d+)\s*([+\-*\/])\s*(\d+)\s*=\s*\?/i',
@@ -511,9 +422,9 @@ function detect_login_wall(string $html): bool {
         || strpos($low, 'sign in to continue') !== false;
 }
 
-// ═══════════════════════════════════════════════════════════════
+// ===============================================================
 //  RESPONSE PARSER
-// ═══════════════════════════════════════════════════════════════
+// ===============================================================
 function parse_alert_message(string $html): array {
     $out = ['success' => null, 'error' => null];
     if (preg_match('/<div[^>]*class="[^"]*alert-success[^"]*"[^>]*>(.*?)<\/div>/is', $html, $m)) {
@@ -595,89 +506,57 @@ function check_response(string $html): array {
     return ['status' => 'unknown', 'msg' => 'Unclear response'];
 }
 
-// ═══════════════════════════════════════════════════════════════
+// ===============================================================
 //  SETUP
-// ═══════════════════════════════════════════════════════════════
+// ===============================================================
 function interactive_setup(): array {
-    echo "\n" . CYN . "═══ FIRST TIME SETUP ═══" . RST . "\n\n";
+    echo "\n" . CYN . "=== FIRST TIME SETUP ===" . RST . "\n\n";
     $email = '';
     while (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $email = read_line(YEL . "FaucetPay Email: " . RST);
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            echo RED . "  ✗ Email gak valid, coba lagi.\n" . RST;
+            echo RED . "  x Email gak valid, coba lagi.\n" . RST;
         }
     }
-    echo "\n";
-    echo DIM . "  Cookie browser (opsional, dari devtools/extension).\n" . RST;
-    echo DIM . "  Format: name1=value1; name2=value2\n" . RST;
-    echo DIM . "  Kosongin kalo mau auto (server yang kasih).\n" . RST;
-    $cookie = read_line(YEL . "Cookie (opsional): " . RST);
-
     return [
         'email'    => $email,
         'base_url' => BASE_URL,
         'delay'    => 65,
-        'cookie'   => $cookie,
     ];
 }
 
-// ═══════════════════════════════════════════════════════════════
+// ===============================================================
 //  MAIN
-// ═══════════════════════════════════════════════════════════════
+// ===============================================================
 render_box_clear();
-echo CYN . "  ◈ TRONBLOW AUTO CLAIM ENGINE v5.1\n" . RST;
-echo DIM . "  ─── Souu Engine ───\n\n" . RST;
+echo CYN . "  + TRONBLOW AUTO CLAIM ENGINE v6.1\n" . RST;
+echo DIM . "  --- Souu Engine ---\n\n" . RST;
 
 // PRE-FLIGHT
 state_log("Running pre-flight check...", 'PRE');
 render_box_clear();
 if (!preflight()) {
     render_box_clear();
-    echo "\n" . RED . "  ✖ Pre-flight gagal. Cek koneksi / server.\n\n" . RST;
+    echo "\n" . RED . "  x Pre-flight gagal. Cek koneksi / server.\n\n" . RST;
     exit(1);
 }
 
 // LOAD CONFIG
 $config = load_config();
 if ($config) {
-    echo GRN . "  ✓ Config found\n" . RST;
+    echo GRN . "  v Config found\n" . RST;
     echo DIM . "    Email : {$config['email']}\n" . RST;
     echo DIM . "    Delay : {$config['delay']}s\n" . RST;
-    echo DIM . "    URL   : {$config['base_url']}\n" . RST;
-    if (!empty($config['cookie'])) {
-        $len = strlen($config['cookie']);
-        echo DIM . "    Cookie: sudah tersimpan ({$len} chars)\n" . RST;
-    } else {
-        echo DIM . "    Cookie: (kosong, auto)\n" . RST;
-    }
-    echo "\n";
+    echo DIM . "    URL   : {$config['base_url']}\n\n" . RST;
     $ans = read_line(YEL . "  Use saved? (y/n): " . RST);
-    if (strtolower($ans) === 'n') $config = interactive_setup();
+    if (strtolower($ans) === 'n') {
+        $config = interactive_setup();
+        save_config($config);
+    }
 } else {
     $config = interactive_setup();
+    save_config($config);
 }
-save_config($config);
-
-// ═══ AUTO COOKIE HANDLING ═══
-if (!file_exists($COOKIE_FILE)) touch($COOKIE_FILE);
-
-$initial_count = 0;
-if (!empty($config['cookie'])) {
-    // User paste cookie → convert ke jar
-    $initial_count = write_cookie_jar($COOKIE_FILE, $config['cookie']);
-    state_log("Load {$initial_count} cookie dari config", 'COOKIE');
-} else {
-    // Auto-fetch: GET homepage → server set session cookies
-    state_log("Auto-fetch cookie dari server...", 'COOKIE');
-    render_box_clear();
-    $initial_count = auto_fetch_cookies($config['base_url'], $COOKIE_FILE);
-    if ($initial_count > 0) {
-        state_log("Dapat {$initial_count} cookie otomatis", 'COOKIE');
-    } else {
-        state_log("Server gak set cookie — lanjut tanpa cookie", 'WARN');
-    }
-}
-$STATE['cookie_count'] = $initial_count;
 
 $STATE['email'] = $config['email'];
 $STATE['daily_count'] = load_counter()['count'];
@@ -689,9 +568,6 @@ $cycle = 0;
 $consecutive_parse_fails = 0;
 
 while (true) {
-    // Update cookie count dari jar (biar realtime)
-    $STATE['cookie_count'] = count_cookies($COOKIE_FILE);
-
     // Daily limit
     $counter = load_counter();
     $STATE['daily_count'] = $counter['count'];
@@ -724,8 +600,8 @@ while (true) {
     state_log("Cycle #$cycle starting...", 'INFO');
     render_box_clear();
 
-    // ─── FETCH ───
-    $result = fetch_page($config['base_url'], $COOKIE_FILE);
+    // FETCH
+    $result = fetch_page($config['base_url']);
     if (!$result['html']) {
         state_log("Fetch failed (HTTP {$result['http_code']}) {$result['err']}", 'ERR');
         $STATE['failures']++;
@@ -735,37 +611,28 @@ while (true) {
     }
     $html = $result['html'];
 
-    // ─── CLOUDFLARE ───
+    // CLOUDFLARE
     if (detect_cloudflare($html)) {
         state_log("Cloudflare challenge detected", 'WARN');
         render_box_clear();
-        @unlink($COOKIE_FILE);
-        touch($COOKIE_FILE);
         $STATE['failures']++;
         $backoff = min(300, 60 + ($STATE['failures'] * 30));
-        state_log("Fresh session + tunggu {$backoff}s", 'WAIT');
+        state_log("Tunggu {$backoff}s", 'WAIT');
         render_box_clear();
         sleep($backoff);
-        // Auto re-fetch cookie setelah fresh
-        $c = auto_fetch_cookies($config['base_url'], $COOKIE_FILE);
-        if ($c > 0) state_log("Re-fetch: {$c} cookie baru", 'COOKIE');
         continue;
     }
 
-    // ─── LOGIN WALL ───
+    // LOGIN WALL
     if (detect_login_wall($html)) {
-        state_log("Login wall — cookie expired", 'WARN');
-        @unlink($COOKIE_FILE);
-        touch($COOKIE_FILE);
+        state_log("Login wall - email mungkin belum set", 'WARN');
         $STATE['failures']++;
         render_box_clear();
         sleep(30);
-        $c = auto_fetch_cookies($config['base_url'], $COOKIE_FILE);
-        if ($c > 0) state_log("Re-fetch: {$c} cookie baru", 'COOKIE');
         continue;
     }
 
-    // ─── HEALTH CHECK ───
+    // HEALTH CHECK
     state_log("Checking faucet health...", 'HEALTH');
     render_box_clear();
     $health = check_faucet_health($html, 30);
@@ -781,14 +648,14 @@ while (true) {
             $STATE['faucet_status'] = 'dead';
             state_log("FATAL: {$pre['error']}", 'ERR');
             render_box_clear();
-            echo "\n" . RED . "  ╔══════════════════════════════════════════════════════╗\n" . RST;
-            echo RED   . "  ║  ❌ FAUCET SUDAH TIDAK BISA BAYAR                    ║\n" . RST;
-            echo RED   . "  ║  Bot dihentikan otomatis.                            ║\n" . RST;
-            echo RED   . "  ╚══════════════════════════════════════════════════════╝\n\n" . RST;
+            echo "\n" . RED . "  +--------------------------------------------------+\n" . RST;
+            echo RED   . "  |  x FAUCET SUDAH TIDAK BISA BAYAR                |\n" . RST;
+            echo RED   . "  |  Bot dihentikan otomatis.                        |\n" . RST;
+            echo RED   . "  +--------------------------------------------------+\n\n" . RST;
             break;
         }
 
-        echo "\n" . YEL . "  ⚠ Faucet kelihatan gak bayar (" . ($health['age_min'] ?? '?') . " menit).\n" . RST;
+        echo "\n" . YEL . "  ! Faucet kelihatan gak bayar (" . ($health['age_min'] ?? '?') . " menit).\n" . RST;
         $ans = read_line(YEL . "  Lanjut claim? (y/n): " . RST);
         if (strtolower($ans) !== 'y') {
             state_log("Stopped by user", 'WARN');
@@ -797,7 +664,7 @@ while (true) {
         }
     }
 
-    // ─── CSRF ───
+    // CSRF
     $csrf = extract_csrf_token($html);
     if (!$csrf) {
         $STATE['failures']++;
@@ -805,21 +672,17 @@ while (true) {
         state_log("CSRF token not found (attempt $consecutive_parse_fails/3)", 'ERR');
         render_box_clear();
         if ($consecutive_parse_fails >= 3) {
-            state_log("3x gagal parse — clear session", 'WARN');
-            @unlink($COOKIE_FILE);
-            touch($COOKIE_FILE);
+            state_log("3x gagal parse - mundur 60s", 'WARN');
             $consecutive_parse_fails = 0;
             render_box_clear();
             sleep(60);
-            $c = auto_fetch_cookies($config['base_url'], $COOKIE_FILE);
-            if ($c > 0) state_log("Re-fetch: {$c} cookie baru", 'COOKIE');
         } else {
             sleep(15);
         }
         continue;
     }
 
-    // ─── MATH ───
+    // MATH
     $math = extract_math_question($html);
     if (!$math) {
         $STATE['failures']++;
@@ -832,11 +695,11 @@ while (true) {
     state_log("Math: {$math['q1']} {$math['op']} {$math['q2']} = $answer", 'VERIFY');
     render_box_clear();
 
-    // ─── SUBMIT ───
+    // SUBMIT
     state_log("Claiming 1000 SAT...", 'CLAIM');
     render_box_clear();
 
-    $submit = submit_claim($config['base_url'], $COOKIE_FILE, $config['email'], $csrf, $answer);
+    $submit = submit_claim($config['base_url'], $config['email'], $csrf, $answer);
     if ($submit['err']) {
         state_log("Submit curl error: {$submit['err']}", 'ERR');
         $STATE['failures']++;
@@ -856,7 +719,7 @@ while (true) {
             $STATE['claims']++;
             $STATE['rewards'] += 0.00001;
             $STATE['failures'] = 0;
-            state_log("✓ CLAIMED: {$status['msg']}", 'OK');
+            state_log("v CLAIMED: {$status['msg']}", 'OK');
             $endAt = extract_endAt($submit['body']);
             if ($endAt) {
                 $wait_ms = $endAt - (int)(microtime(true) * 1000);
@@ -869,14 +732,14 @@ while (true) {
             $STATE['faucet_status'] = 'dead';
             state_log("FATAL: {$status['msg']}", 'ERR');
             render_box_clear();
-            echo "\n" . RED . "  ╔══════════════════════════════════════════════════════╗\n" . RST;
-            echo RED   . "  ║  ❌ FAUCET SUDAH TIDAK BISA BAYAR                    ║\n" . RST;
-            echo RED   . "  ║  Bot dihentikan otomatis.                            ║\n" . RST;
-            echo RED   . "  ╚══════════════════════════════════════════════════════╝\n\n" . RST;
+            echo "\n" . RED . "  +--------------------------------------------------+\n" . RST;
+            echo RED   . "  |  x FAUCET SUDAH TIDAK BISA BAYAR                |\n" . RST;
+            echo RED   . "  |  Bot dihentikan otomatis.                        |\n" . RST;
+            echo RED   . "  +--------------------------------------------------+\n\n" . RST;
             exit(2);
 
         case 'wait':
-            state_log("⏳ {$status['msg']}", 'WAIT');
+            state_log("[WAIT] {$status['msg']}", 'WAIT');
             $endAt = extract_endAt($submit['body']);
             if ($endAt) {
                 $wait_ms = $endAt - (int)(microtime(true) * 1000);
@@ -923,6 +786,6 @@ while (true) {
 }
 
 render_box_clear();
-echo "\n" . CYN . "  ◈ Bot stopped.\n" . RST;
+echo "\n" . CYN . "  + Bot stopped.\n" . RST;
 echo DIM . "  Claims: {$STATE['claims']}  |  Failures: {$STATE['failures']}\n" . RST;
 echo "\n";
